@@ -127,6 +127,17 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     // shielded send to Mara (inside the pool) and a deposit
     await pg.click('[data-open="withdraw"]'); await pg.click('#wA [data-a="USDC"]'); await pg.fill('#wAmt', '25'); await pg.click('#wMara'); await pg.click('#wGo'); b = await done('shielded send');
     check('shielded send to a Veyl address: hidden amount, Mara receives', b && /Mara's shielded USDC here: 25/.test(b) && /none: not even the token|no amounts|Amount/.test(b), b && b.slice(0, 120)); await closeDone();
+    // receive: QR + payment link; opening a link pre-fills Send ("Pay privately") and pays inside the pool
+    await pg.click('[data-open="receive"]'); await pg.click('#rA [data-a="USDC"]'); await pg.fill('#rAmt', '12');
+    const rcv = await ev(() => ({ qr: !!document.querySelector('#rQr svg.qrsvg path'), addr: document.querySelector('#dlgBody .vaddr code').textContent, me: window.veylEngine.veylAddress(), link: document.getElementById('rLink').dataset.link }));
+    check('Receive: QR code and payment link carry the Veyl address, amount and token', rcv.qr && rcv.addr === rcv.me && rcv.link.includes('#pay=' + encodeURIComponent(rcv.me)) && /&a=12&t=USDC$/.test(rcv.link), rcv.link && rcv.link.slice(-40));
+    await pg.click('#dlgX');
+    const mara = await ev(() => window.veylEngine.friendAddress());
+    await ev((m) => { location.hash = '#pay=' + encodeURIComponent(m) + '&a=7&t=USDC'; }, mara); await pg.waitForSelector('#wGo', { timeout: 5000 });
+    const pre = await ev(() => ({ to: document.getElementById('wTo').value, amt: document.getElementById('wAmt').value, t: document.getElementById('dlgTitle').textContent, tok: (document.querySelector('#wA [aria-pressed="true"]') || {}).textContent, hash: location.hash }));
+    check('a payment link opens "Pay privately" pre-filled (address, amount, token) and clears itself from the URL', pre.to === mara && pre.amt === '7' && pre.t === 'Pay privately' && pre.tok === 'USDC' && pre.hash === '#portfolio', JSON.stringify(pre).slice(0, 120));
+    await pg.click('#wGo'); b = await done('payment link');
+    check('paying a link stays inside the pool: Mara now holds 32 USDC privately', b && /Mara's shielded USDC here: 32/.test(b), b && b.slice(0, 120)); await closeDone();
     await pg.click('[data-open="deposit"]'); await pg.click('#dA [data-a="USDT"]'); await pg.fill('#dAmt', '100'); await pg.click('#dGo'); b = await done('deposit');
     check('deposit into the shielded balance (proof, then admitted by the simulated publisher)', b && /Deposited 100(\.00)? USDT/.test(b)); await closeDone();
     await pg.waitForFunction(() => window.veylEngine.chain.shield.pending.length === 0, null, { timeout: 15000 }); await ev(() => window.veylEngine.shieldSync());

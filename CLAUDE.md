@@ -33,6 +33,8 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 - Relayer faucet `POST /drip` (devnet/local only, `FAUCET_KEY`): core basket, or a pool's own pair (`tokens: [..]`), 6 h limits.
 - Pro LP tools in app.html: volatility-sized range presets (Tight/Balanced/Wide), position simulator (fees vs holding at ±30%),
   portfolio summary, per-position edge distance / USD worth / fee APR.
+- Receive (Portfolio → Veyl address → Receive): QR code + payment link `app.html#pay=veyl:…&a=<amount>&t=<token>`; opening a link
+  pre-fills Send as "Pay privately" (`openReceive`, `takePayLink`, `site/qrcode.js` = qrcode-generator, MIT). Inspired by NullCash's send flow.
 - Privacy page + header chip (5 checks, crowd size), plain wording (Private/Public, Withdraw), no "launching soon"/test wording.
 
 ## Brand / site rules (from the owner)
@@ -47,7 +49,7 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 ## Commands
 - `npm ci` · `npm run bundle` (rebuild site/veyl-sol.js after editing site/sol-entry.js, shield-engine.js, sealed-engine.js or sdk/)
 - Tests (run ONE at a time: they share deploy.local.json and validator ports):
-  `npm test` (298, ~20 min) · `node e2e/run.js` (67, ~17–25 min) · `node e2e/local.js` (32) · `node e2e/sandbox.js` (61) · `node e2e/smoke.js` (47)
+  `npm test` (298, ~20 min) · `node e2e/run.js` (67, ~17–25 min) · `node e2e/local.js` (32) · `node e2e/sandbox.js` (64) · `node e2e/smoke.js` (47)
 - Demo mode in the browser: `app.html?mode=sandbox-dev` (in-browser chain, real proofs).
 - Devnet: `./VEYL-DEVNET.command` (or the steps in DEPLOY.md). Needs Solana CLI 3.1.x, Node 20+.
 

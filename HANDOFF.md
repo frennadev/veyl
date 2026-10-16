@@ -13,7 +13,7 @@ committee for sealed swaps (`committee/`). `README.md` = architecture, `PRIVACY.
 
 ## State on hand-off (mid-Oct 2026)
 - Code complete for Phases 1–3. All suites green on this commit, run one at a time on a local validator:
-  `npm test` 298 · `node e2e/run.js` 67 · `node e2e/local.js` 32 · `node e2e/sandbox.js` 61 · `node e2e/smoke.js` 47.
+  `npm test` 298 · `node e2e/run.js` 67 · `node e2e/local.js` 32 · `node e2e/sandbox.js` 64 · `node e2e/smoke.js` 47.
 - Devnet: the owner's Mac is running `VEYL-DEVNET.command` with `CORE_ONLY=1` (12 pools). It is waiting on devnet SOL for
   its deployer. When it finishes it writes `deploy.devnet.json` (public addresses only, meant to be committed).
 - Never deployed to mainnet. Mainnet is blocked by `npm run preflight -- --network mainnet` until the key ceremony, real
