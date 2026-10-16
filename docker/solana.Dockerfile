@@ -6,7 +6,8 @@ ARG AGAVE_VERSION=v3.1.9
 # the compose volume mounts here; owned by node so the non-root user can write the throwaway key and the deploy output
 RUN mkdir -p /state && chown node:node /state
 USER node
-RUN sh -c "$(curl -sSfL https://release.anza.xyz/${AGAVE_VERSION}/install)"
+# download first so a failed fetch fails the build (sh -c "$(curl …)" runs an empty script and "succeeds")
+RUN curl -sSfL -o /tmp/agave-install.sh https://release.anza.xyz/${AGAVE_VERSION}/install && sh /tmp/agave-install.sh && rm /tmp/agave-install.sh
 ENV PATH=/home/node/.local/share/solana/install/active_release/bin:$PATH \
     SOLANA_BIN=/home/node/.local/share/solana/install/active_release/bin \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1

@@ -22,15 +22,30 @@ export PATH="$HOME/.local/share/solana/install/active_release/bin:$PWD/.devnet-r
 command -v node >/dev/null || die "Install Node 20 or newer first (https://nodejs.org, the LTS button), then run this again."
 [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ] || die "Node $(node -v) is too old: install Node 20 or newer from https://nodejs.org"
 if ! command -v solana >/dev/null; then
-  echo "Installing the Solana CLI (Agave 3.1.9)…"; sh -c "$(curl -sSfL https://release.anza.xyz/v3.1.9/install)" || die "Could not install the Solana CLI."
+  echo "Installing the Solana CLI (Agave 3.1.9)…"
+  if ! { INST=$(curl -sSfL https://release.anza.xyz/v3.1.9/install) && sh -c "$INST"; }; then
+    # release.anza.xyz unreachable (e.g. a locked-down network): the same release from GitHub
+    case "$(uname -s)-$(uname -m)" in
+      Linux-x86_64) T=x86_64-unknown-linux-gnu;; Darwin-arm64) T=aarch64-apple-darwin;; Darwin-x86_64) T=x86_64-apple-darwin;;
+      *) die "Could not install the Solana CLI.";;
+    esac
+    mkdir -p .devnet-run && curl -sSfL "https://github.com/anza-xyz/agave/releases/download/v3.1.9/solana-release-$T.tar.bz2" | tar -xj -C .devnet-run || die "Could not install the Solana CLI."
+    export PATH="$PWD/.devnet-run/solana-release/bin:$PATH"
+  fi
   export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 fi
 if ! command -v cloudflared >/dev/null; then
   echo "Installing cloudflared (for the public links)…"; mkdir -p .devnet-run/bin
   if command -v brew >/dev/null; then brew install cloudflared || true; fi
   if ! command -v cloudflared >/dev/null; then
-    ARCH=$(uname -m); [ "$ARCH" = "arm64" ] && F=cloudflared-darwin-arm64.tgz || F=cloudflared-darwin-amd64.tgz
-    curl -sSfL "https://github.com/cloudflare/cloudflared/releases/latest/download/$F" | tar -xz -C .devnet-run/bin || die "Could not download cloudflared."
+    ARCH=$(uname -m); U="https://github.com/cloudflare/cloudflared/releases/latest/download"
+    if [ "$(uname -s)" = "Linux" ]; then
+      case "$ARCH" in aarch64|arm64) F=cloudflared-linux-arm64;; *) F=cloudflared-linux-amd64;; esac
+      curl -sSfL -o .devnet-run/bin/cloudflared "$U/$F" || die "Could not download cloudflared."
+    else
+      [ "$ARCH" = "arm64" ] && F=cloudflared-darwin-arm64.tgz || F=cloudflared-darwin-amd64.tgz
+      curl -sSfL "$U/$F" | tar -xz -C .devnet-run/bin || die "Could not download cloudflared."
+    fi
     chmod +x .devnet-run/bin/cloudflared
   fi
 fi
