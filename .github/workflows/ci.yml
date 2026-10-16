@@ -1,0 +1,43 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      AGAVE_VERSION: v3.1.9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install the Solana (Agave) CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/${AGAVE_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+          echo "SOLANA_BIN=$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_ENV"
+      - run: solana --version && cargo-build-sbf --version
+      - run: npm ci
+      - name: Build the three programs from scratch (also regenerates vkey.rs from zk/keys/withdraw_vkey.json)
+        run: rm -f target/deploy/*.so && npm run build
+      - name: vkey.rs unchanged by the build
+        run: git diff --exit-code programs/veyl_pool/src/vkey.rs
+      - name: Circuit compiles to exactly the shipped build (pinned circom; wasm byte-identical; r1cs as committed)
+        run: npm run ceremony -- r1cs && git diff --exit-code zk/build/withdraw.r1cs
+      - name: Browser bundle reproducible
+        run: npm run bundle && git diff --exit-code site/veyl-sol.js
+      - name: Preflight (informational; no chain RPC in CI)
+        run: npm run preflight -- --network devnet || true
+      - name: Program tests (local validator, real Groth16 proofs)
+        run: npm test
+      - name: Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: End to end (dist/site under the production CSP, proofs in the browser)
+        run: npm run e2e
+      - name: Static site build
+        run: npm run build:site -- --network devnet && test -f dist/site/_headers && test -f dist/site/vercel.json

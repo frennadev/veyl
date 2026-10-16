@@ -1,0 +1,101 @@
+# Render blueprint: the relayer (Docker web service) and the static site. Secrets are entered in the Render dashboard
+# (sync: false), never committed. Set NETWORK / the build --network to mainnet only after DEPLOY.md "Before mainnet".
+services:
+  - type: web
+    name: veyl-sol-relayer
+    runtime: docker
+    dockerfilePath: ./relayer/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: NETWORK
+        value: "devnet"
+      - key: RPC_URL   # a devnet/mainnet RPC URL (paid provider recommended)
+        sync: false
+      - key: RELAYER_SECRET_KEY   # the relayer hot wallet (fee-only, low balance)
+        sync: false
+      - key: POSTMAN_SECRET_KEY   # optional: approved-set publisher key
+        sync: false
+      - key: ALLOWED_ORIGINS   # the site origin, e.g. https://veyl-sol-site.onrender.com
+        sync: false
+      - key: MIN_FEE_BPS
+        value: "5"
+      - key: LOW_BALANCE_SOL
+        value: "0.05"
+      - key: TRUST_PROXY   # Render's proxy: rate-limit on the client address it appends to X-Forwarded-For (REVIEW.md L-2)
+        value: "1"
+      - key: FEE_COVER     # the fee must pay back at least this multiple of the rent + fees a request costs (REVIEW.md M-1)
+        value: "1"
+  - type: web
+    name: veyl-sol-site
+    runtime: static
+    buildCommand: npm ci && npm run build:site -- --network devnet
+    staticPublishPath: dist/site
+    envVars:
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: "1"
+      - key: RELAYER_HOST
+        fromService:
+          type: web
+          name: veyl-sol-relayer
+          property: host
+    routes:
+      - type: rewrite
+        source: /app
+        destination: /app.html
+      - type: rewrite
+        source: /docs
+        destination: /docs.html
+      - type: rewrite
+        source: /protocol
+        destination: /protocol.html
+      - type: rewrite
+        source: /liquidity
+        destination: /liquidity.html
+    headers:
+      - path: "/*"
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+      - path: "/*"
+        name: X-Content-Type-Options
+        value: "nosniff"
+      - path: "/*"
+        name: Referrer-Policy
+        value: "no-referrer"
+      - path: "/*"
+        name: X-Frame-Options
+        value: "DENY"
+      - path: "/*"
+        name: Permissions-Policy
+        value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+      - path: "/*"
+        name: Cross-Origin-Opener-Policy
+        value: "same-origin"
+      - path: "/*"
+        name: Strict-Transport-Security
+        value: "max-age=63072000; includeSubDomains"
+      - path: "/*.wasm"
+        name: Content-Type
+        value: "application/wasm"
+      - path: "/*.wasm"
+        name: Cache-Control
+        value: "public, max-age=31536000, immutable"
+      - path: "/*.zkey"
+        name: Content-Type
+        value: "application/octet-stream"
+      - path: "/*.zkey"
+        name: Cache-Control
+        value: "public, max-age=31536000, immutable"
+      - path: "/*.js"
+        name: Content-Type
+        value: "application/javascript; charset=utf-8"
+      - path: "/*.js"
+        name: Cache-Control
+        value: "public, max-age=300, must-revalidate"
+      - path: "/*.html"
+        name: Cache-Control
+        value: "no-cache"
+      - path: "/veyl.config.js"
+        name: Cache-Control
+        value: "no-cache"

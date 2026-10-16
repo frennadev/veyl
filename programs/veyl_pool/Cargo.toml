@@ -1,0 +1,21 @@
+[package]
+name = "veyl_pool"
+version = "0.1.0"
+edition = "2021"
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "veyl_pool"
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+mainnet = []
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = "0.31.1"
+groth16-solana = "0.2.0"
+solana-poseidon = "2"
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }

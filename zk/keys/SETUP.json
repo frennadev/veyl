@@ -1,0 +1,43 @@
+{
+  "_comment": "Provenance of the Groth16 keys for every circuit (withdraw, transact, position, swap, claim). Preflight compares these hashes with zk/, the program's baked-in verifying keys and the site's copies. kind = \"dev\" means a single-machine setup: preflight --network mainnet stays red until every circuit's keys come from the multi-party ceremony (kind = \"ceremony\", with a public transcript) and veyl_pool is rebuilt from the new *_vkey.json.",
+  "kind": "dev",
+  "description": "withdraw: Powers of Tau 2^14, one local contribution + beacon; phase 2 one local contribution + beacon. transact, position (Phase 2 shielded pool): a locally generated Powers of Tau 2^16 (one contribution), phase 2 one local contribution. swap, claim (Phase 3 sealed batches): the same locally generated Powers of Tau 2^16, phase 2 one local contribution. All made on one machine. Fine for devnet; NOT for real funds.",
+  "circuit": "zk/circuits/withdraw.circom",
+  "zkeySha256": "b1ce9fa6440fd92d540badb7f0053b08f6a6a0a1bb5b6afaac9b112a14d44447",
+  "vkeySha256": "a3e050040ab01476ed1e7d088ee2227b02fadfc34bc0e0f81b7cf1b06122f1b9",
+  "wasmSha256": "49fb1888c9b78f488802e9dce63c659f0b35f7ea42dde4b910c9c2d615f96aa8",
+  "contributionLogSha256": "55976492a32d76ed494e4c3f2c170dbf9f62d38dea42e40260b8c8cee0644274",
+  "transcript": null,
+  "circuits": {
+    "withdraw": {
+      "circuit": "zk/circuits/withdraw.circom",
+      "zkeySha256": "b1ce9fa6440fd92d540badb7f0053b08f6a6a0a1bb5b6afaac9b112a14d44447",
+      "vkeySha256": "a3e050040ab01476ed1e7d088ee2227b02fadfc34bc0e0f81b7cf1b06122f1b9",
+      "wasmSha256": "49fb1888c9b78f488802e9dce63c659f0b35f7ea42dde4b910c9c2d615f96aa8"
+    },
+    "transact": {
+      "circuit": "zk/circuits/transact.circom",
+      "zkeySha256": "7f9e3d222a400b3bb63e986e36d33f68723414e8fa606752c2a57f9182d20064",
+      "vkeySha256": "93caacce5992c69b0b6b6000ec7872b2fa2f7476be0a938b9292f093a322491c",
+      "wasmSha256": "53fda2850bb0debcbbfd1512e415418f6e67d8aa09025611911b7d89cbd1bd10"
+    },
+    "position": {
+      "circuit": "zk/circuits/position.circom",
+      "zkeySha256": "005d3190f5a7ddbafb14d52488d0304988ae22407666dce6b032a7cc1b4b3c2d",
+      "vkeySha256": "c3a85ca0d8e69510c93d1c16cebec3948818f598d38833716a11600e6d1721fc",
+      "wasmSha256": "5df5325d8321be986e56fbaec9130b26b2f605949774cad59785f4cd0d13cea8"
+    },
+    "swap": {
+      "circuit": "zk/circuits/swap.circom",
+      "zkeySha256": "5905898bbc9889d03c75384159de066cae304f2bd637f0ea3a80e968bb00c8b2",
+      "vkeySha256": "418268f6c24d1fb2d4d0cc750cd369bcb9c7db7a69031785e3f08a62fedebaec",
+      "wasmSha256": "09b734a86446c5785b1d9ba57a3cabb1176c69113b1e3bd5da72f5d5645d3e36"
+    },
+    "claim": {
+      "circuit": "zk/circuits/claim.circom",
+      "zkeySha256": "24ee888ae9154f87a48341d21e16729db1db3da89326be1784892f3121e4c2c7",
+      "vkeySha256": "fcf3d3d3b6647942e39db2850fe35cd5a4b37e03474eea9c96173ae8976511ff",
+      "wasmSha256": "637144c214feff3fb7129b3698828250743938a0caa3fb36f63457f4aabbb33a"
+    }
+  }
+}

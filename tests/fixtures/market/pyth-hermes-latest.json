@@ -1,0 +1,10 @@
+{
+  "_source": "Hermes GET /v2/updates/price/latest?ids[]=...&parsed=true: the response shape of the Hermes API (binary + parsed[] with price/conf/expo/publish_time, ema_price, metadata); values illustrative",
+  "binary": { "encoding": "hex", "data": ["504e41550100000003b801000000040d00"] },
+  "parsed": [
+    { "id": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", "price": { "price": "14748534567", "conf": "8834521", "expo": -8, "publish_time": 1791900000 }, "ema_price": { "price": "14712000000", "conf": "9012345", "expo": -8, "publish_time": 1791900000 }, "metadata": { "slot": 180012345, "proof_available_time": 1791900001, "prev_publish_time": 1791899999 } },
+    { "id": "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a", "price": { "price": "99990123", "conf": "82341", "expo": -8, "publish_time": 1791900000 }, "ema_price": { "price": "99991000", "conf": "80000", "expo": -8, "publish_time": 1791900000 }, "metadata": { "slot": 180012345, "proof_available_time": 1791900001, "prev_publish_time": 1791899999 } },
+    { "id": "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b", "price": { "price": "100012000", "conf": "71000", "expo": -8, "publish_time": 1791900000 }, "ema_price": { "price": "100010000", "conf": "70000", "expo": -8, "publish_time": 1791900000 }, "metadata": { "slot": 180012345 } },
+    { "id": "0a0408d619e9380abad35060f9192039ed5042fa6f82301d0e48bb52be830996", "price": { "price": "40560185", "conf": "41234", "expo": -8, "publish_time": 1791899999 }, "ema_price": { "price": "40500000", "conf": "40000", "expo": -8, "publish_time": 1791899999 }, "metadata": { "slot": 180012344 } }
+  ]
+}

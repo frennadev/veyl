@@ -1,0 +1,22 @@
+[package]
+name = "veyl_entry"
+version = "0.1.0"
+edition = "2021"
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "veyl_entry"
+[features]
+default = ["custom-heap"]
+custom-heap = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+mainnet = ["veyl_pool/mainnet", "veyl_bin/mainnet"]
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = "0.31.1"
+veyl_pool = { path = "../veyl_pool", features = ["cpi"] }
+veyl_bin = { path = "../veyl_bin", features = ["cpi"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }

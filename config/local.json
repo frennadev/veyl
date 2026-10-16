@@ -1,0 +1,55 @@
+{
+  "_comment": "Local solana-test-validator (npm run localnet). Mock mints are created by the deploy; nothing here is secret.",
+  "network": "local",
+  "rpc": "http://127.0.0.1:8933",
+  "genesisHash": null,
+  "chainName": "Local validator",
+  "explorer": "",
+  "explorerSuffix": "",
+  "relayerUrl": "http://127.0.0.1:8843",
+  "mockMints": true,
+  "tokens": [
+    "SOL",
+    "USDC",
+    "USDT",
+    "JUP",
+    "BONK"
+  ],
+  "binPools": [
+    "sol-usdc",
+    "sol-usdt",
+    "jup-sol",
+    "bonk-sol",
+    "usdt-usdc"
+  ],
+  "protocolShareBps": 1000,
+  "mints": {},
+  "prices": {},
+  "programs": {
+    "pool": "BudA5kQySdfhfocWhPiDUP888tuoqL9aRxNiq9Qon73V",
+    "bin": "6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk",
+    "entry": "4q6p4io7m3pgxpMqRDSKBRsAb6gCBGCKvTRabZtp1QHn"
+  },
+  "postman": null,
+  "relayer": null,
+  "sealed": {
+    "_comment": "Phase 3 sealed batch swaps: which bin pools get batches and their rules (slots: ~0.4 s each). minIn per token in display units (with the relayer fee, what a fake participant costs). The committee is registered from committee/transcript.local.json when it exists.",
+    "pools": [
+      "sol-usdc",
+      "sol-usdt",
+      "usdt-usdc"
+    ],
+    "epochSlots": 150,
+    "settleTimeout": 1500,
+    "kMin": 3,
+    "maxRollovers": 4,
+    "maxDrift": 50,
+    "minIn": {
+      "SOL": 0.01,
+      "USDC": 1,
+      "USDT": 1,
+      "JUP": 5,
+      "BONK": 200000
+    }
+  }
+}

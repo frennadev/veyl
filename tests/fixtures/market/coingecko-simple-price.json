@@ -1,0 +1,22 @@
+{
+ "solana": {
+  "usd": 147.52,
+  "usd_24h_change": 2.3412
+ },
+ "usd-coin": {
+  "usd": 0.999806,
+  "usd_24h_change": 0.01
+ },
+ "tether": {
+  "usd": 1.0003,
+  "usd_24h_change": -0.02
+ },
+ "jupiter-exchange-solana": {
+  "usd": 0.4051,
+  "usd_24h_change": -1.1
+ },
+ "bonk": {
+  "usd": 1.243e-05,
+  "usd_24h_change": 4.2
+ }
+}

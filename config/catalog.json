@@ -1,0 +1,1208 @@
+{
+ "_comment": "Every major Meteora DLMM pair (deduplicated from Meteora's top 100 pools by 24h volume, 15 Oct 2026), mirrored as Veyl devnet pools with mock tokens. Prices are filled at launch from Meteora's live API (scripts/price-catalog.js); a pair with no live price is skipped. Bin step and base fee follow one rule per pair type (stable 1 / 0.01%, staked SOL 1 / 0.01%, SOL-stable 10 / 0.05%, majors 20 / 0.2%, everything else 80 / 1%).",
+ "tokens": [
+  {
+   "sym": "HYPE",
+   "name": "Hyperliquid",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "TRUMP",
+   "name": "Official Trump",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "MU",
+   "name": "Micron (tokenized)",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "STONK",
+   "name": "STONK",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "cbBTC",
+   "name": "Coinbase Wrapped BTC",
+   "decimals": 8,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "TTWO",
+   "name": "Take-Two (tokenized)",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "SKHY",
+   "name": "SKHY",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "SI",
+   "name": "SI",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "BP",
+   "name": "BP",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "SPCX",
+   "name": "SpaceX (tokenized)",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "wNEAR",
+   "name": "Wrapped NEAR",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "PUMP",
+   "name": "Pump.fun",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "MUSK",
+   "name": "MUSK",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ZEC",
+   "name": "Zcash",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "WETH",
+   "name": "Wrapped Ether",
+   "decimals": 8,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "MET",
+   "name": "Meteora",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ANSEM",
+   "name": "ANSEM",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "BORDR",
+   "name": "BORDR",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ANTFUN",
+   "name": "ANTFUN",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "DOPE",
+   "name": "DOPE",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "CARDS",
+   "name": "CARDS",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "STRK",
+   "name": "Starknet",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "baton",
+   "name": "baton",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ORE",
+   "name": "Ore",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "HOOKED",
+   "name": "HOOKED",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "CLAUDIA",
+   "name": "CLAUDIA",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "Agency",
+   "name": "Agency",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "NVDAx",
+   "name": "NVIDIA xStock",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "MASK",
+   "name": "MASK",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "wXMR",
+   "name": "Wrapped Monero",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "DARK",
+   "name": "DARK",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ZCAT",
+   "name": "ZCAT",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ENA",
+   "name": "Ethena",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "DOGE",
+   "name": "Dogecoin",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "Dacity",
+   "name": "Dacity",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "PENGU",
+   "name": "Pudgy Penguins",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "LOAD",
+   "name": "LOAD",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "PEPE",
+   "name": "Pepe",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "CTM",
+   "name": "CTM",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "GOOGLx",
+   "name": "Alphabet xStock",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "WBTC",
+   "name": "Wrapped BTC",
+   "decimals": 8,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "USDe",
+   "name": "Ethena USDe",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "USDG",
+   "name": "Global Dollar",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "JEANPHIL",
+   "name": "JEANPHIL",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "SNDK",
+   "name": "SanDisk (tokenized)",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "JupSOL",
+   "name": "Jupiter Staked SOL",
+   "decimals": 9,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "JitoSOL",
+   "name": "Jito Staked SOL",
+   "decimals": 9,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "CRAWL",
+   "name": "CRAWL",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "DBR",
+   "name": "DBR",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "OMNI",
+   "name": "OMNI",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "USELESS",
+   "name": "USELESS",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "JLP",
+   "name": "Jupiter LP",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "CATE",
+   "name": "CATE",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "FTR",
+   "name": "FTR",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "ANTHROPIC",
+   "name": "ANTHROPIC",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "INF",
+   "name": "Sanctum Infinity",
+   "decimals": 9,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "swordcat",
+   "name": "swordcat",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "INJ",
+   "name": "Injective",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "JupUSD",
+   "name": "Jupiter USD",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  },
+  {
+   "sym": "VEIL",
+   "name": "VEIL",
+   "decimals": 6,
+   "minDeposit": 0,
+   "price": 0
+  }
+ ],
+ "binPools": [
+  {
+   "id": "hype-sol",
+   "x": "HYPE",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 2
+  },
+  {
+   "id": "trump-usdc",
+   "x": "TRUMP",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 3
+  },
+  {
+   "id": "mu-usdc",
+   "x": "MU",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 4
+  },
+  {
+   "id": "stonk-sol",
+   "x": "STONK",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 5
+  },
+  {
+   "id": "cbbtc-sol",
+   "x": "cbBTC",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 6
+  },
+  {
+   "id": "ttwo-usdc",
+   "x": "TTWO",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 7
+  },
+  {
+   "id": "cbbtc-usdc",
+   "x": "cbBTC",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 8
+  },
+  {
+   "id": "skhy-usdc",
+   "x": "SKHY",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 9
+  },
+  {
+   "id": "si-sol",
+   "x": "SI",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 10
+  },
+  {
+   "id": "bp-usdc",
+   "x": "BP",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 11
+  },
+  {
+   "id": "spcx-sol",
+   "x": "SPCX",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 12
+  },
+  {
+   "id": "wnear-usdc",
+   "x": "wNEAR",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 13
+  },
+  {
+   "id": "pump-usdc",
+   "x": "PUMP",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 15
+  },
+  {
+   "id": "musk-usdc",
+   "x": "MUSK",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 16
+  },
+  {
+   "id": "pump-sol",
+   "x": "PUMP",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 17
+  },
+  {
+   "id": "zec-sol",
+   "x": "ZEC",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 18
+  },
+  {
+   "id": "weth-sol",
+   "x": "WETH",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 19
+  },
+  {
+   "id": "met-sol",
+   "x": "MET",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 20
+  },
+  {
+   "id": "ansem-sol",
+   "x": "ANSEM",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 21
+  },
+  {
+   "id": "bordr-sol",
+   "x": "BORDR",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 22
+  },
+  {
+   "id": "antfun-usdt",
+   "x": "ANTFUN",
+   "y": "USDT",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 23
+  },
+  {
+   "id": "dope-sol",
+   "x": "DOPE",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 24
+  },
+  {
+   "id": "cards-usdc",
+   "x": "CARDS",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 25
+  },
+  {
+   "id": "strk-usdc",
+   "x": "STRK",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 26
+  },
+  {
+   "id": "baton-sol",
+   "x": "baton",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 28
+  },
+  {
+   "id": "wnear-sol",
+   "x": "wNEAR",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 29
+  },
+  {
+   "id": "ttwo-sol",
+   "x": "TTWO",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 30
+  },
+  {
+   "id": "ore-sol",
+   "x": "ORE",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 31
+  },
+  {
+   "id": "hooked-sol",
+   "x": "HOOKED",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 32
+  },
+  {
+   "id": "claudia-sol",
+   "x": "CLAUDIA",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 34
+  },
+  {
+   "id": "agency-sol",
+   "x": "Agency",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 35
+  },
+  {
+   "id": "nvdax-sol",
+   "x": "NVDAx",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 36
+  },
+  {
+   "id": "mask-sol",
+   "x": "MASK",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 37
+  },
+  {
+   "id": "wxmr-usdc",
+   "x": "wXMR",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 38
+  },
+  {
+   "id": "dark-sol",
+   "x": "DARK",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 39
+  },
+  {
+   "id": "zcat-sol",
+   "x": "ZCAT",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 40
+  },
+  {
+   "id": "ena-usdc",
+   "x": "ENA",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 41
+  },
+  {
+   "id": "doge-sol",
+   "x": "DOGE",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 42
+  },
+  {
+   "id": "dacity-sol",
+   "x": "Dacity",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 43
+  },
+  {
+   "id": "pengu-usdc",
+   "x": "PENGU",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 44
+  },
+  {
+   "id": "load-sol",
+   "x": "LOAD",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 45
+  },
+  {
+   "id": "pepe-sol",
+   "x": "PEPE",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 47
+  },
+  {
+   "id": "ctm-sol",
+   "x": "CTM",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 48
+  },
+  {
+   "id": "googlx-sol",
+   "x": "GOOGLx",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 49
+  },
+  {
+   "id": "wbtc-usdc",
+   "x": "WBTC",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 50
+  },
+  {
+   "id": "usde-usdg",
+   "x": "USDe",
+   "y": "USDG",
+   "binStep": 1,
+   "baseFee": 100,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Stable",
+   "meteoraRank": 51
+  },
+  {
+   "id": "jeanphil-sol",
+   "x": "JEANPHIL",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 52
+  },
+  {
+   "id": "cards-sol",
+   "x": "CARDS",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 53
+  },
+  {
+   "id": "sndk-sol",
+   "x": "SNDK",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 54
+  },
+  {
+   "id": "bp-sol",
+   "x": "BP",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 55
+  },
+  {
+   "id": "spcx-usdc",
+   "x": "SPCX",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 56
+  },
+  {
+   "id": "jupsol-jitosol",
+   "x": "JupSOL",
+   "y": "JitoSOL",
+   "binStep": 1,
+   "baseFee": 100,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Staked SOL",
+   "meteoraRank": 57
+  },
+  {
+   "id": "crawl-sol",
+   "x": "CRAWL",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 58
+  },
+  {
+   "id": "dbr-usdc",
+   "x": "DBR",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 59
+  },
+  {
+   "id": "omni-sol",
+   "x": "OMNI",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 60
+  },
+  {
+   "id": "useless-sol",
+   "x": "USELESS",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 61
+  },
+  {
+   "id": "jlp-jitosol",
+   "x": "JLP",
+   "y": "JitoSOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 62
+  },
+  {
+   "id": "cate-usdc",
+   "x": "CATE",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 63
+  },
+  {
+   "id": "strk-sol",
+   "x": "STRK",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 64
+  },
+  {
+   "id": "ftr-sol",
+   "x": "FTR",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 65
+  },
+  {
+   "id": "anthropic-sol",
+   "x": "ANTHROPIC",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 66
+  },
+  {
+   "id": "hype-usdc",
+   "x": "HYPE",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 67
+  },
+  {
+   "id": "jupsol-inf",
+   "x": "JupSOL",
+   "y": "INF",
+   "binStep": 1,
+   "baseFee": 100,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Staked SOL",
+   "meteoraRank": 68
+  },
+  {
+   "id": "si-usdc",
+   "x": "SI",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 69
+  },
+  {
+   "id": "wbtc-sol",
+   "x": "WBTC",
+   "y": "SOL",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 70
+  },
+  {
+   "id": "swordcat-sol",
+   "x": "swordcat",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 71
+  },
+  {
+   "id": "inj-usdc",
+   "x": "INJ",
+   "y": "USDC",
+   "binStep": 20,
+   "baseFee": 2000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Volatile",
+   "meteoraRank": 72
+  },
+  {
+   "id": "inf-sol",
+   "x": "INF",
+   "y": "SOL",
+   "binStep": 1,
+   "baseFee": 100,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Staked SOL",
+   "meteoraRank": 73
+  },
+  {
+   "id": "bordr-jupusd",
+   "x": "BORDR",
+   "y": "JupUSD",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 74
+  },
+  {
+   "id": "ansem-usdc",
+   "x": "ANSEM",
+   "y": "USDC",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 75
+  },
+  {
+   "id": "veil-sol",
+   "x": "VEIL",
+   "y": "SOL",
+   "binStep": 80,
+   "baseFee": 10000,
+   "vfc": 10000,
+   "price": 0,
+   "type": "Memecoin",
+   "meteoraRank": 76
+  }
+ ]
+}
