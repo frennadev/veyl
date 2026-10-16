@@ -6,7 +6,7 @@ What stands today, what is next, and what could come later. The homepage shows t
 
 | Milestone | State | Note |
 |---|---|---|
-| Built and tested | done | Three Anchor programs (`veyl_pool`, `veyl_bin`, `veyl_entry`), five Groth16 circuits, the relayer and the batch committee; `npm test` (298 on a local validator), `npm run e2e` (69), `npm run e2e:sandbox` (70), `npm run e2e:local` (26), `npm run e2e:smoke` (53). Internal review done, findings fixed (REVIEW.md). |
+| Built and tested | done | Three Anchor programs (`veyl_pool`, `veyl_bin`, `veyl_entry`), five Groth16 circuits, the relayer and the batch committee; `npm test` (298 on a local validator), `npm run e2e` (67), `npm run e2e:sandbox` (61), `npm run e2e:local` (32), `npm run e2e:smoke` (47). Internal review done, findings fixed (REVIEW.md). |
 | Try it in your browser | done | The Sandbox: the app on a chain simulated in the page (`site/sandbox-chain.js`), real proofs in a Web Worker, a 2-of-3 committee in the page, play money, live market prices. |
 | Testnet | next | Solana devnet with mock tokens: `GO-LIVE.command` / `npm run deploy -- --network devnet` (DEPLOY.md). Blocked only on funding the deployer. |
 | Security | before mainnet | A multi-party key ceremony for the five circuits (`ceremony/`, rehearsed; the real one not run) and the committee's dealerless key generation among independent operators; then an external audit. Until both, the proving keys are single-machine and the protocol is testnet-only. |
