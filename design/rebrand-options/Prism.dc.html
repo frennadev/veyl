@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Veyl · Prism</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700;900&amp;family=Red+Hat+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#F5F5F2}a:hover{color:#3FC8FF}
+.pr-flow{stroke-dasharray:6 10;animation:pr-flow 1.2s linear infinite}
+.pr-flow-s{stroke-dasharray:3 6;animation:pr-flow-s .9s linear infinite}
+.pr-beam{animation:pr-beam 2.4s ease-in-out infinite}
+.pr-bar{transform-box:fill-box;transform-origin:bottom;animation:pr-bob 3s ease-in-out infinite}
+.pr-glint{animation:pr-glint 5s ease-in-out infinite}
+.pr-fill{transform-origin:left;animation:pr-fill 3.8s cubic-bezier(.6,0,.2,1) infinite}
+.pr-sweep{background-size:300% 100%;animation:pr-sweep 6s linear infinite}
+@keyframes pr-flow{to{stroke-dashoffset:-32}}
+@keyframes pr-flow-s{to{stroke-dashoffset:-18}}
+@keyframes pr-beam{0%,100%{opacity:.75}50%{opacity:1}}
+@keyframes pr-bob{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.84)}}
+@keyframes pr-glint{0%,60%,100%{opacity:0}75%{opacity:.9}}
+@keyframes pr-fill{0%{transform:scaleX(0)}70%,100%{transform:scaleX(1)}}
+@keyframes pr-sweep{to{background-position:300% 0}}
+@media (prefers-reduced-motion:reduce){.pr-flow,.pr-flow-s,.pr-beam,.pr-bar,.pr-glint,.pr-fill,.pr-sweep{animation:none}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1760px; box-sizing: border-box; background: #050506; color: #F5F5F2; font-family: 'Red Hat Display', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<header style="display: flex; align-items: center; gap: 40px; padding: 30px 80px; border-bottom: 1px solid #1A1A1D">
+<a href="#" style="display: flex; align-items: center; gap: 12px; text-decoration: none">
+<svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><line x1="0" y1="36" x2="17" y2="36" stroke="#F5F5F2" stroke-width="3"></line><polygon points="26,10 42,50 10,50" fill="none" stroke="#F5F5F2" stroke-width="3" stroke-linejoin="round"></polygon><line x1="36" y1="34" x2="62" y2="22" stroke="#FF4D4D" stroke-width="3"></line><line x1="37" y1="36" x2="62" y2="32" stroke="#FFB23F" stroke-width="3"></line><line x1="38" y1="38" x2="62" y2="42" stroke="#3FC8FF" stroke-width="3"></line><line x1="39" y1="40" x2="62" y2="52" stroke="#9B6BFF" stroke-width="3"></line></svg>
+<span style="font-weight: 700; font-size: 24px; letter-spacing: -0.01em">veyl</span>
+</a>
+<nav style="display: flex; gap: 34px; margin-left: auto; font-size: 15px; font-weight: 500; color: #B4B4BA">
+<a href="#" style="text-decoration: none; color: inherit">Pools</a>
+<a href="#" style="text-decoration: none; color: inherit">Privacy</a>
+<a href="#" style="text-decoration: none; color: inherit">How it works</a>
+<a href="#" style="text-decoration: none; color: inherit">Docs</a>
+</nav>
+<a href="#" style="background: #F5F5F2; color: #050506; text-decoration: none; font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 8px">Open app</a>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; padding: 72px 80px 56px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 28px">
+<p style="margin: 0; font-family: 'Red Hat Mono', monospace; font-size: 14px; color: #8A8A90">// private liquidity · solana</p>
+<h1 style="margin: 0; font-weight: 900; font-size: 90px; line-height: 0.98; letter-spacing: -0.035em">One deposit in. <span class="pr-sweep" style="background-image: linear-gradient(90deg, #FF4D4D, #FFB23F, #5CE38A, #3FC8FF, #9B6BFF, #FF4D4D); -webkit-background-clip: text; background-clip: text; color: transparent">Nothing traceable out.</span></h1>
+<p style="margin: 0; font-size: 20px; line-height: 1.6; color: #B4B4BA; max-width: 38ch">Your liquidity passes through Veyl and comes out spread across the bins, with no line back to where it started.</p>
+<div style="display: flex; gap: 12px">
+<a href="#" style="background: #F5F5F2; color: #050506; text-decoration: none; font-weight: 700; font-size: 16px; padding: 16px 26px; border-radius: 8px">Provide privately</a>
+<a href="#" style="border: 1px solid #2A2A2E; color: #F5F5F2; text-decoration: none; font-weight: 500; font-size: 16px; padding: 15px 26px; border-radius: 8px">How it works</a>
+</div>
+</div>
+<div style="display: flex; justify-content: center">
+<svg width="580" height="520" viewBox="0 0 580 520" role="img" aria-label="A white beam enters a prism and splits into five coloured rays that fall into liquidity bins">
+<defs>
+<linearGradient id="pr-glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F5F5F2" stop-opacity=".14"></stop><stop offset="1" stop-color="#F5F5F2" stop-opacity=".02"></stop></linearGradient>
+<filter id="pr-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"></feGaussianBlur></filter>
+</defs>
+<line x1="0" y1="292" x2="201" y2="292" stroke="#F5F5F2" stroke-width="10" opacity=".25" filter="url(#pr-blur)"></line>
+<line class="pr-beam" x1="0" y1="292" x2="201" y2="292" stroke="#F5F5F2" stroke-width="3"></line>
+<line class="pr-flow" x1="0" y1="292" x2="201" y2="292" stroke="#050506" stroke-width="3" opacity=".5"></line>
+<line x1="201" y1="292" x2="276" y2="285" stroke="#F5F5F2" stroke-width="2" opacity=".55"></line>
+<polygon points="240,200 300,340 180,340" fill="url(#pr-glass)" stroke="#F5F5F2" stroke-width="2" stroke-linejoin="round"></polygon>
+<line class="pr-glint" x1="244" y1="214" x2="286" y2="312" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></line>
+<g fill="none" stroke-width="2.5" stroke-linecap="round">
+<path d="M276 285 C 340 270, 417 200, 417 279" stroke="#9B6BFF" opacity=".25" stroke-width="8" filter="url(#pr-blur)"></path>
+<path class="pr-flow" d="M276 285 C 340 270, 417 200, 417 279" stroke="#9B6BFF"></path>
+<path d="M276 285 C 350 240, 435 140, 435 218" stroke="#3FC8FF" opacity=".25" stroke-width="8" filter="url(#pr-blur)"></path>
+<path class="pr-flow" d="M276 285 C 350 240, 435 140, 435 218" stroke="#3FC8FF" style="animation-delay:-.2s"></path>
+<path d="M276 285 C 360 210, 453 110, 453 190" stroke="#5CE38A" opacity=".25" stroke-width="8" filter="url(#pr-blur)"></path>
+<path class="pr-flow" d="M276 285 C 360 210, 453 110, 453 190" stroke="#5CE38A" style="animation-delay:-.4s"></path>
+<path d="M276 285 C 380 190, 471 140, 471 218" stroke="#FFB23F" opacity=".25" stroke-width="8" filter="url(#pr-blur)"></path>
+<path class="pr-flow" d="M276 285 C 380 190, 471 140, 471 218" stroke="#FFB23F" style="animation-delay:-.6s"></path>
+<path d="M276 285 C 400 180, 489 200, 489 279" stroke="#FF4D4D" opacity=".25" stroke-width="8" filter="url(#pr-blur)"></path>
+<path class="pr-flow" d="M276 285 C 400 180, 489 200, 489 279" stroke="#FF4D4D" style="animation-delay:-.8s"></path>
+</g>
+<rect class="pr-bar" style="animation-delay:0s" x="372" y="371" width="14" height="59" rx="2" fill="#2A2A2E"></rect>
+<rect class="pr-bar" style="animation-delay:.15s" x="390" y="337" width="14" height="93" rx="2" fill="#2A2A2E"></rect>
+<rect class="pr-bar" style="animation-delay:.3s" x="410" y="279" width="14" height="151" rx="2" fill="#9B6BFF"></rect>
+<rect class="pr-bar" style="animation-delay:.45s" x="428" y="218" width="14" height="212" rx="2" fill="#3FC8FF"></rect>
+<rect class="pr-bar" style="animation-delay:.6s" x="446" y="190" width="14" height="240" rx="2" fill="#5CE38A"></rect>
+<rect class="pr-bar" style="animation-delay:.75s" x="464" y="218" width="14" height="212" rx="2" fill="#FFB23F"></rect>
+<rect class="pr-bar" style="animation-delay:.9s" x="482" y="279" width="14" height="151" rx="2" fill="#FF4D4D"></rect>
+<rect class="pr-bar" style="animation-delay:1.05s" x="500" y="337" width="14" height="93" rx="2" fill="#2A2A2E"></rect>
+<rect class="pr-bar" style="animation-delay:1.2s" x="518" y="371" width="14" height="59" rx="2" fill="#2A2A2E"></rect>
+<line x1="364" y1="438" x2="540" y2="438" stroke="#2A2A2E" stroke-width="1"></line>
+<text x="0" y="272" font-family="Red Hat Mono, monospace" font-size="12" fill="#8A8A90">deposit</text>
+<text x="452" y="462" text-anchor="middle" font-family="Red Hat Mono, monospace" font-size="12" fill="#8A8A90">bins</text>
+</svg>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 0 80px">
+<div style="background: #0D0D0F; border: 1px solid #1A1A1D; border-radius: 14px; padding: 32px; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">// mark</p>
+<div style="display: flex; gap: 16px">
+<div style="width: 140px; height: 140px; border-radius: 16px; background: #050506; border: 1px solid #1A1A1D; display: flex; align-items: center; justify-content: center">
+<svg width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Veyl prism mark on void"><line x1="0" y1="36" x2="17" y2="36" stroke="#F5F5F2" stroke-width="3"></line><polygon points="26,10 42,50 10,50" fill="none" stroke="#F5F5F2" stroke-width="3" stroke-linejoin="round"></polygon><line x1="36" y1="34" x2="62" y2="22" stroke="#FF4D4D" stroke-width="3"></line><line x1="37" y1="36" x2="62" y2="32" stroke="#FFB23F" stroke-width="3"></line><line x1="38" y1="38" x2="62" y2="42" stroke="#3FC8FF" stroke-width="3"></line><line x1="39" y1="40" x2="62" y2="52" stroke="#9B6BFF" stroke-width="3"></line></svg>
+</div>
+<div style="width: 140px; height: 140px; border-radius: 16px; background: #F5F5F2; display: flex; align-items: center; justify-content: center">
+<svg width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Veyl prism mark, one colour, on paper"><line x1="0" y1="36" x2="17" y2="36" stroke="#050506" stroke-width="3"></line><polygon points="26,10 42,50 10,50" fill="none" stroke="#050506" stroke-width="3" stroke-linejoin="round"></polygon><line x1="36" y1="34" x2="62" y2="22" stroke="#050506" stroke-width="3"></line><line x1="37" y1="36" x2="62" y2="32" stroke="#050506" stroke-width="3"></line><line x1="38" y1="38" x2="62" y2="42" stroke="#050506" stroke-width="3"></line><line x1="39" y1="40" x2="62" y2="52" stroke="#050506" stroke-width="3"></line></svg>
+</div>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #B4B4BA">One line goes in, four come out. Works in full spectrum or a single colour.</p>
+</div>
+
+<div style="background: #0D0D0F; border: 1px solid #1A1A1D; border-radius: 14px; padding: 32px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0 0 10px; font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">// palette</p>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 8px; background: #050506; border: 1px solid #2A2A2E"></div><span style="font-size: 15px">Void</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">#050506</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 8px; background: #F5F5F2"></div><span style="font-size: 15px">Paper</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">#F5F5F2</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 8px; background: linear-gradient(90deg, #FF4D4D, #FFB23F, #5CE38A, #3FC8FF, #9B6BFF)"></div><span style="font-size: 15px">Spectrum (lines only)</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">5 stops</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 8px; background: #1A1A1D"></div><span style="font-size: 15px">Smoke</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">#1A1A1D</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 8px; background: #8A8A90"></div><span style="font-size: 15px">Ash</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">#8A8A90</span></div>
+</div>
+
+<div style="background: #0D0D0F; border: 1px solid #1A1A1D; border-radius: 14px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<p style="margin: 0; font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">// type</p>
+<p style="margin: 0; font-weight: 900; font-size: 92px; line-height: 1; letter-spacing: -0.04em">Aa <span style="font-family: 'Red Hat Mono', monospace; font-weight: 400; font-size: 72px; color: #3FC8FF">Aa</span></p>
+<p style="margin: 0; font-size: 15px; color: #B4B4BA">Red Hat Display, with its Mono sibling for figures</p>
+<p style="margin: 0; font-size: 22px; font-weight: 500">Black for headlines, Medium for UI</p>
+<p style="margin: 0; font-family: 'Red Hat Mono', monospace; font-size: 15px; color: #B4B4BA">fee 0.05% · step 0.10%</p>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 20px 80px 0">
+<div style="background: #0D0D0F; border: 1px solid #1A1A1D; border-radius: 14px; padding: 32px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="font-weight: 700; font-size: 26px; letter-spacing: -0.01em">SOL / USDC</span>
+<span style="margin-left: auto; font-family: 'Red Hat Mono', monospace; font-size: 12px; color: #F5F5F2; border: 1px solid #2A2A2E; padding: 6px 10px; border-radius: 6px">shielded</span>
+</div>
+<svg width="100%" height="96" viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true" style="display: block">
+<defs><linearGradient id="pr-spec" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9B6BFF"></stop><stop offset=".3" stop-color="#3FC8FF"></stop><stop offset=".5" stop-color="#5CE38A"></stop><stop offset=".7" stop-color="#FFB23F"></stop><stop offset="1" stop-color="#FF4D4D"></stop></linearGradient></defs>
+<g fill="url(#pr-spec)">
+<rect x="0.0" y="72.2" width="10.17" height="23.8" rx="1.5"></rect><rect x="13.2" y="69.6" width="10.17" height="26.4" rx="1.5"></rect><rect x="26.3" y="65.9" width="10.17" height="30.1" rx="1.5"></rect><rect x="39.5" y="60.8" width="10.17" height="35.2" rx="1.5"></rect><rect x="52.7" y="54.2" width="10.17" height="41.8" rx="1.5"></rect><rect x="65.9" y="46.3" width="10.17" height="49.7" rx="1.5"></rect><rect x="79.0" y="37.4" width="10.17" height="58.6" rx="1.5"></rect><rect x="92.2" y="28.1" width="10.17" height="67.9" rx="1.5"></rect><rect x="105.4" y="19.5" width="10.17" height="76.5" rx="1.5"></rect><rect x="118.6" y="12.3" width="10.17" height="83.7" rx="1.5"></rect><rect x="131.7" y="7.6" width="10.17" height="88.4" rx="1.5"></rect><rect x="144.9" y="6.0" width="10.17" height="90.0" rx="1.5"></rect><rect x="158.1" y="7.6" width="10.17" height="88.4" rx="1.5"></rect><rect x="171.3" y="12.3" width="10.17" height="83.7" rx="1.5"></rect><rect x="184.4" y="19.5" width="10.17" height="76.5" rx="1.5"></rect><rect x="197.6" y="28.1" width="10.17" height="67.9" rx="1.5"></rect><rect x="210.8" y="37.4" width="10.17" height="58.6" rx="1.5"></rect><rect x="224.0" y="46.3" width="10.17" height="49.7" rx="1.5"></rect><rect x="237.1" y="54.2" width="10.17" height="41.8" rx="1.5"></rect><rect x="250.3" y="60.8" width="10.17" height="35.2" rx="1.5"></rect><rect x="263.5" y="65.9" width="10.17" height="30.1" rx="1.5"></rect><rect x="276.7" y="69.6" width="10.17" height="26.4" rx="1.5"></rect><rect x="289.8" y="72.2" width="10.17" height="23.8" rx="1.5"></rect>
+</g>
+</svg>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; font-size: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #8A8A90">Bin step</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 20px">0.10%</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #8A8A90">Base fee</span><span style="font-family: 'Red Hat Mono', monospace; font-size: 20px">0.05%</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #8A8A90">Fee cap</span><span style="font-size: 20px; font-weight: 500">10%</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #B4B4BA">proving on this device…</span>
+<div style="height: 4px; background: #1A1A1D; border-radius: 2px; overflow: hidden"><div class="pr-fill" style="height: 4px; background: linear-gradient(90deg, #9B6BFF, #3FC8FF, #5CE38A, #FFB23F, #FF4D4D)"></div></div>
+</div>
+<button type="button" style="border: 0; background: #F5F5F2; color: #050506; font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 16px; padding: 16px; border-radius: 8px; cursor: pointer">Provide privately</button>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: space-between; padding: 8px 8px 8px 24px">
+<p style="margin: 0; font-family: 'Red Hat Mono', monospace; font-size: 13px; color: #8A8A90">// motion</p>
+<div style="display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 18px">
+<svg width="96" height="64" viewBox="0 0 96 64" aria-hidden="true"><line class="pr-flow-s" x1="0" y1="34" x2="30" y2="34" stroke="#F5F5F2" stroke-width="2"></line><polygon points="40,12 56,50 24,50" fill="none" stroke="#F5F5F2" stroke-width="2" stroke-linejoin="round"></polygon><g fill="none" stroke-width="2"><line class="pr-flow-s" x1="50" y1="32" x2="96" y2="14" stroke="#FF4D4D"></line><line class="pr-flow-s" x1="51" y1="34" x2="96" y2="28" stroke="#FFB23F"></line><line class="pr-flow-s" x1="52" y1="36" x2="96" y2="42" stroke="#3FC8FF"></line><line class="pr-flow-s" x1="53" y1="38" x2="96" y2="56" stroke="#9B6BFF"></line></g></svg>
+<span style="font-size: 20px; font-weight: 500">Refract: light keeps flowing, never stops</span>
+</div>
+<div style="display: flex; align-items: center; gap: 18px">
+<div class="pr-sweep" style="width: 96px; height: 14px; border-radius: 7px; background-image: linear-gradient(90deg, #FF4D4D, #FFB23F, #5CE38A, #3FC8FF, #9B6BFF, #FF4D4D)"></div>
+<span style="font-size: 20px; font-weight: 500">Sweep: the spectrum drifts through accents</span>
+</div>
+</div>
+<p style="margin: 0; font-weight: 900; font-size: 44px; line-height: 1.02; letter-spacing: -0.03em">Split the light. <span style="color: #8A8A90">Lose the trail.</span></p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

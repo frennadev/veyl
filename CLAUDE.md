@@ -52,7 +52,8 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 - Devnet: `./VEYL-DEVNET.command` (or the steps in DEPLOY.md). Needs Solana CLI 3.1.x, Node 20+.
 
 ## Next steps
+The full ordered task list with estimates is in HANDOFF.md. Code lives in the private GitHub repo splashg22/Veyl (main).
 1. Devnet launch (fund the deployer from faucet.solana.com), then host site + relayer for a permanent link.
-2. Push to a private GitHub repo (`veyl`).
+2. Tester round and fixes; key ceremony; mainnet prep (HANDOFF.md).
 3. Optional: rename "price bins" to "price levels" in user-facing copy (owner was asked, no answer yet).
 4. Before mainnet: key ceremony, external audit, real mint addresses in config/mainnet.json (every "VERIFY:" removed).

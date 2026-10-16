@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Veyl · Tidal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600&amp;family=Hanken+Grotesk:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#E8DCC8}a:hover{color:#5FD3C4}
+.td-w1{animation:td-w 7s linear infinite}
+.td-w2{animation:td-w 11s linear infinite reverse}
+.td-bar{transform-box:fill-box;transform-origin:bottom;animation:td-sway 3.4s ease-in-out infinite}
+@keyframes td-w{to{transform:translateX(-50%)}}
+@keyframes td-sway{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.8)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1760px; box-sizing: border-box; background: #071018; color: #E8DCC8; font-family: 'Hanken Grotesk', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<header style="display: flex; align-items: center; gap: 40px; padding: 30px 80px">
+<a href="#" style="display: flex; align-items: center; gap: 12px; text-decoration: none">
+<svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><defs><clipPath id="tw1"><circle cx="32" cy="32" r="24.5"></circle></clipPath></defs><g clip-path="url(#tw1)"><path d="M4 37 C13 30 22 30 32 37 S51 44 60 37 V62 H4Z" fill="#5FD3C4"></path><path d="M4 27 C13 20 22 20 32 27 S51 34 60 27" fill="none" stroke="#E8DCC8" stroke-width="2.5"></path></g><circle cx="32" cy="32" r="26" fill="none" stroke="#E8DCC8" stroke-width="3"></circle></svg>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 600; font-size: 27px; letter-spacing: -0.02em">Veyl</span>
+</a>
+<nav style="display: flex; gap: 34px; margin-left: auto; font-size: 15px; font-weight: 500">
+<a href="#" style="text-decoration: none">Pools</a>
+<a href="#" style="text-decoration: none">Privacy</a>
+<a href="#" style="text-decoration: none">How it works</a>
+<a href="#" style="text-decoration: none">Docs</a>
+</nav>
+<a href="#" style="background: #5FD3C4; color: #071018; text-decoration: none; font-weight: 600; font-size: 15px; padding: 12px 22px; border-radius: 14px">Open app</a>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; padding: 92px 80px 64px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 28px">
+<p style="margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.14em; color: #7C8C96">PRIVATE LIQUIDITY ON SOLANA</p>
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 600; font-size: 98px; line-height: 0.98; letter-spacing: -0.035em">Liquidity runs deep. <span style="color: #5FD3C4">Your name doesn’t.</span></h1>
+<p style="margin: 0; font-size: 20px; line-height: 1.55; color: #B7AE9F; max-width: 36ch">Provide into price bins from a shielded balance. The pool fills; the trail ends at the surface.</p>
+<div style="display: flex; gap: 12px">
+<a href="#" style="background: #5FD3C4; color: #071018; text-decoration: none; font-weight: 600; font-size: 16px; padding: 16px 26px; border-radius: 14px">Provide privately</a>
+<a href="#" style="background: #10202C; color: #E8DCC8; text-decoration: none; font-weight: 500; font-size: 16px; padding: 16px 26px; border-radius: 14px">How it works</a>
+</div>
+</div>
+<div style="position: relative"><img src="/_blob/4d26181bd2411b36c4c1bed26e7cb4ee" alt="The Veyl instrument with sea-glass mesh" style="width: 100%; height: auto; display: block"><div style="position: absolute; left: 0; right: 0; bottom: 0; height: 34%; overflow: hidden; pointer-events: none"><svg class="td-w2" width="200%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" style="position: absolute; left: 0; bottom: 0"><path d="M0 60 C100 30 200 30 300 60 S500 90 600 60 S800 30 900 60 S1100 90 1200 60 V120 H0Z" fill="#5FD3C4" fill-opacity=".14"></path></svg><svg class="td-w1" width="200%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" style="position: absolute; left: 0; bottom: 0"><path d="M0 75 C100 50 200 50 300 75 S500 100 600 75 S800 50 900 75 S1100 100 1200 75 V120 H0Z" fill="#5FD3C4" fill-opacity=".22"></path><path d="M0 75 C100 50 200 50 300 75 S500 100 600 75 S800 50 900 75 S1100 100 1200 75" fill="none" stroke="#5FD3C4" stroke-width="2"></path></svg></div></div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 0 80px">
+<div style="background: #10202C; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #7C8C96">MARK</p>
+<div style="display: flex; gap: 16px">
+<div style="width: 140px; height: 140px; border-radius: 34px; background: #071018; display: flex; align-items: center; justify-content: center">
+<svg width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Veyl mark on abyss"><defs><clipPath id="tw2"><circle cx="32" cy="32" r="24.5"></circle></clipPath></defs><g clip-path="url(#tw2)"><path d="M4 37 C13 30 22 30 32 37 S51 44 60 37 V62 H4Z" fill="#5FD3C4"></path><path d="M4 27 C13 20 22 20 32 27 S51 34 60 27" fill="none" stroke="#E8DCC8" stroke-width="2.5"></path></g><circle cx="32" cy="32" r="26" fill="none" stroke="#E8DCC8" stroke-width="3"></circle></svg>
+</div>
+<div style="width: 140px; height: 140px; border-radius: 34px; background: #5FD3C4; display: flex; align-items: center; justify-content: center">
+<svg width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Veyl mark on sea glass"><defs><clipPath id="tw3"><circle cx="32" cy="32" r="24.5"></circle></clipPath></defs><g clip-path="url(#tw3)"><path d="M4 37 C13 30 22 30 32 37 S51 44 60 37 V62 H4Z" fill="#071018"></path><path d="M4 27 C13 20 22 20 32 27 S51 34 60 27" fill="none" stroke="#071018" stroke-width="2.5"></path></g><circle cx="32" cy="32" r="26" fill="none" stroke="#071018" stroke-width="3"></circle></svg>
+</div>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #B7AE9F">A pool seen side-on: liquidity below the surface, one line on top where the market reads the price.</p>
+</div>
+
+<div style="background: #10202C; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #7C8C96">PALETTE</p>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 10px; background: #071018; border: 1px solid #1D3341"></div><span style="font-size: 15px">Abyss</span><span style="font-size: 13px; color: #7C8C96">#071018</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 10px; background: #5FD3C4"></div><span style="font-size: 15px">Sea glass</span><span style="font-size: 13px; color: #7C8C96">#5FD3C4</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 10px; background: #E8DCC8"></div><span style="font-size: 15px">Sand</span><span style="font-size: 13px; color: #7C8C96">#E8DCC8</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 10px; background: #10202C; border: 1px solid #1D3341"></div><span style="font-size: 15px">Current</span><span style="font-size: 13px; color: #7C8C96">#10202C</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 10px; background: #7C8C96"></div><span style="font-size: 15px">Drift</span><span style="font-size: 13px; color: #7C8C96">#7C8C96</span></div>
+</div>
+
+<div style="background: #10202C; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #7C8C96">TYPE</p>
+<p style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 600; font-size: 96px; line-height: 1; letter-spacing: -0.03em">Aa <span style="color: #5FD3C4">Aa</span></p>
+<p style="margin: 0; font-size: 15px; color: #B7AE9F">Bricolage Grotesque for headlines</p>
+<p style="margin: 0; font-size: 22px; font-weight: 500">Hanken Grotesk for reading</p>
+<p style="margin: 0; font-size: 15px; color: #B7AE9F">Warm, rounded, human. Friendly without being cute.</p>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 20px 80px 0">
+<div style="background: #10202C; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -0.02em">SOL–USDC</span>
+<span style="margin-left: auto; font-size: 13px; font-weight: 600; background: #13383A; color: #5FD3C4; padding: 6px 12px; border-radius: 999px">Shielded</span>
+</div>
+<svg width="100%" height="96" viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true">
+<rect class="td-bar" style="animation-delay:0.00s" x="0.0" y="72.2" width="10.17" height="23.8" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.12s" x="13.2" y="69.6" width="10.17" height="26.4" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.24s" x="26.3" y="65.9" width="10.17" height="30.1" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.36s" x="39.5" y="60.8" width="10.17" height="35.2" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.48s" x="52.7" y="54.2" width="10.17" height="41.8" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.60s" x="65.9" y="46.3" width="10.17" height="49.7" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.72s" x="79.0" y="37.4" width="10.17" height="58.6" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:0.84s" x="92.2" y="28.1" width="10.17" height="67.9" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:0.96s" x="105.4" y="19.5" width="10.17" height="76.5" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.08s" x="118.6" y="12.3" width="10.17" height="83.7" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.20s" x="131.7" y="7.6" width="10.17" height="88.4" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.32s" x="144.9" y="6.0" width="10.17" height="90.0" rx="5" fill="#5FD3C4"></rect><rect class="td-bar" style="animation-delay:1.44s" x="158.1" y="7.6" width="10.17" height="88.4" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.56s" x="171.3" y="12.3" width="10.17" height="83.7" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.68s" x="184.4" y="19.5" width="10.17" height="76.5" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.80s" x="197.6" y="28.1" width="10.17" height="67.9" rx="5" fill="#3A8F86"></rect><rect class="td-bar" style="animation-delay:1.92s" x="210.8" y="37.4" width="10.17" height="58.6" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:2.04s" x="224.0" y="46.3" width="10.17" height="49.7" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:2.16s" x="237.1" y="54.2" width="10.17" height="41.8" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:2.28s" x="250.3" y="60.8" width="10.17" height="35.2" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:2.40s" x="263.5" y="65.9" width="10.17" height="30.1" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:2.52s" x="276.7" y="69.6" width="10.17" height="26.4" rx="5" fill="#1D3341"></rect><rect class="td-bar" style="animation-delay:2.64s" x="289.8" y="72.2" width="10.17" height="23.8" rx="5" fill="#1D3341"></rect>
+</svg>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; font-size: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #7C8C96">Bin step</span><span style="font-size: 20px; font-weight: 500">0.10%</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #7C8C96">Base fee</span><span style="font-size: 20px; font-weight: 500">0.05%</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #7C8C96">Fee cap</span><span style="font-size: 20px; font-weight: 500">10%</span></div>
+</div>
+<button type="button" style="border: 0; background: #5FD3C4; color: #071018; font-family: 'Hanken Grotesk', sans-serif; font-weight: 600; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer">Provide privately</button>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: space-between; padding: 8px 8px 8px 24px">
+<p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #7C8C96">VOICE</p>
+<p style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 600; font-size: 50px; line-height: 1.06; letter-spacing: -0.03em">Everyone sees the tide. <span style="color: #5FD3C4">Nobody sees the swimmer.</span></p>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #B7AE9F; max-width: 44ch">Liquidity as water: calm, deep, rounded. Warm sand and sea glass instead of DeFi neon.</p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

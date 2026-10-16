@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Veyl · Veil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&amp;family=Onest:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#E9E7FF}a:hover{color:#8F7BFF}
+.vl-bar{transform-box:fill-box;transform-origin:bottom;animation:vl-bob 3.6s ease-in-out infinite}
+.vl-veil{animation:vl-drift 9s cubic-bezier(.65,0,.35,1) infinite}
+.vl-glow{animation:vl-glow 9s ease-in-out infinite}
+.vl-sheen{animation:vl-sheen 4.5s linear infinite}
+.vl-dot{animation:vl-dot 1.4s ease-in-out infinite}
+.vl-mini{animation:vl-mini 4s cubic-bezier(.65,0,.35,1) infinite}
+.vl-fill{transform-origin:left;animation:vl-fill 3.8s cubic-bezier(.6,0,.2,1) infinite}
+@keyframes vl-bob{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.86)}}
+@keyframes vl-drift{0%,100%{transform:translateX(0)}50%{transform:translateX(-150px)}}
+@keyframes vl-glow{0%,100%{opacity:.35}50%{opacity:.75}}
+@keyframes vl-sheen{0%{transform:translateX(-120%)}100%{transform:translateX(220%)}}
+@keyframes vl-dot{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes vl-mini{0%,100%{transform:translateX(0)}50%{transform:translateX(-46px)}}
+@keyframes vl-fill{0%{transform:scaleX(0)}70%,100%{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){.vl-bar,.vl-veil,.vl-glow,.vl-sheen,.vl-dot,.vl-mini,.vl-fill{animation:none}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1760px; box-sizing: border-box; background: #0B0A1A; color: #E9E7FF; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column; background-image: radial-gradient(900px 600px at 85% 18%, rgba(143,123,255,0.18), transparent 70%)">
+
+<header style="display: flex; align-items: center; gap: 40px; padding: 30px 80px; border-bottom: 1px solid #1F1C45">
+<a href="#" style="display: flex; align-items: center; gap: 12px; text-decoration: none">
+<svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="34" width="8" height="20" rx="4" fill="#E9E7FF"></rect><rect x="20" y="22" width="8" height="32" rx="4" fill="#E9E7FF"></rect><rect x="32" y="12" width="8" height="42" rx="4" fill="#E9E7FF"></rect><rect x="44" y="26" width="8" height="28" rx="4" fill="#E9E7FF"></rect><path d="M30 8 H58 V56 H30 Z" fill="#8F7BFF" fill-opacity="0.55"></path></svg>
+<span style="font-family: 'Unbounded', sans-serif; font-weight: 600; font-size: 22px; letter-spacing: 0.02em">veyl</span>
+</a>
+<nav style="display: flex; gap: 34px; margin-left: auto; font-size: 15px; font-weight: 500; color: #B9B5E0">
+<a href="#" style="text-decoration: none; color: inherit">Pools</a>
+<a href="#" style="text-decoration: none; color: inherit">Privacy</a>
+<a href="#" style="text-decoration: none; color: inherit">How it works</a>
+<a href="#" style="text-decoration: none; color: inherit">Docs</a>
+</nav>
+<a href="#" style="background: #E9E7FF; color: #0B0A1A; text-decoration: none; font-weight: 600; font-size: 15px; padding: 12px 22px; border-radius: 999px">Open app</a>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; padding: 72px 80px 56px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 28px">
+<p style="margin: 0; display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: #B9B5E0; border: 1px solid #2B2760; padding: 8px 14px; border-radius: 999px"><span class="vl-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #8F7BFF"></span>Private liquidity on Solana</p>
+<h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 800; font-size: 76px; line-height: 1.02; letter-spacing: -0.03em">Draw the veil over <span style="color: #8F7BFF">your liquidity.</span></h1>
+<p style="margin: 0; font-size: 20px; line-height: 1.6; color: #B9B5E0; max-width: 38ch">Everyone sees the depth. Nobody sees whose it is. Concentrated liquidity on Solana, with the owner kept out of sight.</p>
+<div style="display: flex; gap: 12px">
+<a href="#" style="background: #8F7BFF; color: #0B0A1A; text-decoration: none; font-weight: 600; font-size: 16px; padding: 16px 26px; border-radius: 999px">Provide privately</a>
+<a href="#" style="border: 1px solid #2B2760; color: #E9E7FF; text-decoration: none; font-weight: 500; font-size: 16px; padding: 15px 26px; border-radius: 999px">How it works</a>
+</div>
+</div>
+<div style="position: relative; width: 560px; height: 520px; justify-self: center; border-radius: 28px; overflow: hidden; background: #110F28; border: 1px solid #1F1C45">
+<svg width="560" height="520" viewBox="-20 0 560 520" style="position: absolute; inset: 0" role="img" aria-label="Liquidity bins with a frosted veil drifting across them">
+<rect class="vl-bar" style="animation-delay:0s" x="20" y="375" width="20" height="65" rx="6" fill="#8F7BFF" fill-opacity=".45"></rect><rect class="vl-bar" style="animation-delay:.12s" x="48" y="368" width="20" height="72" rx="6" fill="#8F7BFF" fill-opacity=".5"></rect><rect class="vl-bar" style="animation-delay:.24s" x="76" y="353" width="20" height="87" rx="6" fill="#8F7BFF" fill-opacity=".55"></rect><rect class="vl-bar" style="animation-delay:.36s" x="104" y="326" width="20" height="114" rx="6" fill="#8F7BFF" fill-opacity=".6"></rect><rect class="vl-bar" style="animation-delay:.48s" x="132" y="285" width="20" height="155" rx="6" fill="#8F7BFF" fill-opacity=".7"></rect><rect class="vl-bar" style="animation-delay:.6s" x="160" y="230" width="20" height="210" rx="6" fill="#8F7BFF" fill-opacity=".8"></rect><rect class="vl-bar" style="animation-delay:.72s" x="188" y="170" width="20" height="270" rx="6" fill="#8F7BFF" fill-opacity=".9"></rect><rect class="vl-bar" style="animation-delay:.84s" x="216" y="116" width="20" height="324" rx="6" fill="#8F7BFF"></rect><rect class="vl-bar" style="animation-delay:.96s" x="244" y="84" width="20" height="356" rx="6" fill="#E9E7FF"></rect><rect class="vl-bar" style="animation-delay:1.08s" x="272" y="84" width="20" height="356" rx="6" fill="#E9E7FF"></rect><rect class="vl-bar" style="animation-delay:1.2s" x="300" y="116" width="20" height="324" rx="6" fill="#8F7BFF"></rect><rect class="vl-bar" style="animation-delay:1.32s" x="328" y="170" width="20" height="270" rx="6" fill="#8F7BFF" fill-opacity=".9"></rect><rect class="vl-bar" style="animation-delay:1.44s" x="356" y="230" width="20" height="210" rx="6" fill="#8F7BFF" fill-opacity=".8"></rect><rect class="vl-bar" style="animation-delay:1.56s" x="384" y="285" width="20" height="155" rx="6" fill="#8F7BFF" fill-opacity=".7"></rect><rect class="vl-bar" style="animation-delay:1.68s" x="412" y="326" width="20" height="114" rx="6" fill="#8F7BFF" fill-opacity=".6"></rect><rect class="vl-bar" style="animation-delay:1.8s" x="440" y="353" width="20" height="87" rx="6" fill="#8F7BFF" fill-opacity=".55"></rect><rect class="vl-bar" style="animation-delay:1.92s" x="468" y="368" width="20" height="72" rx="6" fill="#8F7BFF" fill-opacity=".5"></rect><rect class="vl-bar" style="animation-delay:2.04s" x="496" y="375" width="20" height="65" rx="6" fill="#8F7BFF" fill-opacity=".45"></rect>
+<line x1="0" y1="460" x2="540" y2="460" stroke="#2B2760" stroke-width="1"></line>
+</svg>
+<div class="vl-veil" style="position: absolute; top: 0; bottom: 0; left: 290px; width: 300px; overflow: hidden; backdrop-filter: blur(18px) saturate(1.3); -webkit-backdrop-filter: blur(18px) saturate(1.3); background: linear-gradient(90deg, rgba(233,231,255,0.10), rgba(143,123,255,0.16)); border-left: 1px solid rgba(233,231,255,0.35)">
+<div class="vl-sheen" style="position: absolute; top: 0; bottom: 0; width: 90px; background: linear-gradient(90deg, transparent, rgba(233,231,255,0.14), transparent)"></div>
+<div class="vl-glow" style="position: absolute; left: -1px; top: 0; bottom: 0; width: 2px; background: #E9E7FF; box-shadow: 0 0 24px 6px rgba(143,123,255,0.8)"></div>
+<p style="position: absolute; left: 28px; top: 28px; margin: 0; font-family: 'Unbounded', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #E9E7FF">PRIVATE</p>
+<p style="position: absolute; left: 28px; bottom: 28px; margin: 0; font-size: 14px; color: #B9B5E0">Owner: hidden</p>
+</div>
+<p style="position: absolute; left: 28px; top: 28px; margin: 0; font-family: 'Unbounded', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #B9B5E0">PUBLIC</p>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 0 80px">
+<div style="background: #13112E; border: 1px solid #1F1C45; border-radius: 22px; padding: 32px; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-family: 'Unbounded', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; color: #8C88B5">MARK</p>
+<div style="display: flex; gap: 16px">
+<div style="width: 140px; height: 140px; border-radius: 28px; background: #0B0A1A; border: 1px solid #1F1C45; display: flex; align-items: center; justify-content: center">
+<svg width="92" height="92" viewBox="0 0 64 64" role="img" aria-label="Veyl veil mark on night"><rect x="8" y="34" width="8" height="20" rx="4" fill="#E9E7FF"></rect><rect x="20" y="22" width="8" height="32" rx="4" fill="#E9E7FF"></rect><rect x="32" y="12" width="8" height="42" rx="4" fill="#E9E7FF"></rect><rect x="44" y="26" width="8" height="28" rx="4" fill="#E9E7FF"></rect><path d="M30 8 H58 V56 H30 Z" fill="#8F7BFF" fill-opacity="0.55"></path></svg>
+</div>
+<div style="width: 140px; height: 140px; border-radius: 28px; background: #8F7BFF; display: flex; align-items: center; justify-content: center">
+<svg width="92" height="92" viewBox="0 0 64 64" role="img" aria-label="Veyl veil mark on violet"><rect x="8" y="34" width="8" height="20" rx="4" fill="#0B0A1A"></rect><rect x="20" y="22" width="8" height="32" rx="4" fill="#0B0A1A"></rect><rect x="32" y="12" width="8" height="42" rx="4" fill="#0B0A1A"></rect><rect x="44" y="26" width="8" height="28" rx="4" fill="#0B0A1A"></rect><path d="M30 8 H58 V56 H30 Z" fill="#E9E7FF" fill-opacity="0.6"></path></svg>
+</div>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #B9B5E0">Four bins, half behind frosted glass. The shape stays readable, the detail doesn't.</p>
+</div>
+
+<div style="background: #13112E; border: 1px solid #1F1C45; border-radius: 22px; padding: 32px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0 0 10px; font-family: 'Unbounded', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; color: #8C88B5">PALETTE</p>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 12px; background: #0B0A1A; border: 1px solid #2B2760"></div><span style="font-size: 15px">Night</span><span style="font-size: 13px; color: #8C88B5">#0B0A1A</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 12px; background: #8F7BFF"></div><span style="font-size: 15px">Violet</span><span style="font-size: 13px; color: #8C88B5">#8F7BFF</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 12px; background: #E9E7FF"></div><span style="font-size: 15px">Ice</span><span style="font-size: 13px; color: #8C88B5">#E9E7FF</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 12px; background: #17153A"></div><span style="font-size: 15px">Panel</span><span style="font-size: 13px; color: #8C88B5">#17153A</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; border-radius: 12px; background: #8C88B5"></div><span style="font-size: 15px">Haze</span><span style="font-size: 13px; color: #8C88B5">#8C88B5</span></div>
+</div>
+
+<div style="background: #13112E; border: 1px solid #1F1C45; border-radius: 22px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<p style="margin: 0; font-family: 'Unbounded', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; color: #8C88B5">TYPE</p>
+<p style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 800; font-size: 88px; line-height: 1; letter-spacing: -0.03em">Aa <span style="font-family: 'Onest', sans-serif; font-weight: 500; color: #8F7BFF">Aa</span></p>
+<p style="margin: 0; font-size: 15px; color: #B9B5E0">Unbounded for display, Onest for everything else</p>
+<p style="margin: 0; font-size: 22px; font-weight: 500">Soft, wide and calm at every size</p>
+<p style="margin: 0; font-size: 16px; color: #B9B5E0; font-variant-numeric: tabular-nums">0.05% base fee · 0.10% bin step</p>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 20px 80px 0">
+<div style="background: #13112E; border: 1px solid #1F1C45; border-radius: 22px; padding: 32px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="font-family: 'Unbounded', sans-serif; font-weight: 600; font-size: 24px">SOL / USDC</span>
+<span style="margin-left: auto; font-size: 13px; font-weight: 500; background: rgba(143,123,255,0.16); color: #C9BFFF; padding: 6px 12px; border-radius: 999px">Veiled</span>
+</div>
+<div style="position: relative; height: 96px; border-radius: 14px; overflow: hidden; background: #0F0D24">
+<svg width="100%" height="96" viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true" style="display: block">
+<rect x="0.0" y="72.2" width="10.17" height="23.8" rx="2" fill="#8F7BFF" fill-opacity=".5"></rect><rect x="13.2" y="69.6" width="10.17" height="26.4" rx="2" fill="#8F7BFF" fill-opacity=".5"></rect><rect x="26.3" y="65.9" width="10.17" height="30.1" rx="2" fill="#8F7BFF" fill-opacity=".55"></rect><rect x="39.5" y="60.8" width="10.17" height="35.2" rx="2" fill="#8F7BFF" fill-opacity=".6"></rect><rect x="52.7" y="54.2" width="10.17" height="41.8" rx="2" fill="#8F7BFF" fill-opacity=".65"></rect><rect x="65.9" y="46.3" width="10.17" height="49.7" rx="2" fill="#8F7BFF" fill-opacity=".7"></rect><rect x="79.0" y="37.4" width="10.17" height="58.6" rx="2" fill="#8F7BFF" fill-opacity=".75"></rect><rect x="92.2" y="28.1" width="10.17" height="67.9" rx="2" fill="#8F7BFF" fill-opacity=".8"></rect><rect x="105.4" y="19.5" width="10.17" height="76.5" rx="2" fill="#8F7BFF" fill-opacity=".85"></rect><rect x="118.6" y="12.3" width="10.17" height="83.7" rx="2" fill="#8F7BFF" fill-opacity=".9"></rect><rect x="131.7" y="7.6" width="10.17" height="88.4" rx="2" fill="#8F7BFF"></rect><rect x="144.9" y="6.0" width="10.17" height="90.0" rx="2" fill="#E9E7FF"></rect><rect x="158.1" y="7.6" width="10.17" height="88.4" rx="2" fill="#8F7BFF"></rect><rect x="171.3" y="12.3" width="10.17" height="83.7" rx="2" fill="#8F7BFF" fill-opacity=".9"></rect><rect x="184.4" y="19.5" width="10.17" height="76.5" rx="2" fill="#8F7BFF" fill-opacity=".85"></rect><rect x="197.6" y="28.1" width="10.17" height="67.9" rx="2" fill="#8F7BFF" fill-opacity=".8"></rect><rect x="210.8" y="37.4" width="10.17" height="58.6" rx="2" fill="#8F7BFF" fill-opacity=".75"></rect><rect x="224.0" y="46.3" width="10.17" height="49.7" rx="2" fill="#8F7BFF" fill-opacity=".7"></rect><rect x="237.1" y="54.2" width="10.17" height="41.8" rx="2" fill="#8F7BFF" fill-opacity=".65"></rect><rect x="250.3" y="60.8" width="10.17" height="35.2" rx="2" fill="#8F7BFF" fill-opacity=".6"></rect><rect x="263.5" y="65.9" width="10.17" height="30.1" rx="2" fill="#8F7BFF" fill-opacity=".55"></rect><rect x="276.7" y="69.6" width="10.17" height="26.4" rx="2" fill="#8F7BFF" fill-opacity=".5"></rect><rect x="289.8" y="72.2" width="10.17" height="23.8" rx="2" fill="#8F7BFF" fill-opacity=".5"></rect>
+</svg>
+<div class="vl-mini" style="position: absolute; top: 0; bottom: 0; left: 62%; width: 46%; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); background: rgba(233,231,255,0.06); border-left: 1px solid rgba(233,231,255,0.4)"></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; font-size: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #8C88B5">Bin step</span><span style="font-size: 20px; font-weight: 600">0.10%</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #8C88B5">Base fee</span><span style="font-size: 20px; font-weight: 600">0.05%</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="color: #8C88B5">Fee cap</span><span style="font-size: 20px; font-weight: 600">10%</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #B9B5E0"><span class="vl-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #8F7BFF"></span>Drawing the veil on this device</div>
+<div style="height: 6px; background: #1F1C45; border-radius: 3px; overflow: hidden"><div class="vl-fill" style="height: 6px; background: linear-gradient(90deg, #8F7BFF, #E9E7FF); border-radius: 3px"></div></div>
+</div>
+<button type="button" style="border: 0; background: #8F7BFF; color: #0B0A1A; font-family: 'Onest', sans-serif; font-weight: 600; font-size: 16px; padding: 16px; border-radius: 999px; cursor: pointer">Provide privately</button>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: space-between; padding: 8px 8px 8px 24px">
+<p style="margin: 0; font-family: 'Unbounded', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; color: #8C88B5">MOTION</p>
+<div style="display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 18px">
+<div style="position: relative; width: 72px; height: 72px; border-radius: 18px; overflow: hidden; background: #17153A"><div style="position: absolute; left: 14px; bottom: 14px; width: 10px; height: 30px; border-radius: 5px; background: #E9E7FF"></div><div style="position: absolute; left: 31px; bottom: 14px; width: 10px; height: 44px; border-radius: 5px; background: #E9E7FF"></div><div style="position: absolute; left: 48px; bottom: 14px; width: 10px; height: 24px; border-radius: 5px; background: #E9E7FF"></div><div class="vl-mini" style="position: absolute; top: 0; bottom: 0; left: 46px; width: 60px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); background: rgba(143,123,255,0.25)"></div></div>
+<span style="font-size: 20px; font-weight: 500">Drift: the veil glides, never snaps</span>
+</div>
+<div style="display: flex; align-items: center; gap: 18px">
+<div style="position: relative; width: 72px; height: 72px; border-radius: 18px; overflow: hidden; background: #17153A"><div class="vl-sheen" style="position: absolute; top: 0; bottom: 0; width: 30px; background: linear-gradient(90deg, transparent, rgba(233,231,255,0.5), transparent)"></div></div>
+<span style="font-size: 20px; font-weight: 500">Sheen: a slow pass of light on glass</span>
+</div>
+</div>
+<p style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 800; font-size: 38px; line-height: 1.1; letter-spacing: -0.02em">Seen in depth. <span style="color: #8F7BFF">Never by name.</span></p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

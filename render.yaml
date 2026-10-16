@@ -17,6 +17,8 @@ services:
         sync: false
       - key: POSTMAN_SECRET_KEY   # optional: approved-set publisher key
         sync: false
+      - key: FAUCET_SECRET_KEY   # DEVNET ONLY: the devnet deployer key (mint authority of the mock tokens) for "Get test tokens". Never set on mainnet.
+        sync: false
       - key: ALLOWED_ORIGINS   # the site origin, e.g. https://veyl-sol-site.onrender.com
         sync: false
       - key: MIN_FEE_BPS
@@ -47,12 +49,6 @@ services:
       - type: rewrite
         source: /docs
         destination: /docs.html
-      - type: rewrite
-        source: /protocol
-        destination: /protocol.html
-      - type: rewrite
-        source: /liquidity
-        destination: /liquidity.html
     headers:
       - path: "/*"
         name: Content-Security-Policy

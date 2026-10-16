@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Veyl · Monolith</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#EDE8DF}a:hover{color:#FF4A1C}
+.mo-slit{animation:mo-slit 5.5s cubic-bezier(.7,0,.3,1) infinite}
+.mo-top{transform-box:fill-box;animation:mo-top 5.5s cubic-bezier(.7,0,.3,1) infinite}
+.mo-bot{transform-box:fill-box;animation:mo-bot 5.5s cubic-bezier(.7,0,.3,1) infinite}
+.mo-bar{transform-box:fill-box;transform-origin:bottom;animation:mo-rise 5.5s cubic-bezier(.2,.8,.2,1) infinite}
+@keyframes mo-slit{0%{transform:translateX(-10%);opacity:0}8%{opacity:1}55%{transform:translateX(105%);opacity:1}62%,100%{transform:translateX(105%);opacity:0}}
+@keyframes mo-top{0%,20%,80%,100%{transform:translate(0,0)}40%,60%{transform:translate(0,-4px)}}
+@keyframes mo-bot{0%,20%,80%,100%{transform:translate(0,0)}40%,60%{transform:translate(0,4px)}}
+@keyframes mo-rise{0%{transform:scaleY(0)}30%,88%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1760px; box-sizing: border-box; background: #0A0A0A; color: #EDE8DF; font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<header style="display: flex; align-items: center; gap: 40px; padding: 32px 80px; border-bottom: 1px solid #2A2826">
+<a href="#" style="display: flex; align-items: center; gap: 14px; text-decoration: none">
+<svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><polygon class="mo-top" points="20,6 44,6 44,26 20,38" fill="#EDE8DF"></polygon><polygon class="mo-bot" points="20,43 44,31 44,58 20,58" fill="#EDE8DF"></polygon></svg>
+<span style="font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: 0.22em; color: #EDE8DF">VEYL</span>
+</a>
+<nav style="display: flex; gap: 36px; margin-left: auto; font-size: 15px; letter-spacing: 0.02em">
+<a href="#" style="text-decoration: none">Pools</a>
+<a href="#" style="text-decoration: none">Privacy</a>
+<a href="#" style="text-decoration: none">How it works</a>
+<a href="#" style="text-decoration: none">Docs</a>
+</nav>
+<a href="#" style="background: #FF4A1C; color: #0A0A0A; text-decoration: none; font-weight: 600; font-size: 15px; padding: 13px 22px">Open app</a>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; padding: 96px 80px 72px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 28px">
+<p style="margin: 0; font-family: 'Geist Mono', monospace; font-size: 13px; letter-spacing: 0.24em; color: #8C8780">PRIVATE LIQUIDITY · SOLANA</p>
+<h1 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 128px; line-height: 0.92; letter-spacing: -0.02em">Liquidity, without a <span style="font-style: italic; color: #FF4A1C">name.</span></h1>
+<p style="margin: 0; font-size: 20px; line-height: 1.5; color: #B9B3A9; max-width: 34ch">Provide into DLMM price bins from a shielded balance. The pool gets the liquidity. Nobody sees whose.</p>
+<div style="display: flex; gap: 12px">
+<a href="#" style="background: #FF4A1C; color: #0A0A0A; text-decoration: none; font-weight: 600; font-size: 16px; padding: 16px 26px">Provide privately</a>
+<a href="#" style="border: 1px solid #EDE8DF; color: #EDE8DF; text-decoration: none; font-weight: 500; font-size: 16px; padding: 15px 26px">Read the docs</a>
+</div>
+</div>
+<div style="position: relative"><img src="/_blob/a4f601e6fd551f56d4a1036603d5be5e" alt="The Veyl instrument: three meshed frames on a stone rail" style="width: 100%; height: auto; display: block"><div style="position: absolute; inset: 0; overflow: hidden; pointer-events: none"><div class="mo-slit" style="position: absolute; top: 0; bottom: 0; left: 0; width: 100%"><div style="position: absolute; top: 0; bottom: 0; left: 0; width: 3px; background: #FF4A1C; box-shadow: 0 0 28px 8px rgba(255,74,28,0.45)"></div></div></div></div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 0 80px; border-top: 1px solid #2A2826; border-bottom: 1px solid #2A2826">
+<div style="padding: 40px 40px 40px 0; border-right: 1px solid #2A2826; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-family: 'Geist Mono', monospace; font-size: 12px; letter-spacing: 0.24em; color: #8C8780">MARK</p>
+<div style="display: flex; gap: 20px; align-items: center">
+<div style="width: 148px; height: 148px; background: #EDE8DF; display: flex; align-items: center; justify-content: center">
+<svg width="92" height="92" viewBox="0 0 64 64" role="img" aria-label="Veyl mark on bone"><polygon points="20,6 44,6 44,26 20,38" fill="#0A0A0A"></polygon><polygon points="20,43 44,31 44,58 20,58" fill="#0A0A0A"></polygon></svg>
+</div>
+<div style="width: 148px; height: 148px; background: #FF4A1C; display: flex; align-items: center; justify-content: center">
+<svg width="92" height="92" viewBox="0 0 64 64" role="img" aria-label="Veyl mark on vermilion"><polygon points="20,6 44,6 44,26 20,38" fill="#0A0A0A"></polygon><polygon points="20,43 44,31 44,58 20,58" fill="#0A0A0A"></polygon></svg>
+</div>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #B9B3A9">A monolith split by one clean cut: the public pool on one side, your name on the other.</p>
+</div>
+
+<div style="padding: 40px; border-right: 1px solid #2A2826; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0 0 10px; font-family: 'Geist Mono', monospace; font-size: 12px; letter-spacing: 0.24em; color: #8C8780">PALETTE</p>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 40px; background: #0A0A0A; border: 1px solid #2A2826"></div><span style="font-size: 15px">Ink</span><span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #8C8780">#0A0A0A</span></div>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 40px; background: #EDE8DF"></div><span style="font-size: 15px">Bone</span><span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #8C8780">#EDE8DF</span></div>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 40px; background: #FF4A1C"></div><span style="font-size: 15px">Vermilion</span><span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #8C8780">#FF4A1C</span></div>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 40px; background: #1A1918"></div><span style="font-size: 15px">Graphite</span><span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #8C8780">#1A1918</span></div>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 40px; background: #8C8780"></div><span style="font-size: 15px">Ash</span><span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #8C8780">#8C8780</span></div>
+</div>
+
+<div style="padding: 40px 0 40px 40px; display: flex; flex-direction: column; gap: 18px">
+<p style="margin: 0; font-family: 'Geist Mono', monospace; font-size: 12px; letter-spacing: 0.24em; color: #8C8780">TYPE</p>
+<p style="margin: 0; font-family: 'Instrument Serif', serif; font-size: 96px; line-height: 1">Aa <span style="font-style: italic; color: #FF4A1C">Aa</span></p>
+<p style="margin: 0; font-size: 15px; color: #B9B3A9">Instrument Serif for headlines, roman and italic</p>
+<p style="margin: 0; font-size: 22px; font-weight: 500">Geist for everything you read</p>
+<p style="margin: 0; font-family: 'Geist Mono', monospace; font-size: 15px; color: #B9B3A9">Geist Mono · 0.05% · bin 0.10%</p>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; padding: 56px 80px 0">
+<div style="background: #1A1918; padding: 32px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="font-family: 'Instrument Serif', serif; font-size: 36px">SOL–USDC</span>
+<span style="margin-left: auto; font-family: 'Geist Mono', monospace; font-size: 12px; letter-spacing: 0.18em; border: 1px solid #FF4A1C; color: #FF4A1C; padding: 6px 10px">SHIELDED</span>
+</div>
+<svg width="100%" height="96" viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true">
+<rect class="mo-bar" style="animation-delay:0.00s" x="0.0" y="72.2" width="10.17" height="23.8" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.06s" x="13.2" y="69.6" width="10.17" height="26.4" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.12s" x="26.3" y="65.9" width="10.17" height="30.1" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.18s" x="39.5" y="60.8" width="10.17" height="35.2" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.24s" x="52.7" y="54.2" width="10.17" height="41.8" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.30s" x="65.9" y="46.3" width="10.17" height="49.7" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.36s" x="79.0" y="37.4" width="10.17" height="58.6" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:0.42s" x="92.2" y="28.1" width="10.17" height="67.9" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.48s" x="105.4" y="19.5" width="10.17" height="76.5" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.54s" x="118.6" y="12.3" width="10.17" height="83.7" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.60s" x="131.7" y="7.6" width="10.17" height="88.4" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.66s" x="144.9" y="6.0" width="10.17" height="90.0" fill="#FF4A1C"></rect><rect class="mo-bar" style="animation-delay:0.72s" x="158.1" y="7.6" width="10.17" height="88.4" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.78s" x="171.3" y="12.3" width="10.17" height="83.7" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.84s" x="184.4" y="19.5" width="10.17" height="76.5" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.90s" x="197.6" y="28.1" width="10.17" height="67.9" fill="#EDE8DF"></rect><rect class="mo-bar" style="animation-delay:0.96s" x="210.8" y="37.4" width="10.17" height="58.6" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:1.02s" x="224.0" y="46.3" width="10.17" height="49.7" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:1.08s" x="237.1" y="54.2" width="10.17" height="41.8" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:1.14s" x="250.3" y="60.8" width="10.17" height="35.2" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:1.20s" x="263.5" y="65.9" width="10.17" height="30.1" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:1.26s" x="276.7" y="69.6" width="10.17" height="26.4" fill="#3A3734"></rect><rect class="mo-bar" style="animation-delay:1.32s" x="289.8" y="72.2" width="10.17" height="23.8" fill="#3A3734"></rect>
+</svg>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; font-family: 'Geist Mono', monospace; font-size: 13px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="color: #8C8780">BIN STEP</span><span style="font-size: 18px">0.10%</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="color: #8C8780">BASE FEE</span><span style="font-size: 18px">0.05%</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="color: #8C8780">FEE CAP</span><span style="font-size: 18px">10%</span></div>
+</div>
+<button type="button" style="border: 0; background: #FF4A1C; color: #0A0A0A; font-family: 'Geist', sans-serif; font-weight: 600; font-size: 16px; padding: 16px; cursor: pointer">Provide privately</button>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: space-between; padding: 8px 0">
+<p style="margin: 0; font-family: 'Geist Mono', monospace; font-size: 12px; letter-spacing: 0.24em; color: #8C8780">VOICE</p>
+<p style="margin: 0; font-family: 'Instrument Serif', serif; font-size: 54px; line-height: 1.05">The pool is public. <span style="font-style: italic; color: #FF4A1C">Whose</span> it is, isn’t.</p>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #B9B3A9; max-width: 44ch">Few words, set large. Black and bone with a single hot accent used sparingly: one button, one word, one bin.</p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Veyl · Cipher</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#E6E8E1}a:hover{color:#C8F560}
+.cp-scan{animation:cp-scan 3.2s linear infinite}
+.cp-cur{animation:cp-blink 1s steps(1) infinite}
+.cp-bar{animation:cp-flick 2.4s steps(1) infinite}
+.cp-px{animation:cp-blink 1.6s steps(1) infinite}
+@keyframes cp-scan{0%{transform:translateY(-8%)}100%{transform:translateY(108%)}}
+@keyframes cp-blink{50%{opacity:0}}
+@keyframes cp-flick{0%,100%{opacity:1}8%{opacity:.25}12%{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1760px; box-sizing: border-box; background: #0E0F0C; color: #E6E8E1; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<header style="display: flex; align-items: center; gap: 40px; padding: 28px 80px; border-bottom: 1px solid #23251F">
+<a href="#" style="display: flex; align-items: center; gap: 12px; text-decoration: none">
+<svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="19" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="20" y="36" width="8" height="8" fill="none" stroke="#C8F560" stroke-width="2"></rect><rect x="32" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="32" y="35" width="10" height="10" fill="#C8F560"></rect><rect x="33" y="23" width="8" height="8" fill="none" stroke="#C8F560" stroke-width="2"></rect><rect x="45" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="45" y="35" width="10" height="10" fill="#C8F560"></rect><rect x="45" y="22" width="10" height="10" fill="#C8F560"></rect><rect class="cp-px" x="46" y="10" width="8" height="8" fill="none" stroke="#C8F560" stroke-width="2"></rect></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 26px; color: #E6E8E1">veyl<span style="color: #C8F560">_</span></span>
+</a>
+<nav style="display: flex; gap: 32px; margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 14px">
+<a href="#" style="text-decoration: none">/pools</a>
+<a href="#" style="text-decoration: none">/privacy</a>
+<a href="#" style="text-decoration: none">/how</a>
+<a href="#" style="text-decoration: none">/docs</a>
+</nav>
+<a href="#" style="background: #C8F560; color: #0E0F0C; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; padding: 12px 18px; border-radius: 2px">open app →</a>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; padding: 104px 80px 72px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 28px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: #7A7F70">&gt; shielded dlmm on solana</p>
+<h1 style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 58px; line-height: 1.08; letter-spacing: -0.02em">provide liquidity.<br><span style="color: #C8F560">leave no trace.</span></h1>
+<p style="margin: 0; font-size: 19px; line-height: 1.6; color: #B6BAAD; max-width: 38ch">Your browser proves you own the funds. A relayer posts it. The pool fills; your wallet never signs.</p>
+<div style="display: flex; gap: 12px">
+<a href="#" style="background: #C8F560; color: #0E0F0C; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; padding: 15px 22px; border-radius: 2px">provide privately</a>
+<a href="#" style="border: 1px solid #3A3D33; color: #E6E8E1; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 15px; padding: 14px 22px; border-radius: 2px">read the spec</a>
+</div>
+</div>
+<div style="position: relative"><img src="/_blob/32fbc42d4be6f73eab584887b3b40731" alt="The Veyl instrument with phosphor-green mesh" style="width: 100%; height: auto; display: block"><div style="position: absolute; inset: 0; overflow: hidden; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(14,15,12,0.18) 0 2px, transparent 2px 4px)"><div class="cp-scan" style="position: absolute; left: 0; right: 0; top: 0; height: 100%"><div style="height: 2px; background: #C8F560; box-shadow: 0 0 18px 4px rgba(200,245,96,0.5)"></div></div><span class="cp-cur" style="position: absolute; right: 22px; bottom: 18px; width: 12px; height: 22px; background: #C8F560"></span></div></div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 0 80px">
+<div style="background: #161814; border: 1px solid #23251F; border-radius: 2px; padding: 32px; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #7A7F70">// mark</p>
+<div style="display: flex; gap: 16px">
+<div style="width: 140px; height: 140px; background: #0E0F0C; border: 1px solid #23251F; display: flex; align-items: center; justify-content: center">
+<svg width="88" height="88" viewBox="0 0 64 64" role="img" aria-label="Veyl mark on graphite"><rect x="6" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="19" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="20" y="36" width="8" height="8" fill="none" stroke="#C8F560" stroke-width="2"></rect><rect x="32" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="32" y="35" width="10" height="10" fill="#C8F560"></rect><rect x="33" y="23" width="8" height="8" fill="none" stroke="#C8F560" stroke-width="2"></rect><rect x="45" y="48" width="10" height="10" fill="#C8F560"></rect><rect x="45" y="35" width="10" height="10" fill="#C8F560"></rect><rect x="45" y="22" width="10" height="10" fill="#C8F560"></rect><rect x="46" y="10" width="8" height="8" fill="none" stroke="#C8F560" stroke-width="2"></rect></svg>
+</div>
+<div style="width: 140px; height: 140px; background: #C8F560; display: flex; align-items: center; justify-content: center">
+<svg width="88" height="88" viewBox="0 0 64 64" role="img" aria-label="Veyl mark on phosphor"><rect x="6" y="48" width="10" height="10" fill="#0E0F0C"></rect><rect x="19" y="48" width="10" height="10" fill="#0E0F0C"></rect><rect x="20" y="36" width="8" height="8" fill="none" stroke="#0E0F0C" stroke-width="2"></rect><rect x="32" y="48" width="10" height="10" fill="#0E0F0C"></rect><rect x="32" y="35" width="10" height="10" fill="#0E0F0C"></rect><rect x="33" y="23" width="8" height="8" fill="none" stroke="#0E0F0C" stroke-width="2"></rect><rect x="45" y="48" width="10" height="10" fill="#0E0F0C"></rect><rect x="45" y="35" width="10" height="10" fill="#0E0F0C"></rect><rect x="45" y="22" width="10" height="10" fill="#0E0F0C"></rect><rect x="46" y="10" width="8" height="8" fill="none" stroke="#0E0F0C" stroke-width="2"></rect></svg>
+</div>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #B6BAAD">Bins drawn in pixels, each column’s top cell left hollow: the part of the position nobody can read.</p>
+</div>
+
+<div style="background: #161814; border: 1px solid #23251F; border-radius: 2px; padding: 32px; display: flex; flex-direction: column; gap: 14px; font-family: 'IBM Plex Mono', monospace">
+<p style="margin: 0 0 10px; font-size: 13px; color: #7A7F70">// palette</p>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; background: #0E0F0C; border: 1px solid #3A3D33"></div><span style="font-size: 14px">graphite</span><span style="font-size: 13px; color: #7A7F70">#0E0F0C</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; background: #C8F560"></div><span style="font-size: 14px">phosphor</span><span style="font-size: 13px; color: #7A7F70">#C8F560</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; background: #E6E8E1"></div><span style="font-size: 14px">fog</span><span style="font-size: 13px; color: #7A7F70">#E6E8E1</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; background: #23251F"></div><span style="font-size: 14px">slate</span><span style="font-size: 13px; color: #7A7F70">#23251F</span></div>
+<div style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center"><div style="height: 38px; background: #7A7F70"></div><span style="font-size: 14px">moss</span><span style="font-size: 13px; color: #7A7F70">#7A7F70</span></div>
+</div>
+
+<div style="background: #161814; border: 1px solid #23251F; border-radius: 2px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #7A7F70">// type</p>
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 84px; line-height: 1">Aa<span style="color: #C8F560">_</span></p>
+<p style="margin: 0; font-size: 15px; color: #B6BAAD">IBM Plex Mono for headlines, labels and numbers</p>
+<p style="margin: 0; font-size: 21px; font-weight: 500">IBM Plex Sans for reading</p>
+<div style="margin-top: auto; background: #0E0F0C; border: 1px solid #23251F; padding: 14px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.8; color: #B6BAAD">
+<div><span style="color: #7A7F70">01</span> notes ← deposit <span style="color: #C8F560">ok</span></div>
+<div><span style="color: #7A7F70">02</span> prove transact.circom <span style="color: #C8F560">ok</span></div>
+<div><span style="color: #7A7F70">03</span> relay → bins 2–12 <span style="color: #C8F560">ok</span></div>
+</div>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 24px 80px 0">
+<div style="background: #161814; border: 1px solid #23251F; border-radius: 2px; padding: 32px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 12px; font-family: 'IBM Plex Mono', monospace">
+<span style="font-size: 26px; font-weight: 500">SOL/USDC</span>
+<span style="margin-left: auto; font-size: 12px; background: #C8F560; color: #0E0F0C; padding: 5px 9px; border-radius: 2px; font-weight: 600">SHIELDED</span>
+</div>
+<svg width="100%" height="96" viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true">
+<rect class="cp-bar" style="animation-delay:0.00s" x="0.0" y="72.2" width="10.17" height="23.8" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.11s" x="13.2" y="69.6" width="10.17" height="26.4" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.22s" x="26.3" y="65.9" width="10.17" height="30.1" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.33s" x="39.5" y="60.8" width="10.17" height="35.2" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.44s" x="52.7" y="54.2" width="10.17" height="41.8" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.55s" x="65.9" y="46.3" width="10.17" height="49.7" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.66s" x="79.0" y="37.4" width="10.17" height="58.6" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:0.77s" x="92.2" y="28.1" width="10.17" height="67.9" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:0.88s" x="105.4" y="19.5" width="10.17" height="76.5" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:0.99s" x="118.6" y="12.3" width="10.17" height="83.7" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:1.10s" x="131.7" y="7.6" width="10.17" height="88.4" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:1.21s" x="144.9" y="6.0" width="10.17" height="90.0" fill="#C8F560"></rect><rect class="cp-bar" style="animation-delay:1.32s" x="158.1" y="7.6" width="10.17" height="88.4" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:1.43s" x="171.3" y="12.3" width="10.17" height="83.7" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:1.54s" x="184.4" y="19.5" width="10.17" height="76.5" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:1.65s" x="197.6" y="28.1" width="10.17" height="67.9" fill="#7E9A3C"></rect><rect class="cp-bar" style="animation-delay:1.76s" x="210.8" y="37.4" width="10.17" height="58.6" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:1.87s" x="224.0" y="46.3" width="10.17" height="49.7" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:1.98s" x="237.1" y="54.2" width="10.17" height="41.8" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:2.09s" x="250.3" y="60.8" width="10.17" height="35.2" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:2.20s" x="263.5" y="65.9" width="10.17" height="30.1" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:2.31s" x="276.7" y="69.6" width="10.17" height="26.4" fill="#2E3129"></rect><rect class="cp-bar" style="animation-delay:2.42s" x="289.8" y="72.2" width="10.17" height="23.8" fill="#2E3129"></rect>
+</svg>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="color: #7A7F70">bin_step</span><span style="font-size: 18px">0.10%</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="color: #7A7F70">base_fee</span><span style="font-size: 18px">0.05%</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="color: #7A7F70">fee_cap</span><span style="font-size: 18px">10%</span></div>
+</div>
+<button type="button" style="border: 0; background: #C8F560; color: #0E0F0C; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; padding: 15px; border-radius: 2px; cursor: pointer">provide privately</button>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: space-between; padding: 8px 8px 8px 24px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #7A7F70">// voice</p>
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 40px; line-height: 1.2">the chain sees the bins.<br><span style="color: #C8F560">it never sees you.</span></p>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #B6BAAD; max-width: 44ch">Lowercase, exact, a little dry. Built for people who read the circuit before they deposit.</p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
