@@ -1,0 +1,14 @@
+[toolchain]
+anchor_version = "0.31.1"
+[features]
+resolution = true
+skip-lint = false
+[programs.localnet]
+veyl_pool = "BudA5kQySdfhfocWhPiDUP888tuoqL9aRxNiq9Qon73V"
+veyl_bin = "6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk"
+veyl_entry = "4q6p4io7m3pgxpMqRDSKBRsAb6gCBGCKvTRabZtp1QHn"
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+[scripts]
+test = "node tests/run.js"

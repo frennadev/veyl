@@ -1,0 +1,92 @@
+import sys, math; sys.path.insert(0, '.'); sys.path.insert(0, '/home/claude/veyl-sol/brand/explore3/src')
+import pathops
+from geo import *
+from finals import wordmark
+from fontTools.pens.transformPen import TransformPen
+
+M64 = fit(master(), pad=4)[0]                 # master in 0 0 64 64 (56 wide)
+S64 = snapped(4, 12, 4, 4, 5.0)               # small master: 4 pills, 3px pill / 1px gap / 1.25px cut at 16px
+DM, DS = D(M64), D(S64)
+
+def lockup(markH=70.0, gapf=0.22, cut=1.45):
+    """lockup units, baseline y=0, x-height 36.7 (same wordmark as brand/veyl-lockup: Manrope 500 'veyl' outlined)."""
+    s = 0.034; word, wb = wordmark(0, s); xh = 1080*s
+    m, _ = build(vgap=SRC['vgap']*cut); mb = m.bounds; sc = markH / (mb[3]-mb[1])   # nav sizes: cut opened 1.45x so it stays a visible line at 20-26 px
+    # optical centre of the mark sits on the x-height middle, raised a little (the wordmark's ascender pulls the eye up)
+    cy = -xh/2 - 6.5
+    mp = pathops.Path(); m.draw(TransformPen(mp.getPen(), (sc, 0, 0, sc, -mb[0]*sc, cy - (mb[1]+mb[3])/2*sc)))
+    mpb = mp.bounds
+    wp = pathops.Path(); word.draw(TransformPen(wp.getPen(), (1, 0, 0, 1, mpb[2] + gapf*markH*1.25 - wb[0], 0)))
+    wpb = wp.bounds
+    y0, y1 = min(mpb[1], wpb[1]), max(mpb[3], wpb[3])
+    return f'0 {fmt(y0)} {fmt(wpb[2])} {fmt(y1-y0)}', D(mp), D(wp)
+LK5 = lockup()
+def lockup4(markH=70.0, gapf=0.34, raise_=6.5):
+    """lockup with the 4-pill mark: fewer, wider-spaced bins read cleaner at nav sizes than 5."""
+    s = 0.034; word, wb = wordmark(0, s); xh = 1080*s
+    mb = S64.bounds; sc = markH / (mb[3]-mb[1]); cy = -xh/2 - raise_
+    mp = pathops.Path(); S64.draw(TransformPen(mp.getPen(), (sc, 0, 0, sc, -mb[0]*sc, cy - (mb[1]+mb[3])/2*sc))); mpb = mp.bounds
+    wp = pathops.Path(); word.draw(TransformPen(wp.getPen(), (1, 0, 0, 1, mpb[2] + gapf*markH*1.25 - wb[0], 0))); wpb = wp.bounds
+    y0, y1 = min(mpb[1], wpb[1]), max(mpb[3], wpb[3])
+    return f'0 {fmt(y0)} {fmt(wpb[2])} {fmt(y1-y0)}', D(mp), D(wp)
+LK = lockup4()
+DM5 = DM; DM = DS          # one mark everywhere: the 4-pill master
+
+def split(path):
+    """Two-tone: each pill's part above the cut vs below it (pairs of contours sharing an x range)."""
+    cs = list(path.contours); top, bot = pathops.Path(), pathops.Path(); groups = {}
+    for c in cs: groups.setdefault(round(c.bounds[0], 1), []).append(c)
+    for g in groups.values():
+        g.sort(key=lambda c: c.bounds[1])
+        for c in g[:1]: c.draw(top.getPen())
+        for c in g[1:]: c.draw(bot.getPen())
+    return D(top), D(bot)
+def _lk_mark():
+    s = 0.034; xh = 1080*s; markH = 70.0
+    m, _ = build(vgap=SRC['vgap']*1.45); mb = m.bounds; sc = markH / (mb[3]-mb[1]); cy = -xh/2 - 6.5
+    mp = pathops.Path(); m.draw(TransformPen(mp.getPen(), (sc, 0, 0, sc, -mb[0]*sc, cy - (mb[1]+mb[3])/2*sc)))
+    return mp
+_LKM = _lk_mark()
+SPLIT = {DM5: split(M64), DS: split(S64)}
+
+def grad_defs(gid, a, b):
+    # gold -> rose along the rise of the bins (bottom-left to top-right); flat-colour safe: the shape needs no gradient
+    return (f'<defs><linearGradient id="{gid}" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="{a}"/>'
+            f'<stop offset="1" stop-color="{b}"/></linearGradient></defs>')
+def is_split(fill): return isinstance(fill, list)
+def paths(d, fill, gid):
+    """<path> elements for a mark d: split fills ['split', top, bottom] colour each pill above / below the cut."""
+    if is_split(fill):
+        t, b = SPLIT[d]; return '', f'<path fill="{fill[1]}" d="{t}"/><path fill="{fill[2]}" d="{b}"/>'
+    defs, f = fillspec(fill, gid); return defs, f'<path fill="{f}" d="{d}"/>'
+def fillspec(fill, gid):
+    if isinstance(fill, tuple): return grad_defs(gid, *fill), f'url(#{gid})'
+    return '', fill
+_n = [0]
+def mark_svg(d, fill, px=None, style='', standalone=False):
+    _n[0] += 1; defs, ps = paths(d, fill, f'g{_n[0]}')
+    size = f' width="{px}" height="{px}"' if px else ''
+    head = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"' + (' role="img" aria-label="Veyl"' if standalone else '')
+    t = '<title>Veyl</title>' if standalone else ''
+    return f'{head}{size} style="display:block;{style}">{t}{defs}{ps}</svg>' if not standalone else f'{head}>{t}{defs}{ps}</svg>\n'
+def lockup_svg(mf, wf, h=None, standalone=False):
+    _n[0] += 1; vb, md, wd = LK; defs, ps = paths(md, mf, f'l{_n[0]}')
+    if standalone:
+        return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}" role="img" aria-label="Veyl"><title>Veyl</title>{defs}'
+                f'{ps}<path fill="{wf}" d="{wd}"/></svg>\n')
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}" height="{h}" style="display:block;overflow:visible">{defs}{ps}<path fill="{wf}" d="{wd}"/></svg>'
+
+def lum(h):
+    h = h.lstrip('#'); c = [int(h[i:i+2], 16)/255 for i in (0, 2, 4)]
+    c = [x/12.92 if x <= 0.03928 else ((x+0.055)/1.055)**2.4 for x in c]
+    return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2]
+def cr(a, b):
+    la, lb = sorted((lum(a), lum(b)), reverse=True); return (la+0.05)/(lb+0.05)
+
+import base64 as _b64
+_FD = '/tmp/claude-0/-home-claude/48139b95-a25c-5b1e-a40e-8ba5bffc0ebe/scratchpad/fonts/node_modules/@fontsource'
+def _ff(fam, pkg, w):
+    d = _b64.b64encode(open(f'{_FD}/{pkg}/files/{pkg}-latin-{w}-normal.woff2', 'rb').read()).decode()
+    return f"@font-face{{font-family:'{fam}';src:url(data:font/woff2;base64,{d}) format('woff2');font-weight:{w}}}"
+SITEFONTS = ''.join(_ff('Manrope', 'manrope', w) for w in (300, 400, 500, 600)) + ''.join(_ff('IBM Plex Mono', 'ibm-plex-mono', w) for w in (400, 500))
+NAVCSS = '.brand img.lockup{height:28px}@media (max-width:640px){.brand img.lockup{height:23px}}'

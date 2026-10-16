@@ -1,0 +1,43 @@
+{
+  "_comment": "Provenance of the Groth16 keys, written by `npm run ceremony -- finalize`. Preflight compares these hashes with zk/, the program's baked-in verifying keys and the site's copies, and (mainnet) re-verifies the whole ceremony.",
+  "kind": "rehearsal",
+  "transcript": "ceremony/TRANSCRIPT.md",
+  "circuits": {
+    "withdraw": {
+      "circuit": "zk/circuits/withdraw.circom",
+      "zkeySha256": "3b693da8eb9d02b72cc14ddbb3f1492ade843c9a45f304719176c02c991a467e",
+      "vkeySha256": "3c742ddb154ac99c7b88b6bd7430d99bc463e6da3d08c34e6610fdf3ce0e7b98",
+      "wasmSha256": "49fb1888c9b78f488802e9dce63c659f0b35f7ea42dde4b910c9c2d615f96aa8"
+    },
+    "transact": {
+      "circuit": "zk/circuits/transact.circom",
+      "zkeySha256": "c4ecee1bd875183a8e9c8ece81bfe66e12f5f4f5daf2f941aace40e30c35e66d",
+      "vkeySha256": "ca47c0bd299eeb0073100f1f6cf331ced9422d47f1f33ac29488b5ee68a9ed25",
+      "wasmSha256": "53fda2850bb0debcbbfd1512e415418f6e67d8aa09025611911b7d89cbd1bd10"
+    },
+    "position": {
+      "circuit": "zk/circuits/position.circom",
+      "zkeySha256": "635ceccf6042ef4f89752281bbd98ab4216792a664996ebbde86ca9514e1d2ee",
+      "vkeySha256": "7f696b916d675a38460b802ba34b76dd41083f22d52e12acde3ca8bf23ec1448",
+      "wasmSha256": "5df5325d8321be986e56fbaec9130b26b2f605949774cad59785f4cd0d13cea8"
+    },
+    "swap": {
+      "circuit": "zk/circuits/swap.circom",
+      "zkeySha256": "9078abd18bd72990bed8ac92cb7ede5dfa533d6a14bb092d4a474d279451a8ec",
+      "vkeySha256": "809bcf113fc0359bef58fa8253ab02654b9e473725e518853921bf308b6a3c5f",
+      "wasmSha256": "09b734a86446c5785b1d9ba57a3cabb1176c69113b1e3bd5da72f5d5645d3e36"
+    },
+    "claim": {
+      "circuit": "zk/circuits/claim.circom",
+      "zkeySha256": "8256e8c10cace964eac5d66cdcc616f082e3428de2dc967468ce463b0fd467ec",
+      "vkeySha256": "3e9c098f7aa888532ceb05e13b2d3d12b9c5d25626c50315c2d1adbc8577b989",
+      "wasmSha256": "637144c214feff3fb7129b3698828250743938a0caa3fb36f63457f4aabbb33a"
+    }
+  },
+  "description": "Phase 1: published Perpetual Powers of Tau files (pot16_final.ptau) (REHEARSAL: local files). Phase 2: 3 contributions per circuit + a random beacon (REHEARSAL fixed test value (not a real beacon)). See ceremony/TRANSCRIPT.md.",
+  "circuit": "zk/circuits/withdraw.circom",
+  "zkeySha256": "3b693da8eb9d02b72cc14ddbb3f1492ade843c9a45f304719176c02c991a467e",
+  "vkeySha256": "3c742ddb154ac99c7b88b6bd7430d99bc463e6da3d08c34e6610fdf3ce0e7b98",
+  "wasmSha256": "49fb1888c9b78f488802e9dce63c659f0b35f7ea42dde4b910c9c2d615f96aa8",
+  "contributionLogSha256": "d99b387b5f1945dc40d24639fc1b68b1284567f3f3bd1aea456ed44ee7912420"
+}

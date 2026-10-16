@@ -1,0 +1,6 @@
+{
+  "_comment": "sha256 of target/deploy/*.so from a clean build (rm -rf target build outputs; npm run build) with solana-cargo-build-sbf 3.1.9 / platform-tools v1.52 and the committed Cargo.lock. Preflight warns when a build differs. Update after any intended program change.",
+  "veyl_bin": "5b7c14a572cd93f890aa88e7cd3c69662a12a4b5f8e7078e8b3d98229b897395",
+  "veyl_entry": "cef51e1607a3b69860fce9f2adf712334a067466279c938092ea9b589db88882",
+  "veyl_pool": "a2bccf1efb46a065d8ffb5e6032699ae92911b4e7113c9c8f04bf328a56af9e8"
+}

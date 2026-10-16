@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Veyl</title>
+<meta name="description" content="Veyl is concentrated DLMM liquidity on Solana, private by default: choose your range and shape, earn dynamic fees, and keep your position to yourself.">
+<meta property="og:title" content="Veyl: liquidity, without a name">
+<meta property="og:description" content="Veyl is private liquidity on Solana: provide into DLMM price bins and swap from a shielded balance, without your wallet showing up.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Veyl">
+<meta property="og:image" content="brand/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Veyl mark beside the line: Liquidity, without a name.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Veyl: liquidity, without a name">
+<meta name="twitter:description" content="Veyl is private liquidity on Solana: provide into DLMM price bins and swap from a shielded balance, without your wallet showing up.">
+<meta name="twitter:image" content="brand/og.png">
+<meta name="theme-color" content="#0A0B09">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="brand/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="veyl.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav" id="nav">
+  <div class="w">
+    <a class="brand" href="index.html" aria-label="Veyl home"><img class="lockup" src="brand/veyl-lockup.svg" alt="Veyl"></a>
+    <nav class="nav-links" aria-label="Site">
+      <a href="#how">Liquidity</a>
+      <a href="#pools">Pools</a>
+      <a href="#privacy">Privacy</a>
+      <a href="docs.html">Docs</a>
+    </nav>
+    <span class="status" title="Veyl runs on Solana."><i></i>Solana</span>
+    <a class="btn primary" href="app.html">Open app</a>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero">
+  <div class="w">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="tag net"><i></i>Private liquidity · Solana</span></p>
+        <h1>Concentrated liquidity,<br><em>kept private.</em></h1>
+        <p class="sub">Provide into price bins on Solana and earn fees that rise with the market. The pool sees the liquidity. Nobody sees whose it is, or how much.</p>
+        <div class="btn-row">
+          <a class="btn primary lg" href="app.html#pools">Add liquidity</a>
+          <a class="btn ghost lg" href="#how">How it works</a>
+        </div>
+        <p class="nowallet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.9-4.3-1.7-7.5-5.3-7.5-9.9V6z"/></svg>No wallet needed. Fund a deposit address from any wallet or exchange.</p>
+      </div>
+
+      <figure class="vflow" id="flow" aria-label="Deposits of different sizes pass through a proof and come out as identical pieces that fill the liquidity bins.">
+        <canvas id="flowCv" aria-hidden="true"></canvas>
+        <div class="flow-tags" aria-hidden="true"><span class="ft in" data-stage="0">Deposits</span><span class="ft gate" data-stage="1">Proof</span><span class="ft out" data-stage="2">Liquidity bins</span></div>
+      </figure>
+    </div>
+
+    <div class="stages" id="stages">
+      <div data-stage="0"><b>Deposit</b><h3>Your tokens go in</h3></div>
+      <div data-stage="1"><b>Proof</b><h3>Made on your device</h3></div>
+      <div data-stage="2"><b>Bins</b><h3>Earning fees, unlinked to you</h3></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="sec feature tryit">
+  <div class="w">
+    <div class="fhead reveal"><span class="pk">How it works</span><h2>Pick a range.<br><em>Earn privately.</em></h2><p>Liquidity sits in price bins. Choose a pool, a shape and how many bins around the price. Every swap through your bins pays you.</p></div>
+    <div class="trygrid">
+      <div class="trycard" id="lpCard" aria-live="polite">
+        <div class="tc-h"><label class="poolsel"><span class="dots" id="lpDots"><i class="c-eth"></i><i class="c-usdc"></i></span><select id="lpPool" aria-label="Pool"><option value="sol-usdc">SOL–USDC</option><option value="sol-usdt">SOL–USDT</option><option value="usdt-usdc">USDT–USDC</option></select></label></div>
+        <p class="tc-mk" id="lpMk">Bin step 0.10% · base fee 0.05%</p>
+        <svg id="lpBins" class="tc-bins" role="img" aria-label="Liquidity in each price bin of the chosen pool; the bins you are about to fill are outlined, the ones you hold are lit"></svg>
+        <div class="tc-ax"><span id="lpLo">lower prices</span><span id="lpMid">active bin</span><span id="lpHi">higher prices</span></div>
+        <div class="lp-ctl">
+          <div class="lp-row"><span class="lbl">Shape</span><div class="seg" id="lpShape" role="group" aria-label="Liquidity shape"><button type="button" data-s="spot" aria-pressed="true">Spot</button><button type="button" data-s="curve" aria-pressed="false">Curve</button><button type="button" data-s="bidask" aria-pressed="false">Bid-Ask</button></div></div>
+          <div class="lp-row"><span class="lbl">Range</span><div class="seg" id="lpRange" role="group" aria-label="Bins around the price"><button type="button" data-w="2" aria-pressed="false">5 bins</button><button type="button" data-w="5" aria-pressed="true">11 bins</button><button type="button" data-w="7" aria-pressed="false">15 bins</button></div></div>
+        </div>
+        <p class="lp-prev" id="lpPrev"></p>
+        <div class="lp-go">
+          <button class="btn primary lg" id="lpGo" type="button">See how it works</button>
+          <a class="btn quiet" href="app.html">Open the app</a>
+        </div>
+        <div class="tc-run" id="lpRun" hidden><div class="tc-bar"><i id="lpBar"></i></div><p id="lpMsg"></p></div>
+      </div>
+      <div class="tryside">
+        <ol class="trysteps steps-line" id="lpSteps" data-state="idle"><i class="runner" aria-hidden="true"></i>
+          <li data-k="deposit"><b>Deposit</b><span>Tokens become private notes.</span></li>
+          <li data-k="prove"><b>Prove</b><span>Your browser proves you own them.</span></li>
+          <li data-k="verify"><b>Verified</b><span>The proof is checked.</span></li>
+          <li data-k="apply"><b>In the bins</b><span>The bins fill. Nobody sees whose.</span></li>
+          <li data-k="earn"><b>Earn</b><span>Swaps pay you. Claim privately.</span></li>
+        </ol>
+        <div class="tryseen" id="lpSeen"><div class="pb"><b>The chain sees</b><p>The pool, a change per bin, the relayer's flat fee, spent-note tags.</p></div><div class="hd"><b>It does not see</b><p>Whose position it is, how large, what you earned, or your wallet: it never signs.</p></div></div>
+        <p class="trynote"><a href="docs.html#privacy">What is and isn't private</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tools" class="sec feature">
+  <div class="w">
+    <div class="fhead reveal"><span class="pk">Liquidity tools</span><h2>Every LP tool.<br><em>All of it private.</em></h2><p>The tools you'd expect from the best liquidity apps on Solana. Each one runs from your private balance, so none of it points back to your wallet.</p></div>
+    <div class="privgrid lqgrid reveal">
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 19h18M5 19V9M9 19V6M13 19V6M17 19V9"/></svg></span><h3>Spot, Curve, Bid-Ask</h3><p>Spread evenly, stack it around the price, or weight the edges for a big move.</p><span class="pv-p"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Private: who owns it and how big</span></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/></svg></span><h3>Fees that move with the market</h3><p>Fees rise when the price moves fast, so you earn more when it matters. Never above 10%.</p><span class="pv-p"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Private: what you earn</span></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h16"/><rect x="9" y="5" width="6" height="14" rx="1.5"/></svg></span><h3>Limit orders</h3><p>Park tokens in one bin. It fills when the price crosses, and earns fees while it waits.</p><span class="pv-p"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Private: whose order it is</span></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg></span><h3>Zap in</h3><p>Only hold one token? Zap swaps part of it and adds both sides in one step.</p><span class="pv-p"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Private: paid from your private balance</span></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></span><h3>One-tap rebalance</h3><p>Price moved out of range? Re-centre your liquidity around it and keep your shape.</p><span class="pv-p"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Private: not linked to your earlier moves</span></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v10M9.5 9.5h4a1.8 1.8 0 0 1 0 3.6h-3a1.8 1.8 0 0 0 0 3.6h4"/></svg></span><h3>Claim any time</h3><p>Fees build up in your position. Claim them, or take 25%, 50% or all of it out.</p><span class="pv-p"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Private: lands in your private balance</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="pools" class="sec feature">
+  <div class="w">
+    <div class="fhead reveal"><span class="pk">Pools</span><h2>Deep pairs.<br><em>Ready for your range.</em></h2><p>83 pools: every major Meteora pair, from SOL–USDC to the top memecoins and tokenized stocks. Pick a pair, choose your range and start earning.</p></div>
+    <div class="livepools reveal" id="livePools">
+      <table class="tbl" aria-describedby="poolsNote">
+        <thead><tr><th>Pool</th><th class="num">Bin step</th><th class="num">Base fee</th><th class="num">Type</th></tr></thead>
+        <tbody id="poolRows">
+          <tr><td><a class="pair" href="app.html#pool-sol-usdc"><span class="dots"><i class="c-eth"></i><i class="c-usdc"></i></span><span><b>SOL–USDC</b></span></a></td><td class="num">0.10%</td><td class="num">0.05%</td><td class="num">Volatile</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-sol-usdt"><span class="dots"><i class="c-eth"></i><i class="c-usde"></i></span><span><b>SOL–USDT</b></span></a></td><td class="num">0.10%</td><td class="num">0.05%</td><td class="num">Volatile</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-usdt-usdc"><span class="dots"><i class="c-usde"></i><i class="c-usdc"></i></span><span><b>USDT–USDC</b></span></a></td><td class="num">0.01%</td><td class="num">0.01%</td><td class="num">Stable</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-jup-sol"><span class="dots"><i class="c-jup"></i><i class="c-eth"></i></span><span><b>JUP–SOL</b></span></a></td><td class="num">0.20%</td><td class="num">0.20%</td><td class="num">Volatile</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-jup-usdc"><span class="dots"><i class="c-jup"></i><i class="c-usdc"></i></span><span><b>JUP–USDC</b></span></a></td><td class="num">0.20%</td><td class="num">0.20%</td><td class="num">Volatile</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-bonk-sol"><span class="dots"><i class="c-bonk"></i><i class="c-eth"></i></span><span><b>BONK–SOL</b></span></a></td><td class="num">0.50%</td><td class="num">0.50%</td><td class="num">Memecoin</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-bonk-usdc"><span class="dots"><i class="c-bonk"></i><i class="c-usdc"></i></span><span><b>BONK–USDC</b></span></a></td><td class="num">0.50%</td><td class="num">0.50%</td><td class="num">Memecoin</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-wif-sol"><span class="dots"><i class="c-wif"></i><i class="c-eth"></i></span><span><b>WIF–SOL</b></span></a></td><td class="num">0.50%</td><td class="num">0.50%</td><td class="num">Memecoin</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-wif-usdc"><span class="dots"><i class="c-wif"></i><i class="c-usdc"></i></span><span><b>WIF–USDC</b></span></a></td><td class="num">0.50%</td><td class="num">0.50%</td><td class="num">Memecoin</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-jto-sol"><span class="dots"><i class="c-jto"></i><i class="c-eth"></i></span><span><b>JTO–SOL</b></span></a></td><td class="num">0.20%</td><td class="num">0.20%</td><td class="num">Volatile</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-pyth-usdc"><span class="dots"><i class="c-pyth"></i><i class="c-usdc"></i></span><span><b>PYTH–USDC</b></span></a></td><td class="num">0.20%</td><td class="num">0.20%</td><td class="num">Volatile</td></tr>
+          <tr><td><a class="pair" href="app.html#pool-ray-sol"><span class="dots"><i class="c-ray"></i><i class="c-eth"></i></span><span><b>RAY–SOL</b></span></a></td><td class="num">0.20%</td><td class="num">0.20%</td><td class="num">Volatile</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="btn-row foot"><p class="small muted" id="poolsNote">The 12 deepest shown. 71 more in the app, including HYPE, TRUMP, cbBTC, PUMP, PENGU and JupSOL. Every pool is private; fees never go above 10%.</p><a class="btn primary" href="app.html#pools">See all 83 pools</a></div>
+  </div>
+</section>
+
+<section id="privacy" class="sec feature">
+  <div class="w">
+    <div class="fhead reveal"><span class="pk">Privacy</span><h2>Your position.<br><em>Nobody else's business.</em></h2><p>The pool still sees liquidity and trades, so prices stay honest. It never sees who's behind them.</p></div>
+    <div class="seeing reveal" aria-label="Example: the same position, as a block explorer shows it and as you see it in Veyl">
+      <div class="sv pub"><span class="sv-k">What anyone sees on-chain</span>
+        <dl><div><dt>Sent by</dt><dd>Veyl relayer</dd></div><div><dt>Pool</dt><dd>SOL–USDC</dd></div><div><dt>Bins</dt><dd>+ liquidity in 11 bins</dd></div><div><dt>Owner</dt><dd class="x">hidden</dd></div><div><dt>Size</dt><dd class="x">hidden</dd></div><div><dt>Fees earned</dt><dd class="x">hidden</dd></div></dl></div>
+      <div class="sv you"><span class="sv-k">What only you see</span>
+        <dl><div><dt>Your position</dt><dd>12.4 SOL + 1,830 USDC</dd></div><div><dt>Range</dt><dd>11 bins around the price</dd></div><div><dt>Fees earned</dt><dd>3.21 USDC</dd></div><div><dt>Your wallet</dt><dd>never signed it</dd></div></dl>
+        <span class="sv-ex">Example</span></div>
+    </div>
+    <div class="privgrid reveal">
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg></span><h3>Private balance</h3><p>Deposit once. Your tokens become private notes that only you can spend.</p></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V14M9 20V9M14 20V5M19 20V11"/></svg></span><h3>Private positions</h3><p>Your liquidity sits in the bins with everyone else's. Size, range and earnings stay yours.</p></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h13M12 7l5 5-5 5"/><circle cx="20" cy="12" r="1.6"/></svg></span><h3>No wallet signature</h3><p>A relayer sends your transaction, so your wallet never shows up next to it.</p></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 10h17"/></svg></span><h3>Sealed swaps</h3><p>Swaps are sealed and settled together in batches. Nobody can see your order and jump ahead of it.</p></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg></span><h3>Proofs on your device</h3><p>The maths that proves it's your money is done in your browser. Your keys never leave it.</p></div>
+      <div class="pv"><span class="pv-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg></span><h3>Withdraw anywhere</h3><p>Take your tokens out to any wallet, even a brand-new one, with no link back to where they came from.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="start" class="sec cta">
+  <div class="w reveal">
+    <h2>Liquidity,<br><em>without a name.</em></h2>
+    <div class="btn-row" style="margin-top:32px">
+      <a class="btn primary lg" href="app.html#pools">Add liquidity</a>
+      <a class="btn ghost lg" href="docs.html">Read the docs</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="w">
+    <div>
+      <a class="brand" href="index.html" aria-label="Veyl home"><img class="lockup" src="brand/veyl-lockup.svg" alt="Veyl"></a>
+      <p class="tagline">Liquidity, <em>without a name.</em></p><p style="margin-top:10px;max-width:34ch">Private DLMM liquidity on Solana.</p>
+    </div>
+    <div>
+      <h4>App</h4>
+      <ul><li><a href="app.html#pools">Pools</a></li><li><a href="app.html#swap">Swap</a></li><li><a href="app.html#home">Portfolio</a></li></ul>
+    </div>
+    <div>
+      <h4>Learn</h4>
+      <ul><li><a href="docs.html">Docs</a></li><li><a href="docs.html#privacy">Privacy</a></li><li><a href="docs.html#faq">FAQ</a></li><li><a href="docs.html#roadmap">Roadmap</a></li></ul>
+    </div>
+    <p class="fine">Veyl has not yet had an independent audit. Built on Solana; not affiliated with the Solana Foundation or Solana Labs. Concentrated liquidity can lose value against holding.</p>
+  </div>
+</footer>
+
+<script src="veyl.config.js"></script>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var clamp=function(v,a,b){return v<a?a:v>b?b:v};
+var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var esc=function(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+
+/* nav hairline once the page has moved */
+var nav=$('nav');
+var onScrollNav=function(){ nav.classList.toggle('scrolled',window.scrollY>8); };
+onScrollNav(); window.addEventListener('scroll',onScrollNav,{passive:true});
+
+/* ---- the flow: deposits of every size go in on the left (public, each one different), pass the proof gate and come
+   out as identical pieces that settle into the pool's bins. Waves every 3.6 s; the stage row follows the wave. ---- */
+var cv=$('flowCv'), fig=$('flow'), ctx=cv.getContext('2d'), stages=Array.prototype.slice.call($('stages').children), tags=Array.prototype.slice.call(fig.querySelectorAll('.ft'));
+var css=getComputedStyle(document.documentElement), C={ink:(css.getPropertyValue('--ink')||'#ECEFE6').trim(), g:(css.getPropertyValue('--oxblood')||'#C8F560').trim()};
+var rgb=function(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }, G=rgb(C.g), I=rgb(C.ink);
+var col=function(c,a){ return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')'; };
+var W=0,H=0,DPR=1, NB=31, MID=15, bins=[], deps=[], bits=[], glows=[], T=0, wave=-1, stageNow=-1, CYCLE=3.6;
+var rnd=function(a,b){ return a+Math.random()*(b-a); }, gauss=function(){ var u=1-Math.random(), v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+function fGeo(){ return {gx:W*0.40, gy0:H*0.2, gy1:H*0.86, x0:W*0.53, x1:W*0.955, base:H*0.86}; }
+function fSize(){ var r=cv.getBoundingClientRect(); DPR=Math.min(2,window.devicePixelRatio||1); W=Math.max(1,r.width); H=Math.max(1,r.height); cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0);
+  var g=fGeo(); bins=[]; for(var i=0;i<NB;i++){ var d=(i-MID)/6.2, hb=H*(0.07+0.44*Math.exp(-d*d)); bins.push({hb:hb,h:hb,f:0}); }
+  var tg=fig.querySelector('.ft.gate'); if(tg) tg.style.left=(g.gx/W*100).toFixed(2)+'%'; }
+function spawnWave(){ var g=fGeo(), n=3+(Math.random()*3|0), cy=(g.gy0+g.gy1)/2;
+  for(var k=0;k<n;k++){ var s=rnd(9,28), y0=rnd(H*0.26,H*0.74), x0=-s-k*rnd(36,70)-rnd(0,24), dur=1.25+k*0.16;
+    deps.push({x:x0,y:y0,s:s,x0:x0,y0:y0,y1:cy+(y0-cy)*0.32,t:0,dur:dur,shade:rnd(0.55,0.95)}); } }
+function fHit(d){ var g=fGeo(), k=Math.max(4,Math.round(d.s*0.75)); glows.push({y:d.y,t:0});
+  for(var j=0;j<k;j++){ var bi=Math.max(0,Math.min(NB-1,Math.round(MID+gauss()*4.2))), bw=(g.x1-g.x0)/NB, tx=g.x0+bw*(bi+0.5)+rnd(-bw*0.18,bw*0.18), ty=g.base-bins[bi].h-3;
+    var sx=g.gx+rnd(2,8), sy=d.y+rnd(-d.s/2,d.s/2); bits.push({sx:sx,sy:sy,cx:(sx+tx)/2+rnd(-20,20),cy:Math.min(sy,ty)-rnd(30,90),tx:tx,ty:ty,bi:bi,t:-rnd(0,0.25),dur:rnd(0.85,1.3)}); } }
+function ease(t){ return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
+function fStep(dt){ T+=dt; var g=fGeo(), w=Math.floor(T/CYCLE); if(w!==wave){ wave=w; spawnWave(); }
+  var ph=(T%CYCLE)/CYCLE, st=ph<0.34?0:ph<0.6?1:2; if(st!==stageNow){ stageNow=st; stages.forEach(function(el){ el.classList.toggle('on',+el.dataset.stage===st); }); tags.forEach(function(el){ el.classList.toggle('on',+el.dataset.stage===st); }); }
+  for(var i=deps.length-1;i>=0;i--){ var d=deps[i]; d.t+=dt; var q=Math.min(1,d.t/d.dur); d.x=d.x0+(g.gx-d.x0)*q; d.y=d.y0+(d.y1-d.y0)*ease(q); if(q>=1){ fHit(d); deps.splice(i,1); } }
+  for(var j=bits.length-1;j>=0;j--){ var b=bits[j]; b.t+=dt; if(b.t>=b.dur){ var bn=bins[b.bi]; bn.h+=H*0.006; bn.f=1; bits.splice(j,1); } }
+  bins.forEach(function(bn){ bn.h+=(bn.hb-bn.h)*(1-Math.exp(-dt/5)); bn.f=Math.max(0,bn.f-dt*2.2); });
+  for(var k=glows.length-1;k>=0;k--){ glows[k].t+=dt; if(glows[k].t>0.9) glows.splice(k,1); } }
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function fDraw(){ var g=fGeo(); ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=col(I,0.06); ctx.lineWidth=1; ctx.setLineDash([2,7]); for(var l=0;l<5;l++){ var ly=H*(0.3+l*0.1); ctx.beginPath(); ctx.moveTo(0,ly); ctx.lineTo(g.gx-14,ly); ctx.stroke(); } ctx.setLineDash([]);
+  var gr=ctx.createLinearGradient(0,g.gy0,0,g.gy1); gr.addColorStop(0,col(G,0)); gr.addColorStop(0.5,col(G,0.55)); gr.addColorStop(1,col(G,0)); ctx.fillStyle=gr; ctx.fillRect(g.gx-1,g.gy0,2,g.gy1-g.gy0);
+  glows.forEach(function(o){ var a=1-o.t/0.9, rg=ctx.createRadialGradient(g.gx,o.y,0,g.gx,o.y,46); rg.addColorStop(0,col(G,0.42*a)); rg.addColorStop(1,col(G,0)); ctx.fillStyle=rg; ctx.fillRect(g.gx-46,o.y-46,92,92); ctx.fillStyle=col(G,0.9*a); ctx.fillRect(g.gx-1.5,o.y-14,3,28); });
+  deps.forEach(function(d){ var a=Math.min(1,(d.x+d.s)/60); if(a<=0) return; ctx.fillStyle=col(I,0.9*a*d.shade); rr(d.x-d.s/2,d.y-d.s/2,d.s,d.s,Math.min(5,d.s*0.22)); ctx.fill(); });
+  var bw=(g.x1-g.x0)/NB, hmax=H*0.6;
+  ctx.fillStyle=col(I,0.12); ctx.fillRect(g.x0,g.base+0.5,g.x1-g.x0,1);
+  bins.forEach(function(bn,i){ var x=g.x0+bw*i+bw*0.19, w=bw*0.62, h=Math.min(hmax,bn.h), k=h/hmax; ctx.fillStyle=i===MID?col(G,1):col(G,Math.min(0.92,0.14+0.62*k+0.35*bn.f)); rr(x,g.base-h,w,h,Math.min(2.5,w/3)); ctx.fill(); });
+  ctx.fillStyle=col(G,1); bits.forEach(function(b){ if(b.t<0) return; var q=ease(Math.min(1,b.t/b.dur)), u=1-q, x=u*u*b.sx+2*u*q*b.cx+q*q*b.tx, y=u*u*b.sy+2*u*q*b.cy+q*q*b.ty; ctx.fillRect(x-1.5,y-1.5,3,3); }); }
+var last=null, raf=null, visible=true;
+function fFrame(now){ raf=null; if(last===null) last=now; var dt=Math.min(0.05,(now-last)/1000); last=now; fStep(dt); fDraw(); if(visible&&!document.hidden) raf=requestAnimationFrame(fFrame); else last=null; }
+function fRun(){ if(reduce) return; if(!raf){ last=null; raf=requestAnimationFrame(fFrame); } }
+fSize(); if(reduce){ for(var s0=0;s0<Math.round(2.9/0.02)+Math.round(3.6*2/0.02);s0++) fStep(0.02); fDraw(); fig.classList.add('static'); }
+else { fig.classList.add('ready'); fRun(); if('IntersectionObserver' in window) new IntersectionObserver(function(es){ visible=es.some(function(e){ return e.isIntersecting; }); if(visible) fRun(); },{rootMargin:'80px'}).observe(fig); document.addEventListener('visibilitychange',function(){ if(!document.hidden) fRun(); }); }
+window.addEventListener('resize',function(){ clearTimeout(fSize.t); fSize.t=setTimeout(function(){ fSize(); if(reduce) fDraw(); },120); });
+
+/* ---- reveal figures once ---- */
+var rev=Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+if(reduce||!('IntersectionObserver' in window)) rev.forEach(function(el){ el.classList.add('in'); });
+else { var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); },{rootMargin:'0px 0px -8% 0px'}); rev.forEach(function(el){ io.observe(el); }); }
+
+/* ---- the showcase: an illustration of a shielded position going into the bins. No balances, prices or proofs here. ---- */
+var POOLS={'sol-usdc':{x:'SOL',y:'USDC',c:['c-eth','c-usdc'],bs:'0.10%',fee:'0.05%'},'sol-usdt':{x:'SOL',y:'USDT',c:['c-eth','c-usde'],bs:'0.10%',fee:'0.05%'},'usdt-usdc':{x:'USDT',y:'USDC',c:['c-usde','c-usdc'],bs:'0.01%',fee:'0.01%'}};
+var L={pool:'sol-usdc',shape:'spot',w:5,busy:false,lit:false};
+var SHAPE={spot:'Spot',curve:'Curve',bidask:'Bid-Ask'};
+var N=25;
+function lpStep(k,state){ var li=document.querySelector('#lpSteps [data-k="'+k+'"]'); if(!li) return; li.className=state||''; var lis=Array.prototype.slice.call(document.querySelectorAll('#lpSteps li')), last=-1; lis.forEach(function(x,i){ if(/\b(on|ok)\b/.test(x.className)) last=i; }); $('lpSteps').style.setProperty('--p',last<0?0:(last/(lis.length-1)).toFixed(3)); }
+function seg(id,key,fn){ $(id).addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b||L.busy) return; Array.prototype.forEach.call($(id).querySelectorAll('button'),function(x){ x.setAttribute('aria-pressed',x===b); }); L[key]=key==='w'?+b.dataset.w:b.dataset.s; L.lit=false; reset(); fn(); }); }
+function poolShape(i){ var d=i/9; return 0.18+0.82*Math.exp(-d*d); }               /* the pool's liquidity around the price, as a shape */
+function weight(i){ var r=Math.abs(i)/(L.w+0.5); if(L.shape==='curve') return Math.max(0.15,1-r*r); if(L.shape==='bidask') return 0.25+r*r; return 1; }
+function draw(){ var svg=$('lpBins'), W=svg.clientWidth||520, H=svg.clientHeight||170; var n=2*N+1, gap=Math.max(1.5,W/n*0.2), bw=(W-gap*(n-1))/n;
+  if(svg.dataset.w!==String(W)||svg.querySelectorAll('rect.b').length!==n){ svg.setAttribute('viewBox','0 0 '+W+' '+H); var h='<rect class="rng" x="0" y="0" width="0" height="'+H+'" rx="3"/>';
+    for(var k=0;k<n;k++){ var i0=k-N; h+='<rect class="b '+(i0<0?'y':i0>0?'x':'a')+'" x="'+(k*(bw+gap)).toFixed(1)+'" width="'+bw.toFixed(1)+'" rx="1.5" y="'+H+'" height="0"/>'; }
+    svg.innerHTML=h; svg.dataset.w=String(W); svg.getBoundingClientRect(); }
+  var rg=svg.querySelector('rect.rng'), k0=N-L.w, k1=N+L.w; rg.style.x=(k0*(bw+gap)-gap/2).toFixed(1)+'px'; rg.style.width=((k1-k0+1)*(bw+gap)).toFixed(1)+'px'; rg.setAttribute('height',H);
+  Array.prototype.forEach.call(svg.querySelectorAll('rect.b'),function(el,k){ var i=k-N, add=(L.lit&&Math.abs(i)<=L.w)?0.42*weight(i):0, hh=(poolShape(i)+add)/1.5*(H-8);
+    el.style.y=(H-hh).toFixed(1)+'px'; el.style.height=hh.toFixed(1)+'px'; el.classList.toggle('mine',add>0); });
+  var p=POOLS[L.pool]; $('lpPrev').textContent=SHAPE[L.shape]+' across '+(2*L.w+1)+' bins around the price, one or both of '+p.x+' and '+p.y+'.'; }
+function reset(){ ['deposit','prove','verify','apply','earn'].forEach(function(k){ lpStep(k,''); }); $('lpSteps').dataset.state='idle'; $('lpRun').hidden=true; }
+function pool(){ var p=POOLS[L.pool]; $('lpDots').innerHTML='<i class="'+p.c[0]+'"></i><i class="'+p.c[1]+'"></i>'; $('lpMk').textContent='Bin step '+p.bs+' · base fee '+p.fee; }
+seg('lpShape','shape',draw); seg('lpRange','w',draw);
+$('lpPool').addEventListener('change',function(){ if(L.busy) return; L.pool=this.value; L.lit=false; reset(); pool(); draw(); });
+$('lpGo').addEventListener('click',function(){ if(L.busy) return; L.busy=true; L.lit=false; reset(); draw(); $('lpSteps').dataset.state='running'; $('lpRun').hidden=false; $('lpBar').style.width='0%';
+  var seq=[['deposit','Your tokens become private notes.',18],['prove','Your browser proves the notes are yours, without showing them.',52],['verify','The proof is checked before anything moves.',70],['apply','The bins fill. On-chain, the owner is the pool\'s shared shielded position.',90],['earn','Swaps through your bins pay you; you claim privately.',100]];
+  var t=0; seq.forEach(function(s,i){ setTimeout(function(){ if(i>0) lpStep(seq[i-1][0],'ok'); lpStep(s[0],'on'); $('lpMsg').textContent=s[1]; $('lpBar').style.width=s[2]+'%'; if(s[0]==='apply'){ L.lit=true; draw(); } if(i===seq.length-1) setTimeout(function(){ lpStep(s[0],'ok'); $('lpSteps').dataset.state='done'; $('lpMsg').textContent='That\'s the whole flow. Do it for real in the app.'; L.busy=false; },900); }, reduce?0:t); t+=i===1?1500:900; }); });
+pool(); draw(); window.addEventListener('resize',function(){ clearTimeout(draw.r); draw.r=setTimeout(draw,150); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+# withdraw
+Reading r1cs
+Reading tauG1
+Reading tauG2
+Reading alphatauG1
+Reading betatauG1
+processing constraints: 0/14237
+processing constraints: 10000/14237
+writing coeffs: 0/57328
+Writing points start IC: 0/7
+Writing points end IC: 0/7
+splitting buffer: 0/16384
+splitting buffer: 10000/16384
+HashingHPoints: 0/16384
+Writing points start C: 0/14288
+Writing points start C: 2709/14288
+Writing points end C: 0/14288
+Writing points end C: 2709/14288
+Writing points start C: 5373/14288
+Writing points start C: 8189/14288
+Writing points end C: 5373/14288
+Writing points end C: 8189/14288
+Writing points start C: 10850/14288
+Writing points start C: 13518/14288
+Writing points end C: 13518/14288
+Writing points end C: 10850/14288
+Writing points start A: 0/14295
+Writing points end A: 0/14295
+Writing points start B1: 0/14295
+Writing points start B1: 14180/14295
+Writing points end B1: 14180/14295
+Writing points end B1: 0/14295
+Writing points start B2: 0/14295
+Writing points start B2: 14180/14295
+Writing points end B2: 14180/14295
+Writing points end B2: 0/14295
+Circuit hash: 
+		8a820009 5ebbbc48 b5efdd28 2f827e95
+		e59d4937 81db7ef2 5ccc70a1 3b651ebe
+		6818b475 ed45e559 b2177198 837a6572
+		42fc2f1b 66344ed7 f74e1eb0 67242735
+Same ratio check L section:  0/14288
+H Verification(tau):  0/16384
+H Verification(lagrange):  0/16384
+Circuit Hash: 
+		8a820009 5ebbbc48 b5efdd28 2f827e95
+		e59d4937 81db7ef2 5ccc70a1 3b651ebe
+		6818b475 ed45e559 b2177198 837a6572
+		42fc2f1b 66344ed7 f74e1eb0 67242735
+-------------------------
+contribution #4 Final beacon: REHEARSAL fixed test value (not a real beacon):
+		7dd9efed aad84987 36bcf213 07572669
+		96217317 fffae87e 84db52ae c54ca812
+		c246f6a0 3bc5bea5 8921f7cf edaff419
+		976ec178 ffcba59f d3516446 e377e8f1
+Beacon generator: 7665796c2072656865617273616c3a206120666978656420746573742076616c75652c206e6f742061207265616c20626561636f6e
+Beacon iterations Exp: 10
+-------------------------
+contribution #3 rehearsal-participant-3:
+		d87d1da4 99bc4c17 ec9987ee 97463736
+		8a3882e9 465ace99 3c0d4785 60fcb002
+		dd78f5d0 987912cc 02b418dd b09c3f96
+		13c5f37b 6078fba6 279747af 0759de79
+-------------------------
+contribution #2 rehearsal-participant-2:
+		a34c121a 82ff540f c02fc802 1fb6b5a2
+		68a29504 5d63ef0a 43d864d6 b69b200f
+		c85dd096 9a483f97 b6891cc9 a30235f8
+		d11bb055 4a6cf6b5 790b2333 502ec2c6
+-------------------------
+contribution #1 rehearsal-participant-1:
+		600fce37 e801011d b78fb51d dcbbb2d1
+		f7853191 e6c18721 34a3407f 65b571d6
+		439d440a f5f63c22 235c2506 2757e3cc
+		9526f826 c3eb0a57 b94206fc b3660e60
+-------------------------
+ZKey Ok!
+
+# transact
+Reading r1cs
+Reading tauG1
+Reading tauG2
+Reading alphatauG1
+Reading betatauG1
+processing constraints: 0/18475
+processing constraints: 10000/18475
+writing coeffs: 0/97082
+Writing points start IC: 0/9
+Writing points end IC: 0/9
+splitting buffer: 0/32768
+splitting buffer: 10000/32768
+splitting buffer: 20000/32768
+splitting buffer: 30000/32768
+HashingHPoints: 0/32768
+HashingHPoints: 16384/32768
+Writing points start C: 0/18540
+Writing points start C: 2072/18540
+Writing points end C: 2072/18540
+Writing points end C: 0/18540
+Writing points start C: 4795/18540
+Writing points start C: 7455/18540
+Writing points end C: 4795/18540
+Writing points end C: 7455/18540
+Writing points start C: 10167/18540
+Writing points start C: 12830/18540
+Writing points end C: 12830/18540
+Writing points end C: 10167/18540
+Writing points start C: 15557/18540
+Writing points start C: 17912/18540
+Writing points end C: 17912/18540
+Writing points end C: 15557/18540
+Writing points start A: 0/18549
+Writing points start A: 17127/18549
+Writing points end A: 17127/18549
+Writing points end A: 0/18549
+Writing points start B1: 0/18549
+Writing points start B1: 10619/18549
+Writing points end B1: 10619/18549
+Writing points end B1: 0/18549
+Writing points start B2: 0/18549
+Writing points start B2: 10619/18549
+Writing points end B2: 10619/18549
+Writing points end B2: 0/18549
+Circuit hash: 
+		f2685bbd b35e9c22 c4142e46 b7fdcaf5
+		71a59311 52f9924d b580a09c cc3467a6
+		1e007809 82aa1e44 014b4630 58290347
+		f91702bf 83f2630d c02dae3c 1bdb5a3d
+Same ratio check L section:  0/18540
+H Verification(tau):  0/32768
+H Verification(lagrange):  0/32768
+Circuit Hash: 
+		f2685bbd b35e9c22 c4142e46 b7fdcaf5
+		71a59311 52f9924d b580a09c cc3467a6
+		1e007809 82aa1e44 014b4630 58290347
+		f91702bf 83f2630d c02dae3c 1bdb5a3d
+-------------------------
+contribution #4 Final beacon: REHEARSAL fixed test value (not a real beacon):
+		bf5fa83f d7422fcf e14474fc 1a8340c5
+		d57e07bf 7df04403 245401e2 877e5ae7
+		ee99ead5 7e812bbc 4b2b8553 b2f5d2be
+		ea5a538f 25ae7f7a d90f2bed 29af92f0
+Beacon generator: 7665796c2072656865617273616c3a206120666978656420746573742076616c75652c206e6f742061207265616c20626561636f6e
+Beacon iterations Exp: 10
+-------------------------
+contribution #3 rehearsal-participant-3:
+		44c26d2b 98c134d2 5d24756d 6ec4eb8c
+		41d318cf 56820267 cfca2516 77d0fa22
+		5ac2504b 5fdb58f7 227a7c0c dd90e5d4
+		fed99876 51e78771 4c1ef8d4 69d53f8b
+-------------------------
+contribution #2 rehearsal-participant-2:
+		94e5b24f ec8728d4 a6bf60da fb33be9b
+		6c2acb19 5e897eaa 89e01694 1931ff7d
+		551f4c1f da42dfd6 8718600c dd2c5a9d
+		10973d1d 99684f7d cfa00c64 ea124ca3
+-------------------------
+contribution #1 rehearsal-participant-1:
+		9281cc9f 200993a8 16122c0f 142fbf66
+		18a4d2d2 67e3d923 70791e0b f564a30d
+		007ebd29 e4a374fc f924f1af 81afda53
+		1be68b6d 6a59c1c2 cef1fdad 02fb4ef9
+-------------------------
+ZKey Ok!
+
+# position
+Reading r1cs
+Reading tauG1
+Reading tauG2
+Reading alphatauG1
+Reading betatauG1
+processing constraints: 0/17219
+processing constraints: 10000/17219
+writing coeffs: 0/176469
+writing coeffs: 100000/176469
+Writing points start IC: 0/9
+Writing points end IC: 0/9
+splitting buffer: 0/32768
+splitting buffer: 10000/32768
+splitting buffer: 20000/32768
+splitting buffer: 30000/32768
+HashingHPoints: 0/32768
+HashingHPoints: 16384/32768
+Writing points start C: 0/17282
+Writing points start C: 1399/17282
+Writing points end C: 0/17282
+Writing points end C: 1399/17282
+Writing points start C: 2836/17282
+Writing points start C: 4461/17282
+Writing points end C: 2836/17282
+Writing points end C: 4461/17282
+Writing points start C: 5898/17282
+Writing points start C: 8372/17282
+Writing points end C: 5898/17282
+Writing points end C: 8372/17282
+Writing points start C: 11509/17282
+Writing points start C: 14174/17282
+Writing points end C: 11509/17282
+Writing points end C: 14174/17282
+Writing points start C: 16830/17282
+Writing points end C: 16830/17282
+Writing points start A: 0/17291
+Writing points start A: 4494/17291
+Writing points end A: 0/17291
+Writing points end A: 4494/17291
+Writing points start A: 16409/17291
+Writing points end A: 16409/17291
+Writing points start B1: 0/17291
+Writing points start B1: 2449/17291
+Writing points end B1: 2449/17291
+Writing points end B1: 0/17291
+Writing points start B1: 5145/17291
+Writing points start B1: 12246/17291
+Writing points end B1: 12246/17291
+Writing points end B1: 5145/17291
+Writing points start B2: 0/17291
+Writing points start B2: 2449/17291
+Writing points end B2: 2449/17291
+Writing points end B2: 0/17291
+Writing points start B2: 5145/17291
+Writing points start B2: 12246/17291
+Writing points end B2: 12246/17291
+Writing points end B2: 5145/17291
+Circuit hash: 
+		30ad70de b0b4a833 7f1ee60d 637ff44a
+		982e1cf3 6e275f54 9a307d8d f17b7ba1
+		c3c59805 d77346d4 f635db09 78e800e1
+		208a54a1 b562ec06 2233c919 e4d54a76
+Same ratio check L section:  0/17282
+H Verification(tau):  0/32768
+H Verification(lagrange):  0/32768
+Circuit Hash: 
+		30ad70de b0b4a833 7f1ee60d 637ff44a
+		982e1cf3 6e275f54 9a307d8d f17b7ba1
+		c3c59805 d77346d4 f635db09 78e800e1
+		208a54a1 b562ec06 2233c919 e4d54a76
+-------------------------
+contribution #4 Final beacon: REHEARSAL fixed test value (not a real beacon):
+		506d1563 ae89183e 5b68f126 33c16861
+		58ed8e64 e0eed6d7 5e97f0dc 249b8336
+		ce661259 63170985 7721a2fa ba0debdc
+		eff152bc 6ccd2fb0 168f7586 b3e6c1a9
+Beacon generator: 7665796c2072656865617273616c3a206120666978656420746573742076616c75652c206e6f742061207265616c20626561636f6e
+Beacon iterations Exp: 10
+-------------------------
+contribution #3 rehearsal-participant-3:
+		277dbad2 b8ed2753 4f78e013 f1eb677b
+		3802f4be 91f2e79f f1707f83 7b12048c
+		97262364 e8d3e604 99a02f86 92cda091
+		a5ad621c 6b352e16 c330a1ec 8ba215b9
+-------------------------
+contribution #2 rehearsal-participant-2:
+		eb0e7a72 8941b10d 0b4ebbdd 102e0fe0
+		10a916f1 b34e2fee 633161ab 00895706
+		d787f618 1bcc25fb 13097e7f 1ee205bb
+		18756ef6 998157c0 1abd3c3b 5b42ff15
+-------------------------
+contribution #1 rehearsal-participant-1:
+		9f926b01 8085a7d5 c16380f5 ec301597
+		844684b7 ac5796c0 93ffcebe cb01826c
+		3432e7a1 e2da2f10 909eb221 39fdfbc8
+		2320aaf5 8f4b94be 93923e7c 912142e4
+-------------------------
+ZKey Ok!
+
+# swap
+Reading r1cs
+Reading tauG1
+Reading tauG2
+Reading alphatauG1
+Reading betatauG1
+processing constraints: 0/23426
+processing constraints: 10000/23426
+processing constraints: 20000/23426
+writing coeffs: 0/122877
+writing coeffs: 100000/122877
+Writing points start IC: 0/9
+Writing points end IC: 0/9
+splitting buffer: 0/32768
+splitting buffer: 10000/32768
+splitting buffer: 20000/32768
+splitting buffer: 30000/32768
+HashingHPoints: 0/32768
+HashingHPoints: 16384/32768
+Writing points start C: 0/23492
+Writing points start C: 1905/23492
+Writing points end C: 0/23492
+Writing points end C: 1905/23492
+Writing points start C: 4343/23492
+Writing points start C: 6999/23492
+Writing points end C: 6999/23492
+Writing points end C: 4343/23492
+Writing points start C: 9656/23492
+Writing points start C: 12369/23492
+Writing points end C: 9656/23492
+Writing points end C: 12369/23492
+Writing points start C: 15026/23492
+Writing points start C: 17684/23492
+Writing points end C: 15026/23492
+Writing points end C: 17684/23492
+Writing points start C: 22578/23492
+Writing points end C: 22578/23492
+Writing points start A: 0/23501
+Writing points start A: 12624/23501
+Writing points end A: 12624/23501
+Writing points end A: 0/23501
+Writing points start B1: 0/23501
+Writing points start B1: 5582/23501
+Writing points end B1: 0/23501
+Writing points end B1: 5582/23501
+Writing points start B1: 20337/23501
+Writing points end B1: 20337/23501
+Writing points start B2: 0/23501
+Writing points start B2: 5582/23501
+Writing points end B2: 0/23501
+Writing points end B2: 5582/23501
+Writing points start B2: 20337/23501
+Writing points end B2: 20337/23501
+Circuit hash: 
+		47cbfc95 5fd29cde 36017b0d 37ff3907
+		2008c638 7477b704 27371965 1e0fdda5
+		0d6a4302 5f824ee6 40938daf eb7e664d
+		f72ac832 b370a0c2 88cda314 f0433539
+Same ratio check L section:  0/23492
+H Verification(tau):  0/32768
+H Verification(lagrange):  0/32768
+Circuit Hash: 
+		47cbfc95 5fd29cde 36017b0d 37ff3907
+		2008c638 7477b704 27371965 1e0fdda5
+		0d6a4302 5f824ee6 40938daf eb7e664d
+		f72ac832 b370a0c2 88cda314 f0433539
+-------------------------
+contribution #4 Final beacon: REHEARSAL fixed test value (not a real beacon):
+		b7eea5c4 ddc7be78 b248fc71 e12636bf
+		d8cef0e1 936b0631 05f416bd 5dcab01e
+		cbfeafd3 a20555b9 b229251e 95fc30ee
+		84276a5b a5df4152 9f1c706f d3651973
+Beacon generator: 7665796c2072656865617273616c3a206120666978656420746573742076616c75652c206e6f742061207265616c20626561636f6e
+Beacon iterations Exp: 10
+-------------------------
+contribution #3 rehearsal-participant-3:
+		d54d8f1e 024aefa5 9935338f 0b09d53e
+		52f0aaca 915613e3 9b4cdbfd 1335def3
+		d01a2af0 503ab827 c921545d 0892e466
+		5bdc731a a084d9b0 e8193c52 f13e79b0
+-------------------------
+contribution #2 rehearsal-participant-2:
+		e86caf8e 19b1c9f3 5e40a7b9 557771f8
+		2748d877 05b52fd3 590d22a1 6cf7ce61
+		17378c34 2157ab94 5e259b3e c3811754
+		1553a878 a90426aa 0e526107 fda641e1
+-------------------------
+contribution #1 rehearsal-participant-1:
+		0b5962e0 336d70e7 44784711 0d8f82e6
+		c67b068c 52b86c09 07918705 31dc9449
+		f432ac71 e2c992f8 b810d322 1873cb16
+		f7dcbe6b 5431d229 3ed71c2c 07724312
+-------------------------
+ZKey Ok!
+
+# claim
+Reading r1cs
+Reading tauG1
+Reading tauG2
+Reading alphatauG1
+Reading betatauG1
+processing constraints: 0/9942
+writing coeffs: 0/58043
+Writing points start IC: 0/7
+Writing points end IC: 0/7
+splitting buffer: 0/16384
+splitting buffer: 10000/16384
+HashingHPoints: 0/16384
+Writing points start C: 0/9972
+Writing points start C: 1984/9972
+Writing points end C: 0/9972
+Writing points end C: 1984/9972
+Writing points start C: 4707/9972
+Writing points start C: 7364/9972
+Writing points end C: 7364/9972
+Writing points end C: 4707/9972
+Writing points start A: 0/9979
+Writing points end A: 0/9979
+Writing points start B1: 0/9979
+Writing points start B1: 9035/9979
+Writing points end B1: 9035/9979
+Writing points end B1: 0/9979
+Writing points start B2: 0/9979
+Writing points start B2: 9035/9979
+Writing points end B2: 9035/9979
+Writing points end B2: 0/9979
+Circuit hash: 
+		4f929b71 e0107e89 453869d0 00aec457
+		397dc498 1c7a8995 03442ad6 c8a7ba41
+		ed65c7ab 48305e4a f335a591 74307f71
+		ee901964 ecc11d4c a7545582 c331339c
+Same ratio check L section:  0/9972
+H Verification(tau):  0/16384
+H Verification(lagrange):  0/16384
+Circuit Hash: 
+		4f929b71 e0107e89 453869d0 00aec457
+		397dc498 1c7a8995 03442ad6 c8a7ba41
+		ed65c7ab 48305e4a f335a591 74307f71
+		ee901964 ecc11d4c a7545582 c331339c
+-------------------------
+contribution #4 Final beacon: REHEARSAL fixed test value (not a real beacon):
+		9e8df7bd 4d60e621 d8fe766e 406132b8
+		d40ebe12 e43cf032 894fe2bd ac7db523
+		896f08a3 c4c9951c f9314710 ea54699f
+		629c22ff cd2ae6d9 545bdc09 def308cc
+Beacon generator: 7665796c2072656865617273616c3a206120666978656420746573742076616c75652c206e6f742061207265616c20626561636f6e
+Beacon iterations Exp: 10
+-------------------------
+contribution #3 rehearsal-participant-3:
+		ab4866af ea11ac08 bd5d477a 5dcac01d
+		645e3921 594d884d 7f6670ef f11780f3
+		671c4565 e7699894 2ae12a38 54b9664d
+		7d7a6b32 84b180cd fc358d6f cf9b6fd2
+-------------------------
+contribution #2 rehearsal-participant-2:
+		aa079e29 27ffef90 bc14edf6 0f355ba0
+		1e5a27f8 7cc626a9 2c7a159b 01a7f4e4
+		a5189213 c868b197 f449aeb8 be3a97dc
+		9c5c1927 35f98828 1c24f846 2d5fb1bd
+-------------------------
+contribution #1 rehearsal-participant-1:
+		0d371ff5 db1e65f0 5a5a16b7 a1678ca6
+		5e90b1f6 616bb74f 8116de3f 1272b57c
+		5bb9d504 c013c5c4 e58504b7 013fcb4d
+		bb79ac63 c4cc4db5 c56475a9 ef5895b4
+-------------------------
+ZKey Ok!

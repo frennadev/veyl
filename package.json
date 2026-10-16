@@ -1,0 +1,54 @@
+{
+  "name": "veyl-sol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Veyl on Solana: private liquidity. Shielded notes (Poseidon tree, Groth16 withdraw proofs verified on-chain), DLMM-style bin pools, and a relayer so your wallet never appears.",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "vkey": "node scripts/vkey-to-rust.js --all",
+    "bundle": "esbuild site/sol-entry.js --bundle --minify --format=iife --global-name=Veyl --outfile=site/veyl-sol.js --define:global=window --external:crypto && esbuild site/committee-worker.src.js --bundle --minify --format=iife --outfile=site/committee-worker.js --define:global=self --external:crypto",
+    "test": "node tests/market.js && node tests/markets.js && node tests/run.js",
+    "e2e": "node e2e/run.js",
+    "preflight": "node scripts/preflight.js",
+    "deploy": "node scripts/deploy.js",
+    "build:site": "node scripts/build-site.js",
+    "serve:site": "node scripts/serve-dist.js",
+    "localnet": "node scripts/localnet.js",
+    "relayer": "node relayer/relayer.js",
+    "demo": "node scripts/demo.js",
+    "dist": "node scripts/dist.js",
+    "ceremony": "node ceremony/ceremony.mjs",
+    "ceremony:rehearse": "node ceremony/rehearse.mjs",
+    "build:mainnet": "bash scripts/build.sh mainnet",
+    "keys:mainnet": "node scripts/keys-mainnet.js",
+    "handover": "node scripts/handover.js",
+    "test:phase2": "node tests/phase2-only.js",
+    "test:phase3": "node tests/phase3-only.js",
+    "committee": "node committee/node.js",
+    "circuits": "node scripts/compile-circuit.js swap claim",
+    "e2e:sandbox": "node e2e/sandbox.js",
+    "seed": "node scripts/seed.js",
+    "e2e:local": "node e2e/local.js",
+    "check:prices": "node scripts/check-prices.js",
+    "e2e:smoke": "node e2e/smoke.js"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^5.0.0",
+    "buffer": "^6.0.3",
+    "js-sha256": "^1.0.0",
+    "poseidon-lite": "^0.3.0",
+    "snarkjs": "^0.7.6",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "circom2": "0.2.23",
+    "circomlib": "2.0.5",
+    "esbuild": "^0.24.0",
+    "playwright": "1.56.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

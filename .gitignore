@@ -1,0 +1,43 @@
+# dependencies and build caches
+node_modules/
+dist/
+target/release/
+target/debug/
+target/sbf-solana-solana/
+target/sbpf-solana-solana/
+target/*/
+!target/deploy/
+target/deploy/*.so.tmp
+.anchor/
+test-ledger/
+.localnet/
+# secrets: env files, any keypair outside target/deploy (those three are the public dev program IDs), key dirs
+.env
+.env.*
+!.env.example
+.keys/
+*.pem
+*-keypair.json
+!target/deploy/veyl_pool-keypair.json
+!target/deploy/veyl_bin-keypair.json
+!target/deploy/veyl_entry-keypair.json
+.devnet-key.json
+id.json
+deployer*.json
+relayer-key*.json
+postman-key*.json
+*.secret.json
+# per-machine deploy output (deploy.devnet.json / deploy.mainnet.json hold only public addresses and are meant to be committed)
+deploy.local.json
+site/veyl.config.js
+# trusted-setup ceremony: coordinator state + intermediate keys (publish them separately), the downloaded ptau, rehearsal keys
+ceremony/work/
+ceremony/ptau/
+ceremony/rehearsal/**/*.zkey
+ceremony/rehearsal/site/
+veyl-contribution-*.json
+# launcher state and local copies
+.devnet-run/
+site/_retired/
+e2e/_*
+site/veyl.keys.js

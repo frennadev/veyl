@@ -1,0 +1,50 @@
+{
+  "_comment": "Solana mainnet-beta. Every value starting with VERIFY must be checked against its issuer / your own records and the VERIFY prefix removed by hand; deploy and preflight refuse while any remain. Mainnet must not happen before a multi-party key ceremony and an external audit (DEPLOY.md, Before mainnet).",
+  "network": "mainnet",
+  "rpc": "VERIFY: https://api.mainnet-beta.solana.com (or your own paid RPC endpoint)",
+  "genesisHash": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  "chainName": "Solana",
+  "explorer": "https://solscan.io",
+  "explorerSuffix": "",
+  "relayerUrl": "VERIFY: https://<your relayer host>",
+  "mockMints": false,
+  "tokens": [
+    "SOL",
+    "USDC",
+    "USDT"
+  ],
+  "binPools": [
+    "sol-usdc",
+    "sol-usdt",
+    "usdt-usdc"
+  ],
+  "protocolShareBps": 1000,
+  "mints": {
+    "SOL": "So11111111111111111111111111111111111111112",
+    "USDC": "VERIFY: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (Circle USDC, SPL Token program)",
+    "USDT": "VERIFY: Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB (Tether USDT, SPL Token program)"
+  },
+  "prices": {
+    "SOL": "VERIFY: SOL price in USD at deploy time (sets the SOL-USDC / SOL-USDT launch bins)",
+    "USDT": "VERIFY: USDT price in USDC at deploy time (usually 1)"
+  },
+  "programs": {
+    "pool": "VERIFY: fresh veyl_pool program ID (npm run keys:mainnet writes it; never the repo's dev keypair)",
+    "bin": "VERIFY: fresh veyl_bin program ID (npm run keys:mainnet writes it; never the repo's dev keypair)",
+    "entry": "VERIFY: fresh veyl_entry program ID (npm run keys:mainnet writes it; never the repo's dev keypair)"
+  },
+  "postman": "VERIFY: multisig or dedicated key that publishes the approved set",
+  "relayer": "VERIFY: relayer hot-wallet pubkey (fee-only, low balance)",
+  "sealed": {
+    "_comment": "Phase 3 sealed batch swaps: which bin pools get batches, and their rules. The committee comes from committee/transcript.mainnet.json (a real dealerless DKG among independent operators; preflight is red without it). VERIFY before mainnet: every value below.",
+    "pools": [
+      "VERIFY"
+    ],
+    "epochSlots": "VERIFY",
+    "settleTimeout": "VERIFY",
+    "kMin": "VERIFY",
+    "maxRollovers": "VERIFY",
+    "maxDrift": "VERIFY",
+    "minIn": "VERIFY"
+  }
+}

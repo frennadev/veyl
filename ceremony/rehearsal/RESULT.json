@@ -1,0 +1,181 @@
+{
+  "rehearsal": true,
+  "at": "2026-10-13T12:29:20.907Z",
+  "seconds": 2671,
+  "circuits": [
+    "withdraw",
+    "transact",
+    "position",
+    "swap",
+    "claim"
+  ],
+  "ptau": {
+    "file": "pot16_final.ptau",
+    "blake2b": "a8d10a0bb0f9f3f28bc7e815db0d8fccbf7a24bf6e3d6b6cf63a67c51de4d3a4b0d0f50df59f9ceb3edec13781a7ac4fe236ce76690cdd94627f565fbc05b314"
+  },
+  "passed": 32,
+  "failed": 0,
+  "checks": [
+    {
+      "check": "init: one ceremony, every circuit (five); each initial key encodes its recorded circuit (same constraint coefficients as the dev keys)",
+      "ok": true,
+      "detail": "withdraw 14237, transact 18475, position 17219, swap 23426, claim 9942  484s"
+    },
+    {
+      "check": "coordinator serves the status: every circuit, next = participant 1, nothing contributed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "an unknown token is refused (403)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "a participant out of turn is refused (409)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "an upload that adds no contribution is refused after inspection (400)",
+      "ok": true,
+      "detail": "expected 1 contributions, the file has 0 (build on the latest key)"
+    },
+    {
+      "check": "a contribution to the transact key uploaded as the position key is refused (another circuit)",
+      "ok": true,
+      "detail": "the key is for another circuit than position"
+    },
+    {
+      "check": "participant 1 contributes to all five circuits with one command (download, contribute, upload, verified by the coordinator, per circuit)",
+      "ok": true,
+      "detail": "withdraw 600fce37e801…, transact 9281cc9f2009…, position 9f926b018085…, swap 0b5962e0336d…, claim 0d371ff5db1e…  843s"
+    },
+    {
+      "check": "participant 2 contributes to all five circuits with one command (download, contribute, upload, verified by the coordinator, per circuit)",
+      "ok": true,
+      "detail": "withdraw a34c121a82ff…, transact 94e5b24fec87…, position eb0e7a728941…, swap e86caf8e19b1…, claim aa079e2927ff…  1164s"
+    },
+    {
+      "check": "participant 3 contributes to all five circuits with one command (download, contribute, upload, verified by the coordinator, per circuit)",
+      "ok": true,
+      "detail": "withdraw d87d1da499bc…, transact 44c26d2b98c1…, position 277dbad2b8ed…, swap d54d8f1e024a…, claim ab4866afea11…  1488s"
+    },
+    {
+      "check": "a fourth upload is refused: nobody else is registered",
+      "ok": true,
+      "detail": "the ceremony is not taking contributions"
+    },
+    {
+      "check": "beacon applied to every circuit (one fixed test value, 2^10 iterations)",
+      "ok": true,
+      "detail": "1793s"
+    },
+    {
+      "check": "verify withdraw: the final key derives from its r1cs and the ptau; 3 participant contributions + 1 beacon; each participant's hash is in it",
+      "ok": true,
+      "detail": "1840s"
+    },
+    {
+      "check": "verify transact: the final key derives from its r1cs and the ptau; 3 participant contributions + 1 beacon; each participant's hash is in it",
+      "ok": true,
+      "detail": "1897s"
+    },
+    {
+      "check": "verify position: the final key derives from its r1cs and the ptau; 3 participant contributions + 1 beacon; each participant's hash is in it",
+      "ok": true,
+      "detail": "1972s"
+    },
+    {
+      "check": "verify swap: the final key derives from its r1cs and the ptau; 3 participant contributions + 1 beacon; each participant's hash is in it",
+      "ok": true,
+      "detail": "2031s"
+    },
+    {
+      "check": "verify claim: the final key derives from its r1cs and the ptau; 3 participant contributions + 1 beacon; each participant's hash is in it",
+      "ok": true,
+      "detail": "2074s"
+    },
+    {
+      "check": "finalize: per circuit vkey, vkey*.rs, zkey (zk + site copies); SETUP.json kind 'rehearsal' with all circuits; TRANSCRIPT.md with a section per circuit",
+      "ok": true,
+      "detail": "2356s"
+    },
+    {
+      "check": "the rehearsal keys are new keys for the same circuits: same public inputs, different delta (each circuit)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "finalizing a rehearsal into the repo is refused",
+      "ok": true,
+      "detail": "a rehearsal never replaces the repo's keys: pass --out <separate dir>"
+    },
+    {
+      "check": "the rehearsal veyl_pool.so embeds all five rehearsal verifying keys and none of the dev deltas",
+      "ok": true,
+      "detail": "2366s"
+    },
+    {
+      "check": "on chain: a transact proof made with the dev key is refused by the rehearsal program (BadProof)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "snarkjs: the rehearsal transact proof verifies with the rehearsal vkey and not with the dev vkey",
+      "ok": true,
+      "detail": "6621 ms"
+    },
+    {
+      "check": "on chain: a REAL rehearsal transact proof verifies in post_proof and the shielded deposit executes (100 USDC note, approved into the tree)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: a hidden transfer proven with the rehearsal transact key executes (B holds 40, A 60; the chain saw two nullifiers and two commitments)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: the legacy withdraw circuit's rehearsal proof verifies (post_withdrawal) and executes (40 out)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: a swap proof made with the DEV key is refused by the rehearsal program (BadProof)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: six sealed swaps (3 per direction) proven with these keys enter batch 0",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: two of three partial decryptions pass the Chaum–Pedersen check; the totals they reveal are the sums of the hidden amounts",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: the batch settles with ONE net swap; its clearing ratios equal the JS twin's",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "on chain: six claims proven with these keys pay floor(amount x num / den) each; claims + dust == what each side was owed (dust < 1 atom per claim)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "snarkjs: the rehearsal swap and claim keys are not the dev keys (different delta)",
+      "ok": true,
+      "detail": "batch totals 1750000000 / 218500000"
+    },
+    {
+      "check": "the repo's keys, vkey*.rs, site zkeys and target/deploy are untouched; no ceremony/TRANSCRIPT.md was written",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "transcript": "ceremony/TRANSCRIPT.md"
+}

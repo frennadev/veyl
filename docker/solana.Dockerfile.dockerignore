@@ -1,0 +1,12 @@
+# used instead of /.dockerignore when building docker/solana.Dockerfile (BuildKit): keeps target/deploy and zk/
+node_modules
+dist
+.localnet
+.git
+.env
+.env.*
+.keys
+target/release
+target/sbf-solana-solana
+target/sbpf-solana-solana
+deploy.local.json

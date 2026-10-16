@@ -1,0 +1,73 @@
+# Everything locally against a local validator:  docker compose up --build
+#   validator  solana-test-validator on 8933 (websocket 8934), funds a throwaway deployer key in the shared volume
+#   committee  three batch committee nodes (8863-8865) in one container: key generation over HTTP, then they watch the
+#              deployment (close, decrypt and settle sealed batches); dev only: one host holds every share
+#   deploy     one-shot: npm run deploy -- --network local (registers the committee from its transcript), then builds
+#              dist/site with this deployment baked in
+#   relayer    relayer + approved-set publisher on 8843 (the throwaway key doubles as relayer + postman locally)
+#   site       dist/site with the production headers on http://localhost:8873
+# Nothing here is for devnet/mainnet: those use DEPLOY.md.
+x-tools: &tools
+  build: { context: ., dockerfile: docker/solana.Dockerfile }
+  image: veyl-sol-tools:local
+  volumes: [ "state:/state" ]
+
+services:
+  validator:
+    <<: *tools
+    command: node scripts/localnet.js
+    environment: { DEPLOYER_KEYPAIR: /state/deployer.json, VALIDATOR_BIND_ADDRESS: 0.0.0.0 }
+    ports: [ "8933:8933", "8934:8934" ]
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:8933',{method:'POST',headers:{'content-type':'application/json'},body:'{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getHealth\"}'}).then(r=>r.json()).then(j=>process.exit(j.result==='ok'?0:1),()=>process.exit(1))" ]
+      interval: 5s
+      retries: 60
+
+  committee:
+    build: { context: ., dockerfile: committee/Dockerfile }
+    image: veyl-sol-committee:local
+    depends_on: { validator: { condition: service_healthy } }
+    volumes: [ "state:/state" ]
+    user: root
+    command: sh -c "node scripts/committee-local.js --dir /state/committee --deploy /state/deploy.local.json"
+    environment: { RPC_URL: http://validator:8933 }
+    ports: [ "8863:8863", "8864:8864", "8865:8865" ]
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('fs').statSync('/state/committee/transcript.json')" ]
+      interval: 3s
+      retries: 60
+
+  deploy:
+    <<: *tools
+    depends_on: { validator: { condition: service_healthy }, committee: { condition: service_healthy } }
+    environment:
+      DEPLOYER_KEYPAIR: /state/deployer.json
+      COMMITTEE_TRANSCRIPT: /state/committee/transcript.json
+      RPC_URL: http://validator:8933
+      RELAYER_URL: http://localhost:8843
+      SITE_RPC_URL: http://localhost:8933
+    command: sh -c "node scripts/deploy.js --network local && node scripts/build-site.js --network local && cp deploy.local.json /state/ && rm -rf /state/site && cp -r dist/site /state/site"
+    restart: "no"
+
+  relayer:
+    build: { context: ., dockerfile: relayer/Dockerfile }
+    image: veyl-sol-relayer:local
+    depends_on: { deploy: { condition: service_completed_successfully } }
+    volumes: [ "state:/state:ro" ]
+    environment:
+      NETWORK: local
+      DEPLOY_FILE: /state/deploy.local.json
+      RPC_URL: http://validator:8933
+      RELAYER_KEY: /state/deployer.json
+      POSTMAN_KEY: /state/deployer.json
+      PORT: "8843"
+    ports: [ "8843:8843" ]
+
+  site:
+    <<: *tools
+    depends_on: { deploy: { condition: service_completed_successfully } }
+    command: node scripts/serve-dist.js 8873 /state/site
+    ports: [ "8873:8873" ]
+
+volumes:
+  state: {}

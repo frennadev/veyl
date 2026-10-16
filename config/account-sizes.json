@@ -1,0 +1,14 @@
+{
+  "_comment": "Account data sizes in bytes (discriminator included): pool/entry/tokenAccount measured on a local validator after a full deploy; factory/binPool/binArray/shares = the Phase 1 layouts (Factory::SIZE, BinPool::SIZE, BinArray::SIZE, ShareAccount::SIZE). Used only for the deploy cost estimate. Phase 3: committee (Committee::SIZE), sealedPool (SealedPool::SIZE), batch (Batch::SIZE: 8 + 1,808), shareJob (ShareJob::SIZE, refunded when the share check ends).",
+  "pool": 8992,
+  "factory": 137,
+  "binPool": 1256,
+  "entry": 10,
+  "tokenAccount": 165,
+  "binArray": 9664,
+  "shares": 6864,
+  "committee": 752,
+  "sealedPool": 150,
+  "batch": 1816,
+  "shareJob": 9132
+}

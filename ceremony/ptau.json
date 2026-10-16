@@ -1,0 +1,13 @@
+{
+  "_comment": "The public phase-1 (Powers of Tau) files the Veyl phase-2 ceremony starts from: the Perpetual Powers of Tau (an open multi-party ceremony, 54 contributions and a random beacon), prepared for phase 2 and truncated by the Hermez / Polygon team. Each circuit starts from the smallest file large enough for it (ceremony/circuits.json `power`): withdraw 2^14, transact and position 2^15. The blake2b-512 hashes are the ones the snarkjs README publishes for these files (section 7, 'Prepare phase 2'); `init` and `verify` refuse any other file (except in a rehearsal). The files are NOT committed: download them and check them with `b2sum`.",
+  "hashPublishedAt": "https://github.com/iden3/snarkjs/blob/master/README.md (section 7, 'Prepare phase 2': table of prepared ptau files and their blake2b hashes)",
+  "ceremony": "https://github.com/weijiekoh/perpetualpowersoftau",
+  "files": {
+    "14": { "file": "powersOfTau28_hez_final_14.ptau", "maxConstraints": 16384, "sizeMB": 18, "blake2b": "eeefbcf7c3803b523c94112023c7ff89558f9b8e0cf5d6cdcba3ade60f168af4a181c9c21774b94fbae6c90411995f7d854d02ebd93fb66043dbb06f17a831c1",
+      "download": ["https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_14.ptau", "https://circom.info/powersOfTau28_hez_final_14.ptau"] },
+    "15": { "file": "powersOfTau28_hez_final_15.ptau", "maxConstraints": 32768, "sizeMB": 36, "blake2b": "982372c867d229c236091f767e703253249a9b432c1710b4f326306bfa2428a17b06240359606cfe4d580b10a5a1f63fbed499527069c18ae17060472969ae6e",
+      "download": ["https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_15.ptau", "https://circom.info/powersOfTau28_hez_final_15.ptau"] },
+    "16": { "file": "powersOfTau28_hez_final_16.ptau", "maxConstraints": 65536, "sizeMB": 72, "blake2b": "6a6277a2f74e1073601b4f9fed6e1e55226917efb0f0db8a07d98ab01df1ccf43eb0e8c3159432acd4960e2f29fe84a4198501fa54c8dad9e43297453efec125",
+      "download": ["https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_16.ptau", "https://circom.info/powersOfTau28_hez_final_16.ptau"] }
+  }
+}
