@@ -10,6 +10,7 @@ What stands today, what is next, and what could come later. The homepage shows t
 | Try it in your browser | done | The Sandbox: the app on a chain simulated in the page (`site/sandbox-chain.js`), real proofs in a Web Worker, a 2-of-3 committee in the page, play money, live market prices. |
 | Testnet | next | Solana devnet with mock tokens: `GO-LIVE.command` / `npm run deploy -- --network devnet` (DEPLOY.md). Blocked only on funding the deployer. |
 | Security | before mainnet | A multi-party key ceremony for the five circuits (`ceremony/`, rehearsed; the real one not run) and the committee's dealerless key generation among independent operators; then an external audit. Until both, the proving keys are single-machine and the protocol is testnet-only. |
+| Curated pools | done | Like Delta, not Meteora: only the factory authority can list a pool (`veyl_bin.create_pool`), and the app has no Create page. The deployer key at first, a multisig after `npm run handover`. |
 | Mainnet | after security | Real mints from `config/mainnet.json` (every `VERIFY` cleared), fresh program IDs, preflight green. |
 
 ## Later
@@ -18,7 +19,7 @@ Features that fit the codebase as it is. Each line says what a user gets, then w
 
 | Feature | Technical note |
 |---|---|
-| More pairs, and anyone able to list a pool | `veyl_bin` already has the factory; listing is gated by the factory authority (`create_pool`). Permissionless listing = a listing fee or bond and a duplicate check (one pool per pair per bin step), plus the app's Create page. |
+| Open pool creation: any project lists its own pair | Today listing is curated: `create_pool` is gated by the factory authority. Permissionless listing = a listing fee or bond and a duplicate check (one pool per pair per bin step), plus the app's Create page. |
 | Bigger shielded positions: more bins per position | A shielded position covers a 16-bin window (`K` in `zk/circuits/position.circom`). Wider = a larger circuit (constraints grow about linearly with K; 32 bins ≈ 2× proving time) or several windows under one note, which the aggregate already allows. |
 | Shielded farm rewards | Rewards accrue per share account; the shielded aggregate's shares are pooled, so rewards would be split by a per-bin reward checkpoint inside the position proof, like fees are today (`fee checkpoint` in `position.circom`). |
 | A limit price on sealed swaps | A sealed swap settles at the batch's clearing price. A limit = a max/min price bound in the swap proof's public inputs, refunded by the settlement when the clearing price crosses it (`sealed.rs` refund path exists). |

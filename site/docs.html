@@ -66,6 +66,7 @@
       <h2 style="margin-top:40px">Getting started</h2>
       <h3>Open the app</h3>
       <p><a href="app.html">Open the app</a> and press <b>Get started</b>. You don't need a wallet: choose <b>No wallet needed</b> and Veyl makes a deposit address in your browser. Send SOL, USDC or USDT to it from any wallet or exchange, then move it into your private balance. Prefer your own wallet? Connect Phantom, Solflare or Backpack instead. Veyl lists 83 pools: SOL–USDC and the other majors, plus every major Meteora pair. Pools, positions and fees are read from the chain.</p>
+      <p><b>Every pool is curated.</b> Veyl lists each pool itself, choosing the pair, price step and fee, so there are no copycat or spam pools to sort through. You can add liquidity to any of them; you can't open a new pool yet. Open pool creation is on the roadmap.</p>
       <h3>The deposit address</h3>
       <p>Its key lives only in this browser and goes into your encrypted backup. Keep about 0.01 SOL in it for network fees. Anything left over can be sent out from the account menu with <b>Send what's left out</b>; that transfer is public, so for privacy withdraw from your private balance instead.</p>
       <h3>Your Veyl wallet, and its seed</h3>
@@ -164,7 +165,7 @@
       <ul class="roadmap">
         <li><b>Now</b> · Private liquidity, instant and sealed swaps, limit orders, zap and rewards on Solana.</li>
         <li><b>Next</b> · Public key ceremony, where independent people each add to the keys behind the proofs, followed by an independent audit.</li>
-        <li><b>Later</b> · Rewards for shielded positions, limit prices on sealed swaps, larger private positions, more pairs, Jupiter routing, viewing keys for accountants, hardware-wallet support.</li>
+        <li><b>Later</b> · Open pool creation, so any project can list its own pair, with a listing bond and checks. Rewards for shielded positions, limit prices on sealed swaps, larger private positions, Jupiter routing, viewing keys for accountants, hardware-wallet support.</li>
       </ul>
     </section>
 
@@ -175,6 +176,7 @@
       <details><summary>Why is proving slow on my phone?</summary><p>Every shielded action is a proof your device makes itself, and a phone has far less power than a laptop: expect two to four times longer, sealed swaps most of all. The first proof also downloads a key of a few megabytes.</p></details>
       <details><summary>Why can't I pay out to the wallet I deposited from?</summary><p>Anyone watching could line up the deposit and the payout, which undoes the point. The app refuses that wallet and any address with a history.</p></details>
       <details><summary>Is this audited?</summary><p>Veyl has had two internal security reviews, with every finding fixed. An independent audit and the public key ceremony are the next items on the roadmap.</p></details>
+      <details><summary>Can I create my own pool?</summary><p>Not yet. Every pool is listed by Veyl, which keeps out copycat and scam pairs and keeps liquidity deep where it counts. Open pool creation, with a listing bond and duplicate checks, is on the roadmap.</p></details>
       <details><summary>What does the relayer see?</summary><p>Your request and the network address it came from. It cannot redirect funds, raise its fee or change what you asked for: all of that is locked inside your proof. It never sees your balance or who you are.</p></details>
       <details><summary>Is Veyl a mixer? Who screens deposits?</summary><p>No. A publisher checks each deposit against a deny list before admitting it, keeping stolen or sanctioned funds out; until then you can take it back, and the admitted list is public. The market stays fully visible: Veyl hides who you are and how much you hold, not what the market did.</p></details>
     </section>

@@ -21,6 +21,8 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
   devnet (`config/devnet.json`). Devnet tokens are mock mints. `scripts/price-catalog.js` sets opening prices from Meteora's live
   API (CoinGecko fallback); unpriced pairs are skipped by the deploy.
 - Local validator + tests deploy only the core 5 (`CORE_TOKENS`/`CORE_POOLS` in lib.js). Keep tests on that set.
+- Pools are curated (Delta-style, not Meteora-style): only the factory authority lists pools; there is no Create page. Open pool
+  creation is a roadmap item (ROADMAP.md "Later"), not a current feature: don't add one without the owner asking.
 - Lookup tables: one table holds 256 addresses, so the deploy makes several (`dep.lookupTables`); SDK `V.lookupExtra`, engine `_luts()`.
 - Cost on devnet: all 83 pools ≈ 62 devnet SOL (deploy ~40 peak + seeding ~0.23 SOL/pool); `CORE_ONLY=1` ≈ 38.
 
