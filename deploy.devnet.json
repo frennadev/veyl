@@ -1,0 +1,409 @@
+{
+  "network": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "deployer": "HfbNvwmchf8uXzeAJkqPt7XJK1etQYkMA32Eyr2YUr1i",
+  "slot": 512113182,
+  "programs": {
+    "pool": "BudA5kQySdfhfocWhPiDUP888tuoqL9aRxNiq9Qon73V",
+    "bin": "6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk",
+    "entry": "4q6p4io7m3pgxpMqRDSKBRsAb6gCBGCKvTRabZtp1QHn"
+  },
+  "postman": "2BKJ8qXsyouizUKcJ9tXaG4mZk3KLHEcDALW22FMwEgC",
+  "relayer": "6BkYzUkVrpLy6n7psazrVkfPAfLKr14RED2JxU7vFMic",
+  "lookupTable": "FGeY6kBeUEqfh7tRtSMswjLRByHhAou8UrErj3t9LTgv",
+  "lookupTables": [
+    "2fLv2VsXcWXrqyzLKYiAXmKaEhA1Lgh4STpjFXteSNrH"
+  ],
+  "shield": "3hedvmhWfNb2E677nXVm5K3imj2qZwUVtGqQ9rqC9vLL",
+  "shieldOwner": "DcsptPGt9ebURVsR2Gi7a2GzBbdbx1fGLo6uvPxZu5PD",
+  "tokens": {
+    "SOL": {
+      "mint": "7SJ3fU6JFBDEP3rHJgexN7egg5Yp8d8sPZqpuCVY56Co",
+      "decimals": 9,
+      "pool": "HcDLqDfx3ydD8ivBEfkfkuihgwAnknwRGdTvnhPgGEz2",
+      "minDeposit": 0.0005,
+      "price": 104.56
+    },
+    "USDC": {
+      "mint": "CFSvusU2qpt3qdZGr9zwBKMLfk4nW4CTxZ1NExEZe3Pt",
+      "decimals": 6,
+      "pool": "A3XPomfyBEdt7LU9RLqyqUVWKxHYj8zVqeXbQE2yEAaR",
+      "minDeposit": 1,
+      "price": 1
+    },
+    "USDT": {
+      "mint": "3cemR7qA7JbMHvyAUejSmbbkrgPTnFvr1zkNKY4yEzuL",
+      "decimals": 6,
+      "pool": "2rDC5d5yZrYefJvB26x6a9LagNCXBhBHehsigRbxT8M2",
+      "minDeposit": 1,
+      "price": 1
+    },
+    "JUP": {
+      "mint": "FfevrwNk6uw61rkybhNtphEhAKbExGiehNPSRjtHX4P",
+      "decimals": 6,
+      "pool": "GZns8dw3wshkWsQ4v5vswAVRLgeiMLPJMHxMfGr4YWkr",
+      "minDeposit": 1,
+      "price": 0.3
+    },
+    "BONK": {
+      "mint": "CQF9uke6Ffq6QssQ5zL14Y3uLjGk8SZQ3Ev25HgBbnj8",
+      "decimals": 5,
+      "pool": "FQtxnCtBsP2tCQWFjeBSsihqMmfYbSNkHWUzYpN4ziVf",
+      "minDeposit": 50000,
+      "price": 0.00000303
+    },
+    "WIF": {
+      "mint": "6ZYs1EyFb83uu9XoevMhdgUmKDSpnB6emJNeqd467FGd",
+      "decimals": 6,
+      "pool": "4PWLApon7iw8bdr94od4VxwF2UUQqVM1mRmbRuYBPWUz",
+      "minDeposit": 1,
+      "price": 0.201082
+    },
+    "JTO": {
+      "mint": "DY8yZ5AEFBZWZ2HQPJgVV32dHEjk6er74Kqz4YjXGayq",
+      "decimals": 9,
+      "pool": "Eq8Xm1eE9cnM9QXkhyYnv1b2UGaT5AvdTsHWjhykAGeF",
+      "minDeposit": 0.5,
+      "price": 0.462106
+    },
+    "PYTH": {
+      "mint": "DttanwuqM2gzS8oX716pdRBHiZYHyCGiJ244y7PV7kG9",
+      "decimals": 6,
+      "pool": "A9LbBcZ8iCLhwXFvXG5UrqHA9ubMWafVdo7d6BCw9csm",
+      "minDeposit": 5,
+      "price": 0.084874
+    },
+    "RAY": {
+      "mint": "Fgkchy7Zyoxyd2vg9bX2urLzduJKAc2JJN7DhA62KUc8",
+      "decimals": 6,
+      "pool": "8yyJhruBZMu33QV7f6NaS2ejz1oMRdiyVtudNcGTBBvD",
+      "minDeposit": 0.5,
+      "price": 1.82
+    },
+    "HYPE": {
+      "mint": "7Af2egwoQmWUuGSq4465qqjaQu9dUrE1yDwWKZmt8pdr",
+      "decimals": 6,
+      "pool": "4S8j4P4H3ZNb7HiA15kj2KozUrWx9qm9qAB7gbsrPRjR",
+      "minDeposit": 0.013,
+      "price": 78.86
+    },
+    "cbBTC": {
+      "mint": "6Vtjqf6eXi6Zxq6ZTZMfnRNiw5veoYbef5dnKZ9cNncN",
+      "decimals": 8,
+      "pool": "DCkrpUHeZSyZkHLTnC5z4icpcR6TM76f6P9gjgHeVSBm",
+      "minDeposit": 0.000012,
+      "price": 81416
+    },
+    "ZEC": {
+      "mint": "4EirrDkGB7mp5Eb2MkzF6uHoFGMVyH3FsBUqadhsLjpu",
+      "decimals": 6,
+      "pool": "7TYNVnGxjUu6SE4gfxva2iHmHHbG2Qhtr5RTe4kdkRxd",
+      "minDeposit": 0.00085,
+      "price": 1171.84
+    },
+    "WETH": {
+      "mint": "8PLoK7xxX8T1Qxtq4nLW83LAx4SMy4SnhpWDP6UHLndx",
+      "decimals": 8,
+      "pool": "GKNs2MtgcFCGr4naTaKxRb2XdXgEG3pUzjByEPzkABAd",
+      "minDeposit": 0.00041,
+      "price": 2431.46
+    },
+    "STRK": {
+      "mint": "B7LaKyFSjkBvSdeHNZcaNAQXMcPXwWrAQRLSRDLGdz3U",
+      "decimals": 6,
+      "pool": "GrR6uNg7C4E185ByrEiZjThGuVJ4n7PyUMaDgX8N2VRh",
+      "minDeposit": 14,
+      "price": 0.0716
+    },
+    "ENA": {
+      "mint": "HTyqGFFc2kDw3AN1aB3QN6VAZ1BcDe5FyCHU35CtdBG6",
+      "decimals": 6,
+      "pool": "DgjGQnrrqk8FGmN8xwTEm8kZVVDddVpQqxpBpvTidUcR",
+      "minDeposit": 5.1,
+      "price": 0.196422
+    },
+    "DOGE": {
+      "mint": "GACKTcCFZEyDix7vk4yVSUNkNGgLacVBVQwyPEvUGemY",
+      "decimals": 6,
+      "pool": "2kDCFHAGkr2mZWMPD1Fk4fGZ344JRBVEDwokKq9ULrbG",
+      "minDeposit": 12,
+      "price": 0.080263
+    },
+    "PENGU": {
+      "mint": "29udNviRrshQ2JXSHjAyHfvEQV4r1CZg57nyxK8aHan3",
+      "decimals": 6,
+      "pool": "GktFNZhcxaJwBU53eFm5QhUDGwz4EQAvyxV9V2xLFuUN",
+      "minDeposit": 130,
+      "price": 0.0075232
+    },
+    "PEPE": {
+      "mint": "DP4FZ1vB71ZyXAEWm5N71TL9mUWCGPqZ6H2WS6nZFsYV",
+      "decimals": 6,
+      "pool": "EQ3ndDMkF3BfU9nkz8FgqzDgWMFvZY8137y9rYoHGCnZ",
+      "minDeposit": 250000,
+      "price": 0.00000397
+    },
+    "WBTC": {
+      "mint": "FPtgBBJtKGhZ8Vcxv6Ljv1jMZGSoig2Y3QcTE5MyYGtf",
+      "decimals": 8,
+      "pool": "3VDGekJjQd7cJqE1gtLkKkQmESW3brqDkmWDdtZXLfEg",
+      "minDeposit": 0.000012,
+      "price": 81336
+    },
+    "USDe": {
+      "mint": "4Fim5qZMVcpc1euogGDGcXvEoNmpcEeFYYAGDwS4eBHo",
+      "decimals": 6,
+      "pool": "8pjLewGm4naPLkbrYMtXJaNhAkszzGmYE6s2dfYHrdFb",
+      "minDeposit": 1,
+      "price": 1
+    },
+    "USDG": {
+      "mint": "841poTVPZ7v8moE96Xt2ueQNPLrjxqdCoaVymGZC6f5",
+      "decimals": 6,
+      "pool": "3umgg5pCqiZpAQKFjWcdfHppb7iybD9N7VNXWDJq9bNy",
+      "minDeposit": 1,
+      "price": 1
+    },
+    "INJ": {
+      "mint": "EXGhzJpKuSYJCy9khXeqksCyvFuiWSnc8D1ndfg3VoBg",
+      "decimals": 6,
+      "pool": "7DAUUj37pcUDv4wK1Lh7X4u1ENW6g2h5U3y7nJzwjvur",
+      "minDeposit": 0.11,
+      "price": 8.7
+    },
+    "JupUSD": {
+      "mint": "2pV3EPbPEDyVeBvPwHB7zLvihFWVWW31WM8AM64Etzjf",
+      "decimals": 6,
+      "pool": "9GqLotr2XR3H8VHW8DzBhM7yvgtkwBhcqPiXYKNF3wPg",
+      "minDeposit": 1,
+      "price": 1
+    }
+  },
+  "binPools": [
+    {
+      "id": "sol-usdc",
+      "x": "SOL",
+      "y": "USDC",
+      "binStep": 10,
+      "baseFee": 500,
+      "address": "E7GNnjkfiBWPx934L91rmCVKjrEma8zH57rZTM6RpzgQ"
+    },
+    {
+      "id": "sol-usdt",
+      "x": "SOL",
+      "y": "USDT",
+      "binStep": 10,
+      "baseFee": 500,
+      "address": "DEo5p26bgiYCtAxf48QDErvCNy2hzqJCcJjasyTtgQ1k"
+    },
+    {
+      "id": "jup-sol",
+      "x": "JUP",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "3B54sdD3Eap9SXfUKv6tbzQ2pQ1GgohGNir3axvewJSX"
+    },
+    {
+      "id": "bonk-sol",
+      "x": "BONK",
+      "y": "SOL",
+      "binStep": 50,
+      "baseFee": 5000,
+      "address": "oN7qW1iyN8kekar9PAqvgp93HCNKxEdhKat4B9xqfVJ"
+    },
+    {
+      "id": "usdt-usdc",
+      "x": "USDT",
+      "y": "USDC",
+      "binStep": 1,
+      "baseFee": 100,
+      "address": "FhRLvk5JWA572ya8RKEQjcyCoXuxJPsKKZiQhNzUQLhW"
+    },
+    {
+      "id": "jup-usdc",
+      "x": "JUP",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "94ukyUYrr76usC7U5xmZxUVZjjLCA2X7pAGy79TxEsYE"
+    },
+    {
+      "id": "bonk-usdc",
+      "x": "BONK",
+      "y": "USDC",
+      "binStep": 50,
+      "baseFee": 5000,
+      "address": "2UCiTkgxdYULr2BjHCEYQtCpZEkHnbMU3usjmhCzNVXu"
+    },
+    {
+      "id": "wif-sol",
+      "x": "WIF",
+      "y": "SOL",
+      "binStep": 50,
+      "baseFee": 5000,
+      "address": "DtVyWMgQgjGHiSxUDtQzSnv8T9qZESKhQAbQmjvfvCPW"
+    },
+    {
+      "id": "wif-usdc",
+      "x": "WIF",
+      "y": "USDC",
+      "binStep": 50,
+      "baseFee": 5000,
+      "address": "2QgweYovp4HCreLaDd9Q3CEuuqniVk2S6KNg5BCfq6LS"
+    },
+    {
+      "id": "jto-sol",
+      "x": "JTO",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "4jTgnJGqMUrgaQU7D7ssM87uFbfvydCEAVtvHiGR5pMW"
+    },
+    {
+      "id": "pyth-usdc",
+      "x": "PYTH",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "5NLLrgyV7ot1wGkeJSU4wFdTWVFcDnkygjui7LqqZv99"
+    },
+    {
+      "id": "ray-sol",
+      "x": "RAY",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "HPMB72FZS7UBwPDxq5zcKAkr4AMFksyFHbJatRnEftbq"
+    },
+    {
+      "id": "hype-sol",
+      "x": "HYPE",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "HpgydXtt3HXRLTDmJ3UG4L5YBrsXPHDiTsRwnNAoeWNY"
+    },
+    {
+      "id": "cbbtc-sol",
+      "x": "cbBTC",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "AveHsoPX7YGswqR7ZnfW7S6kdNqJdc8Yjs4HCP9sXwD2"
+    },
+    {
+      "id": "cbbtc-usdc",
+      "x": "cbBTC",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "BoDvkoJvSYpLzRuYX6uz7gFJYGCQncDrTigLejM5Vm8G"
+    },
+    {
+      "id": "zec-sol",
+      "x": "ZEC",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "74SJXgyR65xWVJf5TrF9hsSfiiZ7yJE1YtBs73YUQW8x"
+    },
+    {
+      "id": "weth-sol",
+      "x": "WETH",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "2reTzJMif1Ce6DPujbadQrfoGiCkUaKXA5R3t9g84b2H"
+    },
+    {
+      "id": "strk-usdc",
+      "x": "STRK",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "7PKjAHmha4MZjD967QUtXpPZwiqCbPPwJDKuFYNo1y9E"
+    },
+    {
+      "id": "ena-usdc",
+      "x": "ENA",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "5Anw4i9PkHW4AdDkPntMJiC3WgrWDB5RrD4HXpm6EeN7"
+    },
+    {
+      "id": "doge-sol",
+      "x": "DOGE",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "5kDdDgxbqX6L3wWQuLoBVY2nWpaTLZSRZK8jB8te7SVy"
+    },
+    {
+      "id": "pengu-usdc",
+      "x": "PENGU",
+      "y": "USDC",
+      "binStep": 80,
+      "baseFee": 10000,
+      "address": "AZq5DHeAJ9eKvXtEN5zuoa81Mh9yn5iLph9SYiZGsVrf"
+    },
+    {
+      "id": "pepe-sol",
+      "x": "PEPE",
+      "y": "SOL",
+      "binStep": 80,
+      "baseFee": 10000,
+      "address": "7zWrgTsoazUndX68Bd7yNWvt8g6HusAdrsNeVSpGJz8t"
+    },
+    {
+      "id": "wbtc-usdc",
+      "x": "WBTC",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "D3av2xLSehCMQStezW2Amfe3mArzMrdyvVvVepZ36et8"
+    },
+    {
+      "id": "usde-usdg",
+      "x": "USDe",
+      "y": "USDG",
+      "binStep": 1,
+      "baseFee": 100,
+      "address": "C5PdNMg1rxXC2i5dUt1RbxefZnF1fdcS9otSzRsDav9g"
+    },
+    {
+      "id": "strk-sol",
+      "x": "STRK",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "Hz7xqUTpDyyJPMi9zp9RfjCQySMUpnYjenSumMEcQuKK"
+    },
+    {
+      "id": "hype-usdc",
+      "x": "HYPE",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "2tCb5aP3kZRhzK9YsCpCr14EKXMNWqtKvzz6Qy8AHcpX"
+    },
+    {
+      "id": "wbtc-sol",
+      "x": "WBTC",
+      "y": "SOL",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "EZcieAB3CRe45aKYScQJqeP3UbKZkin9DvyHJLuSkfCD"
+    },
+    {
+      "id": "inj-usdc",
+      "x": "INJ",
+      "y": "USDC",
+      "binStep": 20,
+      "baseFee": 2000,
+      "address": "2uBK1s7fWVGHpmwt57DR7osxYWxVrnr6kWrsRTYUHRrb"
+    }
+  ],
+  "deployedAt": "2026-10-17T15:06:23.560Z"
+}
