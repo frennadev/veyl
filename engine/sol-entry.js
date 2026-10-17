@@ -233,14 +233,18 @@ export class Engine {
     await this._afterSpend([note], changeNote);
     return { tx: r.txHash, received: v - (v * BigInt(d.feeBps)) / 10000n };
   }
-  /// Direct pool, or two hops through a hub; picks the best quote (computed on this device from the bin arrays).
+  /// Direct pool, or two hops through a hub; picks the best quote (computed on this device from the bin arrays). Every pool
+  /// a path needs is read once, all in parallel, then each path is simulated locally (same result as V.quoteLocal per hop,
+  /// without re-reading a pool for every path: with dozens of pools over a remote RPC that took tens of seconds).
   async quoteRoute(symIn, symOut, amountIn) {
     const pools = this.cfg.binPools; const paths = [];
     const hopsFor = (a, b) => pools.filter((p) => (p.x === a && p.y === b) || (p.x === b && p.y === a)).map((p) => ({ pool: p.address, xForY: p.x === a, out: p.x === a ? p.y : p.x, name: p.x + '–' + p.y }));
     for (const h of hopsFor(symIn, symOut)) paths.push([h]);
     for (const h1 of pools.flatMap((p) => hopsFor(symIn, p.x === symIn ? p.y : p.x)).filter((h) => h.out !== symOut)) for (const h2 of hopsFor(h1.out, symOut)) paths.push([h1, h2]);
+    const state = new Map(); for (const h of paths.flat()) { const k = h.pool + (h.xForY ? ':x' : ':y'); if (!state.has(k)) state.set(k, (async () => { const pool = new PublicKey(h.pool); const p = await this.V.binPool(pool); return { p, bins: await this.V.bins(pool, S.chunksForSwap(p, h.xForY, S.SWAP_ARRAYS)) }; })().catch(() => null)); }
+    const loaded = new Map(await Promise.all([...state].map(async ([k, v]) => [k, await v])));
     let best = null;
-    for (const path of paths) { let amt = amountIn, ok = true, fee = 0n; for (const h of path) { try { const q = await this.V.quoteLocal(new PublicKey(h.pool), h.xForY, amt); amt = q.out; fee += q.fee; } catch { ok = false; break; } }
+    for (const path of paths) { let amt = amountIn, ok = true, fee = 0n; for (const h of path) { const s = loaded.get(h.pool + (h.xForY ? ':x' : ':y')); try { if (!s) throw new Error('pool unavailable'); const q = S.simulateSwap(s.p, s.bins, h.xForY, amt); amt = q.out; fee += q.fee; } catch { ok = false; break; } }
       if (ok && amt > 0n && (!best || amt > best.out)) best = { path, out: amt, fee }; }
     return best;
   }

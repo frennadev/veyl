@@ -54,6 +54,8 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
   relayer/relayer.js composes relayer/{fees,notes,shielded,sealed,postman,faucet}.js; tests share tests/harness.js, e2e/harness.js.
 - Tests (run ONE at a time: they share deploy.local.json and validator ports):
   `npm test` (298, ~20 min) · `node e2e/run.js` (67, ~17–25 min) · `node e2e/local.js` (32) · `node e2e/sandbox.js` (64) · `node e2e/smoke.js` (47)
+  Live devnet: `RPC_URL=<dedicated devnet RPC> SITE_RPC_URL=<same> node e2e/devnet.js` (28, ~20 min, ~0.1 devnet SOL; keys in ~/keys/veyl/).
+  The public devnet RPC rate-limits one machine running the app, the relayer and the test: use a dedicated one (Helius etc.).
 - Demo mode in the browser: `app.html?mode=sandbox-dev` (in-browser chain, real proofs).
 - Devnet: `./VEYL-DEVNET.command` (or the steps in DEPLOY.md). Needs Solana CLI 3.1.x, Node 20+.
 

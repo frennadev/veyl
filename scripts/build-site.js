@@ -10,8 +10,9 @@ const fs = require('fs'); const path = require('path'); const crypto = require('
 const N = require('./net.js'); const H = require('./site-headers.js'); const { makeConfig } = require('./make-config.js');
 const R = N.ROOT;
 
-function build(network, { out = path.join(R, 'dist/site'), env = process.env, log = console.log } = {}) {
-  const cfg = N.loadConfig(network); const dep = N.loadDeploy(network);
+/// noDeploy: build the no-deployment preview (VEYL_CONFIG = null) even when deploy.<network>.json exists (the sandbox and smoke tests).
+function build(network, { out = path.join(R, 'dist/site'), env = process.env, log = console.log, noDeploy = false } = {}) {
+  const cfg = N.loadConfig(network); const dep = noDeploy ? null : N.loadDeploy(network);
   fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
   const skip = (f) => f.startsWith('_') || f.startsWith('.') || f === 'veyl.config.js' || fs.statSync(path.join(R, 'site', f)).isDirectory(); // the engine's sources live in engine/
   const h8 = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 12);

@@ -14,7 +14,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
 
 (async () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-sbx-site-'));
-  const site = build('devnet', { out, env: {}, log: () => {} }); const web = serveDist(PORT, site.out); let browser;
+  const site = build('devnet', { out, env: {}, log: () => {}, noDeploy: true }); const web = serveDist(PORT, site.out); let browser;
   try {
     const cfg = site.sandbox; const parts = Object.values(cfg.zk).flatMap((z) => z.zkey);
     const sizes = parts.map((f) => fs.statSync(path.join(out, f)).size);

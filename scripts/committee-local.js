@@ -4,15 +4,19 @@
 // registration for set_committee (from the transcript every node wrote) and the processes. Never for real funds: one
 // machine runs every member, so whoever controls it holds all the shares (DEPLOY.md, "Batch committee").
 //   node scripts/committee-local.js [--n 3] [--t 2] [--dir .localnet/committee]     (keeps running; Ctrl-C stops)
+//   COMMITTEE_LOG=<file>: append every node's output there (tests otherwise discard it)
 'use strict';
 const fs = require('fs'); const path = require('path'); const { spawn } = require('child_process');
 const { Keypair } = require('@solana/web3.js');
 const { boxKeyOf } = require('../committee/node.js'); const D = require('../committee/dkg.js');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function startLocalCommittee({ n = 3, t = 2, basePort = Number(process.env.COMMITTEE_PORT || 8863), dir, deployFile = null, rpc = null, session = 'local-' + Date.now(), log = () => {}, env = {} } = {}) {
+async function startLocalCommittee({ n = 3, t = 2, basePort = Number(process.env.COMMITTEE_PORT || 8863), dir, deployFile = null, rpc = null, session = 'local-' + Date.now(), log = process.env.COMMITTEE_LOG ? (m) => fs.appendFileSync(process.env.COMMITTEE_LOG, m + '\n') : () => {}, env = {} } = {}) {
   fs.mkdirSync(dir, { recursive: true }); const keys = []; const procs = [];
   for (let i = 1; i <= n; i++) { const f = path.join(dir, `node-${i}.json`); if (!fs.existsSync(f)) fs.writeFileSync(f, JSON.stringify([...Keypair.generate().secretKey]), { mode: 0o600 }); keys.push(Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(f))))); }
   const peers = keys.map((k, i) => ({ index: i + 1, url: `http://127.0.0.1:${basePort + i}`, node: k.publicKey.toBase58(), boxKey: Buffer.from(boxKeyOf(k).publicKey).toString('base64') }));
+  // a node left over from an earlier run would answer in place of the new one (which then fails to listen): refuse to start
+  for (const p of peers) { let busy = false; try { busy = !!(await fetch(p.url + '/health', { signal: AbortSignal.timeout(1000) })); } catch { /* free */ }
+    if (busy) throw new Error(p.url + ' already answers: a committee node from an earlier run is still running (stop it, or set COMMITTEE_PORT)'); }
   for (let i = 1; i <= n; i++) { const cfg = path.join(dir, `config-${i}.json`); fs.writeFileSync(cfg, JSON.stringify({ index: i, t, n, peers }, null, 1));
     const p = spawn(process.execPath, [path.join(__dirname, '../committee/node.js')], { env: { ...process.env, ...env, COMMITTEE_CONFIG: cfg, NODE_KEY: path.join(dir, `node-${i}.json`), STATE_DIR: path.join(dir, `state-${i}`), DKG_SESSION: session, PORT: String(basePort + i - 1), ...(deployFile ? { DEPLOY_FILE: deployFile } : {}), ...(rpc ? { RPC_URL: rpc } : {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
     p.stdout.on('data', (d) => log(String(d).trim())); p.stderr.on('data', (d) => log(String(d).trim())); procs.push(p); }

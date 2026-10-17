@@ -33,7 +33,7 @@ async function clickAll(page, scope, label, errs, w, hash = null, reopen = null)
   check(label + ': ' + n + ' controls clicked, none dead, no errors, no overflow', dead.length === 0 && errs.length === 0 && (await noScroll(page, w)), (dead.length ? 'dead: ' + dead.join(', ') + ' ' : '') + errs.slice(0, 2).join(' | ')); errs.length = 0; }
 
 (async () => {
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-smoke-')); const site = build('devnet', { out, env: {}, log: () => {} }); const web = serveDist(PORT, site.out); let browser;
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-smoke-')); const site = build('devnet', { out, env: {}, log: () => {}, noDeploy: true }); const web = serveDist(PORT, site.out); let browser;
   try {
     browser = await chromium.launch({ executablePath: chromePath() });
     // the in-browser demo chain is a developer mode now (the public app is on-chain only): every context here opts in

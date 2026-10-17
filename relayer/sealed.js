@@ -11,8 +11,13 @@ module.exports = (Base) => class Sealed extends Base {
     return { enabled: true, slot, slotMs: 400, paused: s.paused, mintX: s.mintX.toBase58(), mintY: s.mintY.toBase58(), seq: String(s.seq), epochSlots: String(s.epochSlots), settleTimeout: String(s.settleTimeout), minIn: s.minIn.map(String), kMin: s.kMin, maxRollovers: s.maxRollovers,
       batch: pub(b), last: pub(last), committee: c ? { t: c.t, n: c.n, epoch: c.epoch, kind: c.kind, pk: Buffer.from(require('../sdk/bjj.js').enc(c.pk)).toString('hex') } : null }; }
   /// Permissionless upkeep of every sealed pool: close a batch whose epoch is over; fail a closed one past its window.
+  /// Only pools with a sealed account are cranked: found with one batched read, refreshed every 15 s (a deployment with no
+  /// committee has none, and per-pool reads every few seconds would exhaust a public RPC's rate limit).
   async crankSealed() { const V = this.V; let n = 0;
-    for (const b of this.dep.binPools) { const pool = new PublicKey(b.address); try { const st = await V.sealedState(pool); if (!st || !st.batch) continue; const { sealed: s, batch: x, slot } = st;
+    if (!this._sealedAt || Date.now() - this._sealedAt > 15_000) { const all = this.dep.binPools; const found = [];
+      for (let i = 0; i < all.length; i += 100) { const part = all.slice(i, i + 100); const infos = await V.conn.getMultipleAccountsInfo(part.map((b) => V.sealedPda(new PublicKey(b.address))), 'confirmed'); part.forEach((b, j) => { if (infos[j]) found.push(b); }); }
+      this._sealed = found; this._sealedAt = Date.now(); }
+    for (const b of this._sealed) { const pool = new PublicKey(b.address); try { const st = await V.sealedState(pool); if (!st || !st.batch) continue; const { sealed: s, batch: x, slot } = st;
       if (x.state === 'open' && BigInt(slot) >= x.endSlot + 2n) { /* 2 slots of grace: the committee's nodes usually close first */ await V.send([V.closeBatchIx(this.wallet.publicKey, pool, x.seq)], [], 1_400_000); n++; }
       for (let q = s.seq - 1n; q >= 0n && q >= s.seq - 4n; q--) { const y = await V.batch(pool, q); if (y && y.state === 'closed' && BigInt(slot) > y.closedSlot + s.settleTimeout) { await V.send([V.failBatchIx(pool, q)], [], 200_000); n++; } }
     } catch (e) { if (!/"Custom":60(16|18|19)\b/.test(e.message)) console.error('sealed crank', b.id, e.message.slice(0, 120)); } } // a node closed or settled it first: nothing to do

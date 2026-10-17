@@ -43,7 +43,7 @@ function serve(relayer, port = 8843) {
   srv.inflight = 0; srv.listen(port);
   if (process.env.SEALED_CRANK !== '0') { srv.crank = setInterval(() => relayer.crankSealed().catch((e) => console.error('crank', e.message)), Number(process.env.CRANK_INTERVAL_MS || 4_000)); srv.crank.unref(); }
   relayer.refreshBalance(); srv.bal = setInterval(() => relayer.refreshBalance(), 60_000); srv.bal.unref();
-  if (relayer.postman) { relayer.publish(); srv.asp = setInterval(() => relayer.publish(), Number(process.env.ASP_INTERVAL_MS || 30_000)); srv.asp.unref();
+  if (relayer.postman) { const publish = () => relayer.publish().catch((e) => console.error('asp', e.message)); publish(); srv.asp = setInterval(publish, Number(process.env.ASP_INTERVAL_MS || 30_000)); srv.asp.unref();
     const admit = () => relayer.approveDeposits().catch((e) => console.error('admit', e.message)); admit(); srv.admit = setInterval(admit, Number(process.env.ADMIT_INTERVAL_MS || 5_000)); srv.admit.unref(); }
   return srv;
 }

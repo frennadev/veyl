@@ -66,12 +66,16 @@ module.exports = { Relayer, serve, isAllowed, clientKey, pricesFrom, WORST, SIGN
 
 if (require.main === module) {
   const env = process.env; const dep = deployFromEnv(env);
-  const conn = new Connection(env.RPC_URL || dep.rpc, 'confirmed');
+  // a dropped connection to the RPC (a connect timeout, a reset) is retried a few times: resending a signed transaction is safe
+  const retryFetch = async (url, init) => { for (let i = 0; ; i++) { try { return await fetch(url, init); } catch (e) { if (i >= 3) throw e; await new Promise((r) => setTimeout(r, 500 * 2 ** i)); } } };
+  const conn = new Connection(env.RPC_URL || dep.rpc, { commitment: 'confirmed', fetch: retryFetch });
   const wallet = keyFromEnv(env, 'RELAYER_SECRET_KEY', 'RELAYER_KEY'); if (!wallet) { console.error('Set RELAYER_SECRET_KEY (or RELAYER_KEY=<keypair file>): the relayer\'s own fee-only hot wallet.'); process.exit(1); }
   const postman = keyFromEnv(env, 'POSTMAN_SECRET_KEY', 'POSTMAN_KEY');
   const r = new Relayer({ connection: conn, wallet, deploy: dep, postman, minFeeBps: Number(env.MIN_FEE_BPS || 5), feeCover: Number(env.FEE_COVER || 1) });
   if (dep.network !== 'mainnet') r.faucet = keyFromEnv(env, 'FAUCET_SECRET_KEY', 'FAUCET_KEY');
   if (!r.prices.SOL) console.error('no SOL price (deploy file or PRICES_JSON): the fee floor is off and small requests can drain this wallet');
+  // a failed RPC call in a background job (a timeout, a dropped connection) is logged; it must not stop the relayer
+  process.on('unhandledRejection', (e) => console.error('unhandled', (e && e.message) || e));
   const port = Number(env.PORT || 8843); const srv = serve(r, port);
   console.log('relayer', r.wallet.publicKey.toBase58(), 'v' + VERSION, dep.network, 'listening on', port, postman ? '(+ approved-set publisher)' : '');
   // graceful stop: no new connections, let in-flight submissions finish (max 25 s), then exit
