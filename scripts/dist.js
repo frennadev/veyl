@@ -4,7 +4,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), out = path.resolve(root, process.env.OUT || 'dist'); fs.mkdirSync(out, { recursive: true });
-const skip = (f) => f.startsWith('_') || f.endsWith('entry.js') || f === 'shield-engine.js' || f === 'sealed-engine.js' || /\.(zkey|wasm)$/.test(f) || (process.env.PREVIEW && f === 'veyl.config.js');
+const skip = (f) => f.startsWith('_') || /\.(zkey|wasm)$/.test(f) || (process.env.PREVIEW && f === 'veyl.config.js');
 for (const f of fs.readdirSync(path.join(root, 'site')).filter((f) => !skip(f))) {
   if (!f.endsWith('.html')) { fs.copyFileSync(path.join(root, 'site', f), path.join(out, f)); continue; }
   let s = fs.readFileSync(path.join(root, 'site', f), 'utf8');

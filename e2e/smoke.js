@@ -9,9 +9,7 @@ const path = require('path'); const fs = require('fs'); const os = require('os')
 const { chromium } = require('playwright');
 const { build } = require('../scripts/build-site.js'); const { mockMarket, mockMarkets } = require('./market-mock.js'); const { serveDist } = require('../scripts/serve-dist.js');
 const PORT = 8876; const WEB = 'http://127.0.0.1:' + PORT;
-let pass = 0, fail = 0; const check = (n, ok, extra = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (extra ? '  ' + String(extra).replace(/\s+/g, ' ').slice(0, 220) : '')); };
-const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(0) + 's';
-const chromePath = () => { const d = '/opt/pw-browsers'; if (!fs.existsSync(d)) return undefined; const c = fs.readdirSync(d).find((x) => /^chromium-\d+$/.test(x)); if (!c) return undefined; for (const p of ['chrome-linux/chrome', 'chrome-linux64/chrome']) if (fs.existsSync(path.join(d, c, p))) return path.join(d, c, p); return undefined; };
+const { check, lap, chromePath, finish } = require('./harness.js');
 const NOISE = /fonts\.g|ERR_TUNNEL|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|ERR_INTERNET|net::ERR_ABORTED|favicon/;
 const PAGES = ['index', 'docs'];
 const VIEWS = ['pools', 'swap', 'home', 'privacy', 'activity', 'markets', 'sealed', 'pool-sol-usdc', 'pool-bonk-sol'];
@@ -75,11 +73,12 @@ async function clickAll(page, scope, label, errs, w, hash = null, reopen = null)
       await page.goto(WEB + '/index.html'); await page.locator('#how').scrollIntoViewIfNeeded(); await page.click('#lpGo');
       const ok = await page.waitForFunction(() => document.getElementById('lpSteps').dataset.state === 'done', null, { timeout: 60000 }).then(() => true).catch(() => false);
       check('slow network (4 Mbit/s): the homepage loads and the showcase runs its five steps', ok && errs.length === 0, errs.join(' | ')); await ctx.close(); }
+    // the swap page sells USDC for SOL, so the balance watched is the one spent (USDC): unchanged, or lower by the whole swap
     if (want('reload')) { const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } }); await mockMarket(ctx); const page = await ctx.newPage(); const errs = []; watch(page, errs);
       await page.goto(WEB + '/app.html#swap'); await waitApp(page); await page.click('#acctBtn'); await page.click('#acctPop [data-faucet]'); await page.waitForSelector('#doneBtn', { timeout: 60000 }); await page.click('#doneBtn');
-      const bal = await page.evaluate(() => String(window.veylEngine.shieldBalance('SOL'))); await page.click('#swSrc [data-src="priv"]'); await page.fill('#swIn', '0.2'); await page.waitForFunction(() => !document.getElementById('swGo').disabled, null, { timeout: 20000 }); await page.click('#swGo');
+      const bal = await page.evaluate(() => String(window.veylEngine.shieldBalance('USDC'))); await page.click('#swSrc [data-src="priv"]'); await page.fill('#swIn', '0.2'); await page.waitForFunction(() => !document.getElementById('swGo').disabled, null, { timeout: 20000 }); await page.click('#swGo');
       await page.waitForFunction(() => /Proving|proof/i.test(document.getElementById('dlgBody').textContent), null, { timeout: 30000 }); await page.waitForTimeout(1500); await page.reload(); await waitApp(page); await page.evaluate(() => window.veylEngine.shieldSync());
-      const after = await page.evaluate(() => String(window.veylEngine.shieldBalance('SOL'))); const seq = await page.evaluate(() => window.veylEngine.chain.seq);
+      const after = await page.evaluate(() => String(window.veylEngine.shieldBalance('USDC'))); const seq = await page.evaluate(() => window.veylEngine.chain.seq);
       check('reload mid-proof: the sandbox reloads consistent (balance intact or spent whole, no half state), no errors', (after === bal || BigInt(after) < BigInt(bal)) && seq >= 1 && errs.length === 0, bal + ' -> ' + after + ' ' + errs.join(' | '));
       await page.click('#swSrc [data-src="priv"]'); await page.fill('#swIn', '0.1'); await page.waitForFunction(() => !document.getElementById('swGo').disabled, null, { timeout: 20000 }); await page.click('#swGo'); await page.waitForSelector('#doneBtn, #actErr', { timeout: 300000 });
       check('after the reload the next shielded swap completes', !!(await page.$('#doneBtn')), (await page.textContent('#dlgBody')).slice(0, 100));
@@ -93,5 +92,5 @@ async function clickAll(page, scope, label, errs, w, hash = null, reopen = null)
       check('localStorage blocked: the app (all 83 pools) and the homepage still load, no errors', rows === 83 && !(await page.isDisabled('#lpGo')) && errs.length === 0, rows + ' rows ' + errs.join(' | ')); await ctx.close(); }
   } catch (e) { check('smoke ran to the end', false, e.stack); }
   finally { if (browser) await browser.close(); web.close(); try { fs.rmSync(out, { recursive: true, force: true }); } catch { /* temp */ } }
-  console.log(`\n${pass} passed, ${fail} failed (${lap()})`); process.exit(fail ? 1 : 0);
+  finish();
 })();

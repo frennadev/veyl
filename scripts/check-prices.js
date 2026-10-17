@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Checks the live price sources the app uses (site/market.js) from this machine, in the app's own order, and prints what
+// Checks the live price sources the app uses (engine/market.js) from this machine, in the app's own order, and prints what
 // each answered. Run it where the app will be used when the app says "market price unavailable":
 //   node scripts/check-prices.js                 # keyless, like the published app
 //   PYTH_API_KEY=... JUPITER_API_KEY=... node scripts/check-prices.js
 // Node 20+ (global fetch). HTTPS_PROXY is honoured when NODE_USE_ENV_PROXY=1 (Node 22.21+).
 'use strict';
 const path = require('path');
-const code = require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../site/market.js')], bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
+const code = require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../engine/market.js')], bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
 const box = { exports: {} }; new Function('module', 'exports', 'require', code)(box, box.exports, require); const M = box.exports;
 const keys = { pyth: process.env.PYTH_API_KEY, jupiter: process.env.JUPITER_API_KEY };
 (async () => {

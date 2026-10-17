@@ -14,9 +14,7 @@ const S = require('../sdk/veyl.js'); const { Veyl, zeros, STATE_DEPTH } = S; con
 const { ROOT, RPC_PORT, startValidator, deployAll, fund, units, sleep } = require('../scripts/lib.js'); const { makeConfig } = require('../scripts/make-config.js');
 const { build } = require('../scripts/build-site.js'); const { serveDist } = require('../scripts/serve-dist.js');
 const RELAYER_PORT = 8843, WEB_PORT = 8873; const WEB = 'http://127.0.0.1:' + WEB_PORT;
-let pass = 0, fail = 0; const check = (n, ok, extra = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (extra ? '  ' + String(extra).replace(/\s+/g, ' ').slice(0, 160) : '')); };
-const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(0) + 's';
-const chromePath = () => { const d = '/opt/pw-browsers'; if (!fs.existsSync(d)) return undefined; const c = fs.readdirSync(d).find((x) => /^chromium-\d+$/.test(x)); if (!c) return undefined; for (const p of ['chrome-linux/chrome', 'chrome-linux64/chrome']) if (fs.existsSync(path.join(d, c, p))) return path.join(d, c, p); };
+const { counts, check, lap, chromePath, finish: report } = require('./harness.js');
 /// the app opens in Sandbox mode by default; this test drives the deployment (Devnet mode against the local validator)
 const { mockMarket } = require('./market-mock.js'); // the price APIs are not reachable from tests: answered in their own shapes
 const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catch { /* storage blocked */ } };
@@ -384,7 +382,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     const violations = cspErrs;
     check('no Content-Security-Policy violations (proofs made under the production CSP)', violations.length === 0, JSON.stringify(violations.slice(0, 3)));
     { const real = errs.filter((e) => !/favicon|ERR_TUNNEL|fonts.googleapis|fonts.gstatic|net::ERR/.test(e)); check('no browser errors', real.length === 0, JSON.stringify(real.slice(0, 3))); }
-  } catch (e) { console.error('\nE2E CRASHED:', e); fail++; }
+  } catch (e) { console.error('\nE2E CRASHED:', e); counts.fail++; }
   finally { if (browser) await browser.close(); if (web) web.close(); if (rel) rel.kill(); await new Promise((r) => { val.once('exit', r); val.kill(); setTimeout(r, 8000); }); try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} }
-  console.log(`\n${pass} passed, ${fail} failed  (${lap()})  screenshots in ${SHOTS}`); process.exit(fail ? 1 : 0);
+  report(`  screenshots in ${SHOTS}`);
 })();

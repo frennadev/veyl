@@ -1,5 +1,8 @@
 # Veyl on Solana: internal security review
 
+> File paths below are as they were at review time. Since then (Oct 2026) the relayer was split into `relayer/*.js` (same
+> code, one module per job) and the browser engine moved from `site/` to `engine/`.
+
 **This is not an external audit.** It is a line-by-line review written as a fresh reviewer would, to find and fix what can be
 found before an independent firm looks at the code. The external audit stays open in `DEPLOY.md` and `config/blockers.json`.
 

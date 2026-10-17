@@ -26,7 +26,7 @@ committee for sealed swaps (`committee/`). `README.md` = architecture, `PRIVACY.
 3. Quick check: `node e2e/smoke.js` (3 min, no validator). Then `node e2e/local.js` (starts a local validator, 2 min).
 4. Browser demo with no chain at all: `npm run build:site -- --network local && npm run serve:site`, then open
    `http://localhost:8873/app.html?mode=sandbox-dev` (real proofs, simulated chain; the build writes the sandbox config).
-5. `npm run bundle` after editing `site/sol-entry.js`, `shield-engine.js`, `sealed-engine.js` or `sdk/`.
+5. `npm run bundle` after editing anything in `engine/` or `sdk/` (it writes `site/veyl-sol.js`).
 
 Tests share `deploy.local.json` and the validator ports: never run two suites at once.
 
@@ -64,15 +64,15 @@ Tests share `deploy.local.json` and the validator ports: never run two suites at
    sanctions/stolen-funds source and keep it updated (a scheduled job), since the approved-set publisher screens every deposit.
 
 ### Days 4–7: mainnet prep (≈ 2–3 days, in parallel with the audit)
-7. **Audit package.** Freeze a commit; scope = the three programs, the five circuits, `site/shield-engine.js` +
-   `sealed-engine.js`, `relayer/relayer.js`. Hand over `README.md`, `PRIVACY.md`, `REVIEW.md` (internal findings and fixes).
+7. **Audit package.** Freeze a commit; scope = the three programs, the five circuits, `engine/shield-engine.js` +
+   `sealed-engine.js`, `relayer/`. Hand over `README.md`, `PRIVACY.md`, `REVIEW.md` (internal findings and fixes).
    Fix findings, re-run everything, get the fixes re-checked.
 8. **`config/mainnet.json`**: clear every `VERIFY` (RPC, USDC/USDT mints checked against the issuers, launch prices,
    relayer URL and pubkeys, sealed params). `npm run keys:mainnet` creates fresh program IDs outside the repo.
 9. **Multisig** (Squads) for upgrade, factory, fee and publisher authorities: `npm run handover -- --network mainnet ...`
    right after the deploy (`DEPLOY.md`).
 10. **Guarded launch config**: 3 pools (SOL/USDC, SOL/USDT, USDT/USDC), sealed swaps off (no transcript = the deploy skips
-    them), invite-only, small deposits (add a per-deposit size cap to the publisher's `isAllowed` in `relayer/relayer.js`:
+    them), invite-only, small deposits (add a per-deposit size cap to the publisher's `isAllowed` in `relayer/screening.js`:
     not built yet; refused deposits can be taken back by the depositor), a "Beta, unaudited" banner until the audit is published.
     The owner runs the mainnet deploy with their own keys: `npm run preflight -- --network mainnet`, then
     `npm run deploy -- --network mainnet --confirm-mainnet`.

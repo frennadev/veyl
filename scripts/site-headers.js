@@ -3,9 +3,9 @@
 // ('wasm-unsafe-eval') for snarkjs, its prover workers from blob:, styles inline + Google Fonts, connections only to the
 // site, the RPC and the relayer. The proving key and circuit are content-hashed by the build, so they cache for a year.
 'use strict';
-/// Live market prices (site/market.js): Pyth Hermes, Jupiter's Price API, CoinGecko, Coinbase's ticker and candles. Read-only.
+/// Live market prices (engine/market.js): Pyth Hermes, Jupiter's Price API, CoinGecko, Coinbase's ticker and candles. Read-only.
 const MARKET = ['https://hermes.pyth.network', 'https://api.jup.ag', 'https://api.coingecko.com', 'https://api.exchange.coinbase.com',
-  // Solana markets (site/markets.js): GeckoTerminal, DexScreener, Meteora DLMM, Raydium, Orca: keyless, read-only
+  // Solana markets (engine/markets.js): GeckoTerminal, DexScreener, Meteora DLMM, Raydium, Orca: keyless, read-only
   'https://api.geckoterminal.com', 'https://api.dexscreener.com', 'https://dlmm-api.meteora.ag', 'https://api-v3.raydium.io', 'https://api.orca.so'];
 const origin = (u) => { try { const x = new URL(u); return x.origin; } catch { return null; } };
 // @solana/web3.js opens its websocket on the RPC host, at port + 1 when the URL names a port (solana-test-validator style).

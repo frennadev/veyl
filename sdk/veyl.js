@@ -85,12 +85,14 @@ function merklePath(leaves, index, depth) {
   return { root: level.length ? level[0] : z[depth], siblings };
 }
 /// snarkjs proof -> the 256 bytes the program takes (A | B with c1 before c0 | C), and the 6 public signals as 32-byte BE each.
-function packProof(proof, publicSignals) {
+function packProofN(proof, publicSignals, n) {
   const B = (x) => be32(BigInt(x));
-  const bytes = Buffer.concat([B(proof.pi_a[0]), B(proof.pi_a[1]), B(proof.pi_b[0][1]), B(proof.pi_b[0][0]), B(proof.pi_b[1][1]), B(proof.pi_b[1][0]), B(proof.pi_c[0]), B(proof.pi_c[1])]);
-  if (publicSignals.length !== 6) throw new Error('expected 6 public signals');
-  return { proof: bytes, pubs: publicSignals.map((s) => BigInt(s)) };
+  if (publicSignals.length !== n) throw new Error('expected ' + n + ' public signals, got ' + publicSignals.length);
+  return { proof: Buffer.concat([B(proof.pi_a[0]), B(proof.pi_a[1]), B(proof.pi_b[0][1]), B(proof.pi_b[0][0]), B(proof.pi_b[1][1]), B(proof.pi_b[1][0]), B(proof.pi_c[0]), B(proof.pi_c[1])]), pubs: publicSignals.map((s) => BigInt(s)) };
 }
+const packProof = (proof, publicSignals) => packProofN(proof, publicSignals, 6); // the withdraw circuit
+/// BigInts as decimal strings (witness inputs for snarkjs, JSON for the relayer)
+const strings = (o) => JSON.parse(JSON.stringify(o, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
 
 /// The circuit's input for spending `withdrawnValue` out of `note` (value, label, nullifier, secret, index) under `context`,
 /// given the pool's leaves and the approved labels. Returns the input and the change note's fresh secrets.
@@ -663,7 +665,7 @@ class Veyl {
     return { leaves, deposits };
   }
 }
-module.exports = { Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
+module.exports = { W, R, encRoute, packProofN, strings, Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
   CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, DEFAULT_PROTOCOL_SHARE, MAX_PROTOCOL_SHARE, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
   disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents,
   mulDiv, mulDivCeil, stepQ, priceOf, feeOf, accOf, refsOf, simulateSwap, sharesForMint, chunkOf, slotOf, chunksForSwap, chunkBit, nextChunk, nextBin, liveChunks, owedOf, pendingRewardGrowth, distribute, sideWeights, shapeWeights, EMPTY_BIN,

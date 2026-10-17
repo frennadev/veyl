@@ -74,7 +74,7 @@ The app reads live data in the browser from keyless public APIs; nothing here ne
 | Raydium | Markets: pools with TVL, 24h volume/fees/APR | `api-v3.raydium.io/pools/info/list` (legacy endpoint) | cached 60 s |
 | Orca | Markets: whirlpools with TVL, 24h stats | `api.orca.so/v2/solana/pools` | public, 429 on abuse |
 
-All of these allow browser calls (CORS `*`) as far as their docs say; `site/markets.js` keeps a per-source cache and backs a source off after a 429 or 5xx (doubling to 5 minutes) and the UI shows the countdown. If a source ever refuses browser origins, set `proxy` in `window.VEYL_KEYS` to a relayer path and add a pass-through there (the relayer's CSP is the same list).
+All of these allow browser calls (CORS `*`) as far as their docs say; `engine/markets.js` keeps a per-source cache and backs a source off after a 429 or 5xx (doubling to 5 minutes) and the UI shows the countdown. If a source ever refuses browser origins, set `proxy` in `window.VEYL_KEYS` to a relayer path and add a pass-through there (the relayer's CSP is the same list).
 
 **Optional keys** (the owner signs up; the app says "add a key for more" until then). Put them in `site/veyl.keys.js` as `window.VEYL_KEYS={...}` (never commit it) or as build env `BIRDEYE_API_KEY`, `HELIUS_API_KEY`, `JUPITER_API_KEY`, `PYTH_API_KEY`:
 

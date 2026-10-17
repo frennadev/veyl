@@ -30,10 +30,10 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 
 ## Recent features (all tested)
 - No-wallet mode ("Get started" → "No wallet needed"): an in-browser deposit address (`localKeypair/connectLocal/localSweep` in
-  site/sol-entry.js), funded from any wallet/exchange; key goes into the encrypted backup. Wallet connect is the second option.
+  engine/sol-entry.js), funded from any wallet/exchange; key goes into the encrypted backup. Wallet connect is the second option.
 - Native SOL is wrapped automatically on deposit (`wrapIxs`).
 - Relayer faucet `POST /drip` (devnet/local only, `FAUCET_KEY` = key file path or `FAUCET_SECRET_KEY` = the key itself): core basket, or a pool's own pair (`tokens: [..]`), 6 h limits.
-- Pro LP tools in app.html: volatility-sized range presets (Tight/Balanced/Wide), position simulator (fees vs holding at ±30%),
+- Pro LP tools in the app (site/app.js): volatility-sized range presets (Tight/Balanced/Wide), position simulator (fees vs holding at ±30%),
   portfolio summary, per-position edge distance / USD worth / fee APR.
 - Receive (Portfolio → Veyl address → Receive): QR code + payment link `app.html#pay=veyl:…&a=<amount>&t=<token>`; opening a link
   pre-fills Send as "Pay privately" (`openReceive`, `takePayLink`, `site/qrcode.js` = qrcode-generator, MIT). Inspired by NullCash's send flow.
@@ -49,7 +49,9 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 - Don't change the circuits or crypto for UI work.
 
 ## Commands
-- `npm ci` · `npm run bundle` (rebuild site/veyl-sol.js after editing site/sol-entry.js, shield-engine.js, sealed-engine.js or sdk/)
+- `npm ci` · `npm run bundle` (rebuild site/veyl-sol.js after editing anything in engine/ or sdk/)
+- Layout: site/ = what is served (app.html markup + app.js + app.css); engine/ = browser engine sources (bundled);
+  relayer/relayer.js composes relayer/{fees,notes,shielded,sealed,postman,faucet}.js; tests share tests/harness.js, e2e/harness.js.
 - Tests (run ONE at a time: they share deploy.local.json and validator ports):
   `npm test` (298, ~20 min) · `node e2e/run.js` (67, ~17–25 min) · `node e2e/local.js` (32) · `node e2e/sandbox.js` (64) · `node e2e/smoke.js` (47)
 - Demo mode in the browser: `app.html?mode=sandbox-dev` (in-browser chain, real proofs).

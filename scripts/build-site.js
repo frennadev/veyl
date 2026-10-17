@@ -13,7 +13,7 @@ const R = N.ROOT;
 function build(network, { out = path.join(R, 'dist/site'), env = process.env, log = console.log } = {}) {
   const cfg = N.loadConfig(network); const dep = N.loadDeploy(network);
   fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
-  const skip = (f) => f.startsWith('_') || f.startsWith('.') || f.endsWith('entry.js') || f === 'shield-engine.js' || f === 'sealed-engine.js' || /^sandbox-.*\.js$/.test(f) || f === 'market.js' || f === 'markets.js' || f.endsWith('.src.js') || f === 'veyl.config.js' || fs.statSync(path.join(R, 'site', f)).isDirectory();
+  const skip = (f) => f.startsWith('_') || f.startsWith('.') || f === 'veyl.config.js' || fs.statSync(path.join(R, 'site', f)).isDirectory(); // the engine's sources live in engine/
   const h8 = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 12);
   // content-hashed zero-knowledge files (byte-identical copies of zk/; preflight checks the hashes)
   const zk = {}; const ZK_PLAIN = new Set();
@@ -23,10 +23,13 @@ function build(network, { out = path.join(R, 'dist/site'), env = process.env, lo
     fs.copyFileSync(zkeySrc, path.join(out, z.zkey)); fs.copyFileSync(wasmSrc, path.join(out, z.wasm)); ZK_PLAIN.add(`${name}_final.zkey`); ZK_PLAIN.add(`${name}.wasm`);
     if (name === 'withdraw') Object.assign(zk, z); else zk[name] = z; // config.zk.{wasm,zkey} = withdraw; config.zk.transact / .position / .swap / .claim
   }
+  // the pages' own scripts and styles get content-hashed names too, so a page never runs against an older copy
+  const HASHED = {}; for (const f of ['app.js', 'app.css', 'home.js']) { const b = fs.readFileSync(path.join(R, 'site', f)); HASHED[f] = f.replace(/\.(\w+)$/, `.${h8(b)}.$1`); fs.writeFileSync(path.join(out, HASHED[f]), b); }
   for (const f of fs.readdirSync(path.join(R, 'site')).filter((f) => !skip(f))) {
-    if (ZK_PLAIN.has(f)) continue; // replaced by the hashed copies
+    if (ZK_PLAIN.has(f) || HASHED[f]) continue; // replaced by the hashed copies
     if (!f.endsWith('.html')) { fs.copyFileSync(path.join(R, 'site', f), path.join(out, f)); continue; }
     let s = fs.readFileSync(path.join(R, 'site', f), 'utf8'); let n = 0;
+    s = s.replace(/(<script src=|<link rel="stylesheet" href=)"([\w.-]+)"/g, (m, tag, name) => HASHED[name] ? `${tag}"${HASHED[name]}"` : m);
     s = s.replace(/<script>([\s\S]*?)<\/script>/g, (_, body) => { const name = `${f.replace(/\.html$/, '')}.${h8(body)}.js`; fs.writeFileSync(path.join(out, name), body); n++; return `<script src="${name}"></script>`; });
     if (/<script(?![^>]*\bsrc=)[^>]*>/.test(s)) throw new Error(f + ': an inline script is left; the CSP would block it');
     if (/\son[a-z]+\s*=\s*["']/i.test(s)) throw new Error(f + ': inline event handler attribute; the CSP would block it');

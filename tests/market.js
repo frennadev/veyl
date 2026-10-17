@@ -1,13 +1,12 @@
 #!/usr/bin/env node
-// Market price parsers (site/market.js) against recorded response shapes: Pyth Hermes, Jupiter Price API v3 (and v2's
+// Market price parsers (engine/market.js) against recorded response shapes: Pyth Hermes, Jupiter Price API v3 (and v2's
 // { data } wrapper), CoinGecko, Coinbase ticker and candles; and the provider chain (Pyth only with a key, then Jupiter,
 // CoinGecko, Coinbase, each for what is still missing; a clear failure when nothing answers) with a mocked fetch. No network.
 'use strict';
 const path = require('path'); const fs = require('fs');
-const code = require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../site/market.js')], bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
-const box = { exports: {} }; new Function('module', 'exports', 'require', code)(box, box.exports, require); const mod = box.exports;
+const { check, finish, loadEngine } = require('./harness.js');
+const mod = loadEngine('market.js');
 const fx = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/market', f), 'utf8'));
-let pass = 0, fail = 0; const check = (n, ok, x = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (x ? '  ' + x : '')); };
 const close = (a, b, e = 1e-9) => Math.abs(a - b) <= e * Math.max(1, Math.abs(b));
 (async () => {
   const py = mod.parsePyth(fx('pyth-hermes-latest.json'));
@@ -38,5 +37,5 @@ const close = (a, b, e = 1e-9) => Math.abs(a - b) <= e * Math.max(1, Math.abs(b)
   check('Jupiter and CoinGecko rate-limited: Coinbase tickers answer SOL, USDC is 1; the reasons are kept', close(p4.SOL.usd, 147.5) && p4.USDC.usd === 1 && !p4.JUP && /Jupiter: api\.jup\.ag answered 429 · CoinGecko: api\.coingecko\.com answered 429 · Coinbase: ok/.test(m4.why()), m4.why());
   const m3 = new mod.Market({ keys: {}, fetch: () => Promise.reject(new Error('offline')) }); let err = null; try { await m3.refresh(); } catch (e) { err = e.message; }
   check('nothing answers: a clear "market price unavailable" with every reason, no invented price', /market price unavailable.*Jupiter: offline.*CoinGecko: offline.*Coinbase: offline/.test(err) && m3.usd('SOL') === null && m3.label('SOL') === 'market price unavailable', err);
-  console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
+  finish(null, { cu: false });
 })();

@@ -9,10 +9,10 @@
 //   claim bundle    Poseidon(direction, assetOut, num, den, fee);  out = floor(amount·num/den) - fee
 'use strict';
 const { Buffer } = require('buffer');
-const { PublicKey, TransactionInstruction, SystemProgram } = require('@solana/web3.js');
+const { PublicKey, TransactionInstruction } = require('@solana/web3.js');
 const V_ = require('./veyl.js'); const Z = require('./shield.js'); const J = require('./bjj.js');
 const { u8, u16, u32, u64, be32, pk, vec, Reader } = V_;
-const { P, hashToField, randField, DEPTH } = Z;
+const { P, hashToField, randField, DEPTH } = Z; const { W, R, SYS, strings } = V_;
 
 const KIND = { SWAP: 3, CLAIM: 4 };
 const STATE = ['open', 'closed', 'settled', 'failed'];
@@ -63,7 +63,6 @@ function claimInput({ tree, sk, swap, assetOut, num, den, fee = 0n, out, ext }) 
     pathIndex: BigInt(swap.index), pathElements: tree.path(swap.index), assetOut: BigInt(assetOut), num, den, fee, q, outPubkey: BigInt(out.pk), outBlinding: BigInt(out.blinding) };
   return { input: strings(input), pubs: [root, nullifier, outCommitment, BigInt(swap.batchKey), bundle, extDataHash, 0n, 0n], nullifier, outCommitment, value };
 }
-const strings = (o) => JSON.parse(JSON.stringify(o, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
 
 // ------------------------------------------------------------------------------------------------ settlement maths (= settle_batch)
 /// What a batch clears at: totals [X sold, Y sold], the active bin's 128.128 price (Y per X), and a quote function for the
@@ -78,9 +77,6 @@ async function clearing({ totals, price, quote }) {
 const claimOut = (amount, num, den, fee = 0n) => (BigInt(den) === 0n ? 0n : (BigInt(amount) * BigInt(num)) / BigInt(den) - BigInt(fee));
 
 // ------------------------------------------------------------------------------------------------ accounts and instructions
-const W = (k, s = false) => ({ pubkey: new PublicKey(k), isSigner: s, isWritable: true });
-const R = (k, s = false) => ({ pubkey: new PublicKey(k), isSigner: s, isWritable: false });
-const SYS = SystemProgram.programId;
 const pt64 = (p) => (Buffer.isBuffer(p) || p instanceof Uint8Array ? Buffer.from(p) : J.enc(p));
 const encParams = (p) => Buffer.concat([u64(p.epochSlots), u64(p.settleTimeout), u64(p.minIn[0]), u64(p.minIn[1]), u8(p.kMin), u8(p.maxRollovers), u16(p.maxDrift)]);
 

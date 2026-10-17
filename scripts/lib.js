@@ -41,6 +41,8 @@ const BIN_POOLS = [
   { id: 'pyth-usdc', x: 'PYTH', y: 'USDC', binStep: 20, baseFee: 2_000, vfc: 10_000, price: 0.15 },
   { id: 'ray-sol', x: 'RAY', y: 'SOL', binStep: 20, baseFee: 2_000, vfc: 10_000, price: 2.5 / 150 },
 ];
+/// The built-in set (before the catalog is merged in): what CORE_ONLY=1 ./VEYL-DEVNET.command deploys and the faucet's basket.
+const BUILTIN_TOKENS = TOKENS.map((t) => t.sym), BUILTIN_POOLS = BIN_POOLS.map((b) => b.id);
 // Every major Meteora pair (config/catalog.json), mirrored on devnet; priced at launch by scripts/price-catalog.js.
 try { const C = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/catalog.json'), 'utf8'));
   for (const t of C.tokens || []) if (!TOKENS.some((x) => x.sym === t.sym)) TOKENS.push({ sym: t.sym, decimals: t.decimals, minDeposit: t.minDeposit, price: t.price });
@@ -132,4 +134,4 @@ async function deployAll({ rpc, payerFile, mints = {}, postman, relayer, network
   fs.writeFileSync(path.join(ROOT, `deploy.${network}.json`), JSON.stringify(dep, null, 2));
   return { V, dep, conn, payer, T, BP };
 }
-module.exports = { ROOT, BIN, RPC_PORT, PROGRAMS, TOKENS, BIN_POOLS, CORE_TOKENS, CORE_POOLS, sleep, units, priceQ, readKey, programKey, programIds, startValidator, deployAll, deployPrograms, createMint, fund, tool, LAMPORTS_PER_SOL };
+module.exports = { ROOT, BIN, RPC_PORT, PROGRAMS, TOKENS, BIN_POOLS, BUILTIN_TOKENS, BUILTIN_POOLS, CORE_TOKENS, CORE_POOLS, sleep, units, priceQ, readKey, programKey, programIds, startValidator, deployAll, deployPrograms, createMint, fund, tool, LAMPORTS_PER_SOL };

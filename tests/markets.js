@@ -1,13 +1,12 @@
 #!/usr/bin/env node
-// Solana markets (site/markets.js): parsers against recorded response shapes (GeckoTerminal, DexScreener, Meteora DLMM,
+// Solana markets (engine/markets.js): parsers against recorded response shapes (GeckoTerminal, DexScreener, Meteora DLMM,
 // Raydium, Orca, OHLCV), the merge (one row per pool, the DEX's own figures first), and the client's cache, rate limit and
 // backoff with a mocked fetch. No network.
 'use strict';
 const path = require('path'); const fs = require('fs');
-const code = require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../site/markets.js')], bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
-const box = { exports: {} }; new Function('module', 'exports', 'require', code)(box, box.exports, require); const M = box.exports;
+const { check, finish, loadEngine } = require('./harness.js');
+const M = loadEngine('markets.js');
 const fx = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/markets', f), 'utf8'));
-let pass = 0, fail = 0; const check = (n, ok, x = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (x ? '  ' + x : '')); };
 const close = (a, b, e = 1e-6) => a != null && Math.abs(a - b) <= e * Math.max(1, Math.abs(b));
 (async () => {
   const g = M.parseGecko(fx('gecko-pools.json'));
@@ -36,5 +35,5 @@ const close = (a, b, e = 1e-6) => a != null && Math.abs(a - b) <= e * Math.max(1
   const det = await mk.detail('Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE'); check('detail: DexScreener pair (or its absence) and candles rate-limited reported per part', 'pair' in det && det.candlesError === 'rate limited' && Array.isArray(det.candles));
   const mk2 = new M.Markets({ fetch: () => Promise.reject(new Error('offline')) }); const L2 = await mk2.list(); check('every source down: an empty list with an error per source, never fabricated rows', L2.rows.length === 0 && Object.keys(L2.errors).length === 5 && mk2.state.orca.error === 'offline');
   check('keyed sources are slots only, none present by default', mk.keyed().length === 4 && mk.keyed().every((k) => !k.present));
-  console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
+  finish(null, { cu: false });
 })();

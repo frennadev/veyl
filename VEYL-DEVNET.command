@@ -63,7 +63,7 @@ echo "Deployer (devnet only): $ADDR"
 step "3/6  Pools and today's prices"
 # all 83 pools (the 12 built in + every major Meteora pair) by default; CORE_ONLY=1 ./VEYL-DEVNET.command keeps the 12 (cheaper)
 if [ ! -f deploy.devnet.json ]; then
-  if [ "${CORE_ONLY:-0}" = "1" ]; then node -e 'const fs=require("fs"),p="config/devnet.json",c=JSON.parse(fs.readFileSync(p));c.tokens=c.tokens.slice(0,9);c.binPools=c.binPools.filter(b=>["sol-usdc","sol-usdt","usdt-usdc","jup-sol","jup-usdc","bonk-sol","bonk-usdc","wif-sol","wif-usdc","jto-sol","pyth-usdc","ray-sol"].includes(b));fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n")'; fi
+  if [ "${CORE_ONLY:-0}" = "1" ]; then node -e 'const fs=require("fs"),L=require("./scripts/lib.js"),p="config/devnet.json",c=JSON.parse(fs.readFileSync(p));c.tokens=c.tokens.filter(t=>L.BUILTIN_TOKENS.includes(t));c.binPools=c.binPools.filter(b=>L.BUILTIN_POOLS.includes(b));fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n")'; fi
   node scripts/price-catalog.js --network devnet || echo "${Y}Could not fetch live prices: only the built-in pools open.${N}"
 else echo "Already deployed: pools keep their opening prices."; fi
 POOLS=$(node -p 'require("./config/devnet.json").binPools.length'); echo "Pools listed: $POOLS"

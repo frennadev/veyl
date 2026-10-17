@@ -11,9 +11,7 @@ const S = require('../sdk/veyl.js'); require('../sdk/shield.js');
 const { startValidator, deployAll, sleep, fund } = require('../scripts/lib.js'); const spl = require('@solana/spl-token'); const { seed } = require('../scripts/seed.js');
 const { build } = require('../scripts/build-site.js'); const { serveDist } = require('../scripts/serve-dist.js'); const { mockMarket, PRICES } = require('./market-mock.js');
 const PORT = 8875, WEB = 'http://127.0.0.1:' + PORT, RPC_PORT = Number(process.env.LOCAL_RPC_PORT || 8953);
-let pass = 0, fail = 0; const check = (n, ok, x = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (x ? '  ' + String(x).replace(/\s+/g, ' ').slice(0, 220) : '')); };
-const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(0) + 's';
-const chromePath = () => { const d = '/opt/pw-browsers'; if (!fs.existsSync(d)) return undefined; const c = fs.readdirSync(d).find((x) => /^chromium-\d+$/.test(x)); for (const p of ['chrome-linux/chrome', 'chrome-linux64/chrome']) if (fs.existsSync(path.join(d, c, p))) return path.join(d, c, p); };
+const { check, lap, chromePath, finish } = require('./harness.js');
 // the app's own number formatting (site/app.html: tiny, pct), so a displayed figure can be compared as text
 const SUBS = '₀₁₂₃₄₅₆₇₈₉';
 function tiny(n) { if (!isFinite(n) || n <= 0) return '0'; if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'; if (n >= 1e4) return n.toLocaleString('en-US', { maximumFractionDigits: 0 }); if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 2 }); if (n >= 1) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -90,5 +88,5 @@ const pct = (pips) => (pips / 1e4).toFixed(pips < 1000 ? 3 : 2).replace(/0$/, ''
     check('no page errors', errs.length === 0, errs.join(' | '));
   } catch (e) { check('local e2e ran to the end', false, e.stack); }
   finally { if (browser) await browser.close(); if (web) web.close(); val.kill(); if (keepDeploy) fs.writeFileSync(path.join(__dirname, '../deploy.local.json'), keepDeploy); }
-  console.log(`\n${pass} passed, ${fail} failed (${lap()})`); process.exit(fail ? 1 : 0);
+  finish();
 })();

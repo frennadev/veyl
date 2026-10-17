@@ -15,14 +15,13 @@ const { sha256 } = require('js-sha256');
 const nacl = require('tweetnacl');
 const bs58 = require('bs58');
 const PL = require('poseidon-lite');
-const { be32, fromBe32, u8, u32, i32, u64, i64, u128, pk, vec, F, Reader, zeros: zerosOf } = require('./veyl.js');
+const { be32, fromBe32, u8, u32, i32, u64, i64, u128, pk, vec, F, Reader, zeros: zerosOf, hashToField, rand: randField, strings, packProofN, W, R, SYS, encRoute } = require('./veyl.js');
 
 const DEPTH = 32; const K = 16; const SHARE_BITS = 112n; const Q64 = 1n << 64n; const U64MAX = Q64 - 1n;
 const NOTE = { TOKEN: 1, POSITION: 2, ORDER: 3, SWAP: 4 };
 const P = (...xs) => { const a = xs.map(BigInt); const f = PL['poseidon' + a.length]; if (!f) throw new Error('poseidon arity ' + a.length); return f(a); };
 const mod = (x) => ((BigInt(x) % F) + F) % F;
-/// sha256 of the parts with the top three bits cleared: a field element (= hash_to_field in the programs).
-const hashToField = (...parts) => { const h = Buffer.from(sha256.arrayBuffer(Buffer.concat(parts.map((p) => Buffer.from(p))))); h[0] &= 0x1f; return fromBe32(h); };
+/// sha256 of the parts (hashToField, from sdk/veyl.js, is this with the top three bits cleared: = hash_to_field in the programs).
 const sha = (...parts) => Buffer.from(sha256.arrayBuffer(Buffer.concat(parts.map((p) => Buffer.from(p)))));
 
 // ------------------------------------------------------------------------------------------------ assets
@@ -51,7 +50,6 @@ function decodeAddress(a) { const s = String(a).trim(); if (!s.startsWith('veyl:
 // ------------------------------------------------------------------------------------------------ notes
 const commitmentOf = (asset, amount, ownerPk, blinding) => P(asset, amount, ownerPk, blinding);
 const nullifierOf = (commitment, index, sk) => P(commitment, index, P(sk, commitment, index));
-const randField = () => { const b = new Uint8Array(32); (globalThis.crypto || require('crypto').webcrypto).getRandomValues(b); return (fromBe32(b) % (F - 1n)) + 1n; };
 
 // ------------------------------------------------------------------------------------------------ encrypted payloads
 const ZERO_NONCE = new Uint8Array(24);
@@ -117,7 +115,6 @@ function transactInput({ tree, asset, ins = [], outs, ext, sk }) {
     inPathElements: inn.map((n) => (n.dummy ? Array(DEPTH).fill(0n) : tree.path(n.index))), outAmount: outs.map((o) => BigInt(o.amount)), outPubkey: outs.map((o) => BigInt(o.pk)), outBlinding: outs.map((o) => BigInt(o.blinding)) };
   return { input: strings(input), pubs: [root, publicAmount, extDataHash, publicAsset, ...nulls, ...commits], nullifiers: nulls, commitments: commits };
 }
-const strings = (o) => JSON.parse(JSON.stringify(o, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
 
 // ------------------------------------------------------------------------------------------------ positions
 const hash16 = (v) => { if (v.length !== 16) throw new Error('16 values'); return P(P(...v.slice(0, 8).map(mod)), P(...v.slice(8).map(mod))); };
@@ -169,11 +166,6 @@ function positionInput({ tree, sk, binPool, lo, note, delta, growth, assets, fee
 }
 
 /// Groth16 proof -> the 256 bytes the programs take, and the public signals (any count).
-function packProofN(proof, publicSignals, n) {
-  const B = (x) => be32(BigInt(x));
-  if (publicSignals.length !== n) throw new Error('expected ' + n + ' public signals, got ' + publicSignals.length);
-  return { proof: Buffer.concat([B(proof.pi_a[0]), B(proof.pi_a[1]), B(proof.pi_b[0][1]), B(proof.pi_b[0][0]), B(proof.pi_b[1][1]), B(proof.pi_b[1][0]), B(proof.pi_c[0]), B(proof.pi_c[1])]), pubs: publicSignals.map((s) => BigInt(s)) };
-}
 
 module.exports = { bytes, DEPTH, K, SHARE_BITS, NOTE, P, mod, hashToField, assetOf, orderAssetOf, posAssetOf, keysFromSeed, oneTime, encodeAddress, decodeAddress, commitmentOf, nullifierOf, randField,
   seal, open, encodeNote, encodePosition, decodePlain, assetOfNote, encodeExt, extHash, publicAmountOf, Tree, transactInput, hash16, positionDigest, positionCommitment, bundleOf, encodeLpCore, lpExtHash, lpAction,
@@ -182,13 +174,9 @@ module.exports = { bytes, DEPTH, K, SHARE_BITS, NOTE, P, mod, hashToField, asset
 // ================================================================================================ instruction builders
 // Added to the Veyl client (sdk/veyl.js) by install(): the Phase 2 instructions of veyl_pool and veyl_entry, account order
 // exactly as in the Rust structs. Optional accounts (Anchor `Option<...>`) that are absent are passed as the program id.
-const { TransactionInstruction, SystemProgram, SYSVAR_INSTRUCTIONS_PUBKEY } = require('@solana/web3.js');
+const { TransactionInstruction, SYSVAR_INSTRUCTIONS_PUBKEY } = require('@solana/web3.js');
 const V_ = require('./veyl.js');
 const KIND = { TRANSACT: 1, POSITION: 2 };
-const W = (k, s = false) => ({ pubkey: new PublicKey(k), isSigner: s, isWritable: true });
-const R = (k, s = false) => ({ pubkey: new PublicKey(k), isSigner: s, isWritable: false });
-const SYS = SystemProgram.programId;
-const encRoute = (r) => Buffer.concat([u64(r.amountIn), vec(r.hops, (h) => Buffer.concat([pk(h.pool), u8(h.xForY ? 1 : 0), u8(h.nArrays || 0)]))]);
 const encodeLpRequest = (req) => Buffer.concat([encodeLpCore(req.core), vec(req.legs || [], encodeExt)]);
 const encodeSwapCore = (c) => Buffer.concat([pk(c.tokenOut), vec(c.routes, encRoute), u64(c.minOut), be32(c.receiptOwner), be32(c.receiptBlinding), i64(c.deadline)]);
 const encodeOrderCore = (c) => Buffer.concat([pk(c.binPool), i32(c.id), u8(c.isAsk ? 1 : 0), be32(c.receiptOwner), be32(c.receiptBlinding), i64(c.deadline)]);

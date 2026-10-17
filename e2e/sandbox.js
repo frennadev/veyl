@@ -9,9 +9,7 @@ const path = require('path'); const fs = require('fs'); const os = require('os')
 const { chromium } = require('playwright');
 const { build } = require('../scripts/build-site.js'); const { mockMarket, mockMarkets, PRICES } = require('./market-mock.js'); const { serveDist } = require('../scripts/serve-dist.js');
 const PORT = 8874; const WEB = 'http://127.0.0.1:' + PORT;
-let pass = 0, fail = 0; const check = (n, ok, extra = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (extra ? '  ' + String(extra).replace(/\s+/g, ' ').slice(0, 170) : '')); };
-const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(0) + 's';
-const chromePath = () => { const d = '/opt/pw-browsers'; if (!fs.existsSync(d)) return undefined; const c = fs.readdirSync(d).find((x) => /^chromium-\d+$/.test(x)); if (!c) return undefined; for (const p of ['chrome-linux/chrome', 'chrome-linux64/chrome']) if (fs.existsSync(path.join(d, c, p))) return path.join(d, c, p); };
+const { check, lap, chromePath, finish } = require('./harness.js');
 const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots'); fs.mkdirSync(SHOTS, { recursive: true });
 
 (async () => {
@@ -196,5 +194,5 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   } catch (e) { check('sandbox e2e ran to the end', false, e.stack); }
   finally { if (browser) await browser.close(); web.close(); }
-  console.log(`\n${pass} passed, ${fail} failed (${lap()})`); process.exit(fail ? 1 : 0);
+  finish();
 })();

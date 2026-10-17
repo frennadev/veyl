@@ -4,27 +4,19 @@
 // double spend / stale root / wrong context refused -> ragequit -> bin pool maths vs the JS twin -> entry: relay,
 // private swap, private add, signed private remove, public router.
 'use strict';
-const fs = require('fs'); const path = require('path'); const os = require('os'); const nacl = require('tweetnacl');
+const nacl = require('tweetnacl');
 const { Keypair, LAMPORTS_PER_SOL, PublicKey } = require('@solana/web3.js');
 const spl = require('@solana/spl-token');
 const S = require('../sdk/veyl.js'); const { Veyl, H, be32, labelOf, contextOf, encodeAction, removeDigest, zeros, merklePath, withdrawInput, newNote, simulateSwap, priceOf, chunkOf, STATE_DEPTH, ASP_DEPTH, Q } = S;
 const { prove, verifyLocal } = require('../sdk/prover.js');
-const { startValidator, deployAll, deployPrograms, programIds, createMint, fund, units, sleep, priceQ } = require('../scripts/lib.js');
+const { deployAll, deployPrograms, programIds, createMint, fund, units, sleep, priceQ } = require('../scripts/lib.js');
 const { Relayer } = require('../relayer/relayer.js');
-const PORT = require('../scripts/lib.js').RPC_PORT;
-let pass = 0, fail = 0; const check = (n, ok, extra = '') => { ok ? pass++ : fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (extra !== '' ? '  ' + String(extra).slice(0, 200) : '')); };
-const refused = async (p, re) => { try { await p; return false; } catch (e) { const t = String(e.message) + JSON.stringify(e.logs || e.transactionLogs || ''); if (!re.test(t)) console.log('    unexpected error:', t.slice(0, 600)); return re.test(t); } };
-const CU = {}; const cuOf = async (conn, sig, label) => { const t = await conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const m = (t.meta.logMessages || []).map((l) => l.match(/consumed (\d+) of \d+ compute units/)).filter(Boolean); if (m.length) CU[label] = Math.max(...m.map((x) => Number(x[1]))); };
-const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(1) + 's';
+const { counts, check, refused, CU, cuOf, lap, freshValidator, funded, finish } = require('./harness.js');
 
 (async () => {
-  const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-sol-')); const payer = Keypair.generate(); const payerFile = path.join(TMP, 'payer.json'); fs.writeFileSync(payerFile, JSON.stringify([...payer.secretKey]));
-  const { val, rpc, conn } = await startValidator(TMP, payer, PORT);
-  // stop the validator and delete its ledger (each run would otherwise leave ~150 MB in the temp dir)
-  const done = (code) => { val.once('exit', () => { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch {} process.exit(code); }); val.kill(); setTimeout(() => process.exit(code), 8000).unref(); };
+  const { rpc, conn, payer, payerFile, done } = await freshValidator('veyl-sol-');
   try {
-    const [postman, relayer, alice, bob, carol, mallory, fresh] = Array.from({ length: 7 }, () => Keypair.generate());
-    for (const k of [postman, relayer, alice, bob, carol, mallory, fresh]) await conn.confirmTransaction(await conn.requestAirdrop(k.publicKey, 50 * LAMPORTS_PER_SOL), 'confirmed');
+    const [postman, relayer, alice, bob, carol, mallory, fresh] = await funded(conn, 7);
     // REVIEW.md H-1: right after the programs are deployed, before the deployer initialises anything, a stranger tries to take
     // the bin factory (it is a fixed address: whoever creates it owns pool listing)
     await deployPrograms(rpc, payerFile);
@@ -409,7 +401,6 @@ const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(1) +
         && await refused(V.send([V.setProtocolShareIx(payer.publicKey, BPX.address, 0)]), /NotAuthority|ConstraintHasOne/) && await refused(V.send([await V.withdrawProtocolFeeIx(payer.publicKey, BPX.address, 1n, 0n)]), /NotAuthority|ConstraintHasOne/) && await refused(V.send([await V.fundRewardIx(payer.publicKey, BPX.address, 0, 1n)]), /NotAuthority/));
       const again = await handover({ rpc, dep, deployer: payer, deployerFile: payerFile, to: msig.publicKey, postman: newPostman, dryRun: true, log: () => {} });
       check('re-running the handover has nothing left to do', again.plan.every((x) => /^done|^skip|kept by the deployer/.test(x.action))); }
-  } catch (e) { console.error('\nTEST RUN CRASHED:', e); fail++; }
-  console.log('\ncompute units:', JSON.stringify(CU));
-  console.log(`\n${pass} passed, ${fail} failed  (${lap()})`); done(fail ? 1 : 0);
+  } catch (e) { console.error('\nTEST RUN CRASHED:', e); counts.fail++; }
+  finish(done);
 })();
