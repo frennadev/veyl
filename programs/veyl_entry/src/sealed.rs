@@ -45,8 +45,17 @@ pub const OPEN: u8 = 0;
 pub const CLOSED: u8 = 1;
 pub const SETTLED: u8 = 2;
 pub const FAILED: u8 = 3;
-/// Compute left over when a resumable job stops (enough for one more step's bookkeeping and the account write-back).
-const CU_RESERVE: u64 = 160_000;
+/// Work per transaction for a resumable share check, in compute units: a fixed budget charged per stage, because devnet
+/// and mainnet have not activated sol_remaining_compute_units. Stage costs are the worst measured on a local validator
+/// (tests/phase3.js) plus a margin: a table 65.3k, a window 28k + 8.1k per non-zero digit (8 digits: 93.1k), the final
+/// stage 36.6k. post_share spends up to ~100k before its first stage, share_step ~5k; each budget leaves >= 150k of the
+/// 1.4M transaction limit spare.
+const TABLE_CU: u32 = 68_000;
+const WINDOW_CU: u32 = 28_500;
+const DIGIT_CU: u32 = 8_400;
+const FINAL_CU: u32 = 40_000;
+const POST_SHARE_BUDGET: u32 = 1_100_000;
+const SHARE_STEP_BUDGET: u32 = 1_200_000;
 
 // ------------------------------------------------------------------------------------------------ hashing (= sdk/sealed.js)
 /// The batch's key: a field element naming (bin pool, sequence number). In every swap commitment and claim.
@@ -100,7 +109,6 @@ fn store_cached(c: &Cached) -> [Limbs; 4] { [limbs_of(&c.ymx), limbs_of(&c.ypx),
 fn signed_add(acc: &Ext, c: &Cached, d: i8) -> Ext { if d < 0 { bjj::add_cached(acc, &bjj::neg_cached(c)) } else { bjj::add_cached(acc, c) } }
 /// A posted proof (veyl_pool account: the owner is checked by the accounts struct, the discriminator here).
 fn read_posted(info: &AccountInfo) -> Result<veyl_pool::PostedProof> { let d = info.try_borrow_data()?; veyl_pool::PostedProof::try_deserialize(&mut &d[..]) }
-fn remaining() -> u64 { anchor_lang::solana_program::compute_units::sol_remaining_compute_units() }
 
 // ------------------------------------------------------------------------------------------------ state
 /// The batch committee: its threshold public key and each member's public key share (from the DKG transcript, whose hash
@@ -323,7 +331,7 @@ pub fn post_share(ctx: Context<PostShare>, member: u8, da: [u8; 64], db: [u8; 64
         j.batch = ctx.accounts.batch.key(); j.node = ctx.accounts.node.key(); j.member = member; j.window = 64;
         j.digits = [bjj::recode(&mul_mod_l(&sw, &z1)), neg(bjj::recode(&mul_mod_l(&cc, &z1))), neg(bjj::recode(&z1)), bjj::recode(&sw), neg(bjj::recode(&cc)), bjj::recode(&mul_mod_l(&sw, &z3)), neg(bjj::recode(&mul_mod_l(&cc, &z3))), neg(bjj::recode(&z3))];
         j.pts = [da, db, ap, ba, bb]; j.acc = store_ext(&bjj::IDENTITY);
-        let b = ctx.accounts.batch.load()?; run_job(&mut j, &b, c)? };
+        let b = ctx.accounts.batch.load()?; run_job(&mut j, &b, c, POST_SHARE_BUDGET)? };
     if done { finish_job(&ctx.accounts.job.to_account_info(), &ctx.accounts.batch, &ctx.accounts.node.to_account_info())?; }
     Ok(())
 }
@@ -332,18 +340,21 @@ pub fn share_step(ctx: Context<ShareStep>) -> Result<()> {
     let node = { let j = ctx.accounts.job.load()?; require_keys_eq!(j.batch, ctx.accounts.batch.key(), EntryError::BadParams); j.node };
     require_keys_eq!(ctx.accounts.node.key(), node, EntryError::NotMember);
     { let b = ctx.accounts.batch.load()?; require!(b.state == CLOSED && b.committee_epoch == ctx.accounts.committee.epoch, EntryError::BatchNotClosed); }
-    let done = { let mut j = ctx.accounts.job.load_mut()?; let b = ctx.accounts.batch.load()?; run_job(&mut j, &b, &ctx.accounts.committee)? };
+    let done = { let mut j = ctx.accounts.job.load_mut()?; let b = ctx.accounts.batch.load()?; run_job(&mut j, &b, &ctx.accounts.committee, SHARE_STEP_BUDGET)? };
     if done { finish_job(&ctx.accounts.job.to_account_info(), &ctx.accounts.batch, &ctx.accounts.node.to_account_info())?; }
     Ok(())
 }
 /// Give up a share check (its node; e.g. one that failed): rent back.
 pub fn cancel_share(_ctx: Context<CancelShare>) -> Result<()> { Ok(()) }
 
-/// Runs the share check while compute lasts. Stages: 0 = window tables of the 7 variable points, 1 = the 65 windows
-/// (4 doublings, then the signed digit of every term), 2 = the last term, the cofactor and the verdict.
-fn run_job(j: &mut ShareJob, b: &Batch, c: &Committee) -> Result<bool> {
+/// Runs the share check for up to `budget` compute units (see TABLE_CU). Stages: 0 = window tables of the 7 variable
+/// points, 1 = the 65 windows (4 doublings, then the signed digit of every term), 2 = the last term, the cofactor and the verdict.
+fn run_job(j: &mut ShareJob, b: &Batch, c: &Committee, budget: u32) -> Result<bool> {
+    let mut left = budget;
     loop {
-        if remaining() < CU_RESERVE { return Ok(false); }
+        let cost = match j.stage { 0 => TABLE_CU, 1 => { let w = j.window as usize; WINDOW_CU + DIGIT_CU * j.digits.iter().filter(|d| d[w] != 0).count() as u32 } _ => FINAL_CU };
+        if cost > left { return Ok(false); }
+        left -= cost;
         match j.stage { 0 => stage_table(j, b, c)?, 1 => stage_window(j), _ => { stage_final(j)?; return Ok(true); } }
     }
 }

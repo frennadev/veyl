@@ -18,7 +18,8 @@
 const fs = require('fs'); const path = require('path'); const { execFileSync } = require('child_process');
 const N = require('./net.js');
 
-const PROGRAMS = ['veyl_pool', 'veyl_bin', 'veyl_entry'];
+// Largest first: each program's write buffer is held on top of the rent already kept, so the big buffer goes up while little is kept.
+const PROGRAMS = ['veyl_entry', 'veyl_bin', 'veyl_pool'];
 const KEY_OF = { veyl_pool: 'pool', veyl_bin: 'bin', veyl_entry: 'entry' };
 const solBin = () => { const d = process.env.SOLANA_BIN || '/opt/solana/bin'; return fs.existsSync(path.join(d, 'solana')) ? path.join(d, 'solana') : 'solana'; };
 const fmtSol = (l) => (Number(l) / 1e9).toFixed(4) + ' SOL';
@@ -32,7 +33,7 @@ async function plan({ cfg, network, rpc, deployerPk, programDir, tokens, binPool
   const reach = await N.rpcCall(rpc, 'getVersion');
   const conn = reach.ok ? new Connection(rpc, 'confirmed') : null;
   const rent = async (bytes) => { if (conn) { try { return await conn.getMinimumBalanceForRentExemption(bytes); } catch {} } return N.rentFormula(bytes); };
-  const steps = []; let lamports = 0, maxBuffer = 0; const breakdown = [];
+  const steps = []; let lamports = 0, maxBuffer = 0, peak = 0; const breakdown = [];
   for (const p of PROGRAMS) {
     const so = path.join(N.soDirOf(network), p + '.so');
     const len = fs.existsSync(so) ? fs.statSync(so).size : 0;
@@ -49,17 +50,17 @@ async function plan({ cfg, network, rpc, deployerPk, programDir, tokens, binPool
           status = same ? 'skip (identical bytes on chain)' : 'upgrade (on-chain bytes differ)'; }
       }
     }
-    let cost = 0;
+    let cost = 0, held = 0;
     if (status.startsWith('deploy')) {
       // programdata (45-byte header + code) and the program account are kept; the write buffer (37 + code) is held
       // during the deploy and refunded: the deployer needs both at once (~2x rent). Fees: one write tx per ~1 KB.
       const keep = (await rent(45 + len)) + (await rent(36)); const buffer = await rent(37 + len); const fees = (Math.ceil(len / 1000) + 4) * 5000;
-      cost = keep + fees; maxBuffer = Math.max(maxBuffer, buffer); breakdown.push([p, `rent(${45 + len}) + rent(36) kept ${fmtSol(keep)} + buffer rent(${37 + len}) ${fmtSol(buffer)} (refunded) + ~${Math.ceil(len / 1000) + 4} txs fees ${fmtSol(fees)}`]);
+      cost = keep + fees; held = buffer; maxBuffer = Math.max(maxBuffer, buffer); breakdown.push([p, `rent(${45 + len}) + rent(36) kept ${fmtSol(keep)} + buffer rent(${37 + len}) ${fmtSol(buffer)} (refunded) + ~${Math.ceil(len / 1000) + 4} txs fees ${fmtSol(fees)}`]);
     } else if (status.startsWith('upgrade')) {
-      const buffer = await rent(37 + len); const fees = (Math.ceil(len / 1000) + 4) * 5000; cost = fees; maxBuffer = Math.max(maxBuffer, buffer);
+      const buffer = await rent(37 + len); const fees = (Math.ceil(len / 1000) + 4) * 5000; cost = fees; held = buffer; maxBuffer = Math.max(maxBuffer, buffer);
       breakdown.push([p, `upgrade buffer rent(${37 + len}) ${fmtSol(buffer)} (refunded) + fees ${fmtSol(fees)}`]);
     }
-    lamports += cost; steps.push({ what: `program ${p} ${id.toBase58()} (${len} bytes)`, status, authority });
+    peak = Math.max(peak, lamports + cost + held); lamports += cost; steps.push({ what: `program ${p} ${id.toBase58()} (${len} bytes)`, status, authority });
   }
   // accounts created by the initialisation (rent kept) + ~5000 lamports per transaction
   const acct = async (label, bytes, n = 1) => { const r = (await rent(bytes)) * n + 5000 * n; lamports += r; breakdown.push([label, `${n} x rent(${bytes}) + fees = ${fmtSol(r)}`]); };
@@ -72,8 +73,8 @@ async function plan({ cfg, network, rpc, deployerPk, programDir, tokens, binPool
   const ns = sealedPools(cfg).length; if (ns) { await acct('batch committee', SIZES.committee); await acct('sealed pools + first batches', SIZES.sealedPool + SIZES.batch, ns); }
   let balance = null;
   if (conn && deployerPk) { try { balance = await conn.getBalance(deployerPk); } catch {} }
-  // programs are deployed one after another, so only one write buffer is held at a time
-  return { reachable: reach.ok, rpcError: reach.error, steps, spent: lamports, maxBuffer, lamports: lamports + maxBuffer, breakdown, balance };
+  // programs are deployed one after another, so only one write buffer is held at a time, on top of what is kept so far
+  return { reachable: reach.ok, rpcError: reach.error, steps, spent: lamports, maxBuffer, lamports: Math.max(peak, lamports), breakdown, balance };
 }
 
 /// Config "sealed": the bin pools that get sealed batches (ids), and their parameters in program units.
@@ -130,7 +131,7 @@ async function main() {
   console.log('\nEstimated cost (upper bound; rent from ' + (p.reachable ? 'the RPC' : 'the formula (128 + bytes) x 6960 lamports, RPC unreachable') + '):');
   for (const [k, v] of p.breakdown) console.log(`  ${k.padEnd(22)} ${v}`);
   console.log(`  ${'SPENT (kept as rent)'.padEnd(22)} ${fmtSol(p.spent)}`);
-  console.log(`  ${'NEEDED (peak balance)'.padEnd(22)} ${fmtSol(p.lamports)}  = spent + the largest write buffer ${fmtSol(p.maxBuffer)}, refunded after each program${p.balance !== null ? '\n  deployer balance       ' + fmtSol(p.balance) : ''}`);
+  console.log(`  ${'NEEDED (peak balance)'.padEnd(22)} ${fmtSol(p.lamports)}  = the most held at once: rent kept so far + the write buffer of the program going up (refunded after each, largest first)${p.balance !== null ? '\n  deployer balance       ' + fmtSol(p.balance) : ''}`);
   if (args.dryRun) { console.log('\nDry run: nothing was sent.'); return; }
 
   if (!p.reachable) { console.error('RPC unreachable: ' + p.rpcError); process.exit(1); }
