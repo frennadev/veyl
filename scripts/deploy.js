@@ -23,7 +23,7 @@ const KEY_OF = { veyl_pool: 'pool', veyl_bin: 'bin', veyl_entry: 'entry' };
 const solBin = () => { const d = process.env.SOLANA_BIN || '/opt/solana/bin'; return fs.existsSync(path.join(d, 'solana')) ? path.join(d, 'solana') : 'solana'; };
 const fmtSol = (l) => (Number(l) / 1e9).toFixed(4) + ' SOL';
 
-/// Account sizes in bytes (measured on a local validator: `node scripts/measure-accounts.js`), for the rent estimate.
+/// Account sizes in bytes (measured on a local validator), for the rent estimate. Update after a change to an account layout.
 const SIZES = require('../config/account-sizes.json');
 
 /// What the deploy would do, from the chain (or "unknown" when the RPC is unreachable), plus the cost.

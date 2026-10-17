@@ -13,14 +13,14 @@ solana-keygen new -o ~/keys/veyl/devnet-relayer.json       # relayer hot wallet 
 solana-keygen new -o ~/keys/veyl/devnet-postman.json       # publishes the approved set
 export DEPLOYER_KEYPAIR=~/keys/veyl/devnet-deployer.json
 export RELAYER_PUBKEY=$(solana-keygen pubkey ~/keys/veyl/devnet-relayer.json) POSTMAN_PUBKEY=$(solana-keygen pubkey ~/keys/veyl/devnet-postman.json)
-solana airdrop 5 $(solana-keygen pubkey $DEPLOYER_KEYPAIR) -u devnet     # repeat (or faucet.solana.com) to ~14 SOL
+solana airdrop 5 $(solana-keygen pubkey $DEPLOYER_KEYPAIR) -u devnet     # repeat (or faucet.solana.com): the dry-run below prints the amount (NEEDED)
 npm run preflight -- --network devnet                      # all green except the dev-setup warning
 npm run deploy -- --network devnet --dry-run               # plan + cost, sends nothing
 npm run deploy -- --network devnet                         # writes deploy.devnet.json (+ site/veyl.config.js); re-runs skip what exists
 git add deploy.devnet.json && git commit -m "devnet deploy" && git push   # public addresses only; the hosts build from it
 ```
 Then create the Render blueprint (`render.yaml`: relayer + static site) and set the secrets below; or build the site yourself:
-`RELAYER_URL=https://<relayer> npm run build:site -- --network devnet` and upload `dist/site/` (`vercel deploy dist/site`, `netlify deploy --dir dist/site`). `GO-LIVE.command` (NET=devnet) does the same on your Mac with one key.
+`RELAYER_URL=https://<relayer> npm run build:site -- --network devnet` and upload `dist/site/` (`vercel deploy dist/site`, `netlify deploy --dir dist/site`). `VEYL-DEVNET.command` does all of this on your Mac with one key, plus seeding and two public links (`START-HERE-DEVNET.md`).
 
 ## Mainnet (only after Before mainnet)
 ```bash
@@ -30,7 +30,7 @@ npm run keys:mainnet        # fresh program keypairs there (reused if present), 
                             # npm run build:mainnet -> target/deploy-mainnet/, and checks every .so carries the mainnet IDs
                             # (its own and the ones it calls) and no dev ID. Devnet/local IDs are unchanged.
 # edit config/mainnet.json: remove every "VERIFY: ..." (RPC, USDC/USDT mints, launch prices, postman, relayer, relayerUrl)
-export DEPLOYER_KEYPAIR=~/keys/veyl/mainnet-deployer.json PROGRAM_KEYPAIR_DIR=$MAINNET_KEYPAIR_DIR CEREMONY_PTAU=~/keys/veyl/powersOfTau28_hez_final_14.ptau
+export DEPLOYER_KEYPAIR=~/keys/veyl/mainnet-deployer.json PROGRAM_KEYPAIR_DIR=$MAINNET_KEYPAIR_DIR CEREMONY_PTAU_14=~/keys/veyl/powersOfTau28_hez_final_14.ptau CEREMONY_PTAU_15=~/keys/veyl/powersOfTau28_hez_final_15.ptau
 npm run preflight -- --network mainnet                     # must be fully green (re-verifies the whole ceremony)
 npm run deploy -- --network mainnet --dry-run
 npm run deploy -- --network mainnet --confirm-mainnet      # asks you to type "mainnet"
@@ -44,8 +44,9 @@ handover, and list only classic SPL Token mints (USDC, USDT, wrapped SOL): no tr
 
 ## Cost (computed by `--dry-run`)
 Per program: rent(45+len) + rent(36) kept, plus a write buffer rent(37+len) held while that program uploads (refunded); rent(n) = (128+n) x 6,960 lamports; ~1 tx per KB x 5,000 lamports. Accounts: sizes in `config/account-sizes.json`.
-- **Devnet** (5 pools, mock mints): **13.73 SOL** kept, **18.98 SOL** peak balance needed (Phase 1 grew `veyl_bin` to 755 KB and `veyl_entry` to 664 KB).
-- **Mainnet** (SOL/USDC/USDT, 3 bin pools): **13.55 SOL** kept, **18.80 SOL** peak. Plus priority fees if you set `PRIORITY_FEE_MICROLAMPORTS`.
+Programs today: `veyl_pool` 768 KB, `veyl_bin` 782 KB, `veyl_entry` 1.6 MB, so the programs alone keep about 16 SOL on any network and the largest write buffer adds 8.1 SOL to the peak.
+- **Devnet**, the 12 built-in pools, mock mints (dry-run, Oct 2026): **16.67 SOL** kept, **24.80 SOL** peak. Seeding adds ~0.25 SOL a pool; `VEYL-DEVNET.command` adds that and 2 SOL for the faucet, then prints the total (about 30 SOL for 12 pools; all 83 pools need roughly twice that).
+- **Mainnet** (SOL/USDC/USDT, 3 bin pools): about **16.4 SOL** kept, **24.5 SOL** peak (same programs; run the dry-run for the exact figure). Plus priority fees if you set `PRIORITY_FEE_MICROLAMPORTS`.
 - Paid later by whoever needs them (never refunded: there is no close instruction yet): a bin array (60 bins, 9,664 bytes) **0.0682 SOL**,
   a share account (one owner, 60 bins, 6,864 bytes) **0.0487 SOL**, a reward vault 0.0020 SOL. The relayer's fee floor charges
   the arrays and share accounts a private add, order, zap or rebalance creates.
@@ -130,7 +131,7 @@ bins: about 70 bins in total fit one 4,096-byte transaction. The local validator
 - **Created by the deploy**: `init_shield` (upgrade authority; the shielded pool is the PDA `["shield"]` of veyl_pool, with
   the postman you configure), its vault per token (the ATA of that PDA), and lookup-table entries for the shield, the
   shielded owner, the LpAcc and aggregate share accounts. `npm run handover` moves the shield authority and postman with the
-  other roles; preflight checks the three verifying keys (withdraw, transact, position) baked into `veyl_pool.so`.
+  other roles; preflight checks the five verifying keys (withdraw, transact, position, swap, claim) baked into `veyl_pool.so`.
 - **Postman**: the relayer process admits pending deposits every `ADMIT_INTERVAL_MS` (default 5 s) when it runs with
   `POSTMAN_SECRET_KEY`. Until admitted, a depositor can take a deposit back.
 - **Relayer fees** for shielded actions are flat amounts (`POST /fee` with `kind` = `transact`, `shieldSwap`, `shieldLp`,

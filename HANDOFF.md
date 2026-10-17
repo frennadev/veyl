@@ -1,7 +1,7 @@
 # Veyl handoff: start here
 
-Welcome. This is the brief for picking the project up. Read this, then `CLAUDE.md` (the short project brief), then the doc
-each task points to. Everything an engineer needs is in this repo; secrets are not, and never go in it.
+Welcome. This is the brief for picking the project up. Read this, then the doc each task points to
+(`CLAUDE.md` is the same brief, condensed for Claude Code). Everything an engineer needs is in this repo; secrets are not, and never go in it.
 
 ## What Veyl is (one paragraph)
 A private DLMM on Solana: Meteora-style concentrated-liquidity bin pools where nobody can link a position, swap or fee claim
@@ -24,7 +24,8 @@ committee for sealed swaps (`committee/`). `README.md` = architecture, `PRIVACY.
    Rust + `cargo-build-sbf` only if you rebuild the programs (`npm run build`); the built `.so` files are in `target/deploy`.
 2. `npm ci`
 3. Quick check: `node e2e/smoke.js` (3 min, no validator). Then `node e2e/local.js` (starts a local validator, 2 min).
-4. Browser demo with no chain at all: serve `site/` and open `app.html?mode=sandbox-dev` (real proofs, simulated chain).
+4. Browser demo with no chain at all: `npm run build:site -- --network local && npm run serve:site`, then open
+   `http://localhost:8873/app.html?mode=sandbox-dev` (real proofs, simulated chain; the build writes the sandbox config).
 5. `npm run bundle` after editing `site/sol-entry.js`, `shield-engine.js`, `sealed-engine.js` or `sdk/`.
 
 Tests share `deploy.local.json` and the validator ports: never run two suites at once.
@@ -42,7 +43,7 @@ Tests share `deploy.local.json` and the validator ports: never run two suites at
 ### Day 1: devnet live and permanent (≈ 1 day)
 1. **Finish the devnet deploy.** Either the owner's Mac run completes (then commit `deploy.devnet.json`), or deploy your own
    devnet instance with your own throwaway key: `CORE_ONLY=1 ./VEYL-DEVNET.command` or the manual steps in `DEPLOY.md`.
-   Needs about 33 devnet SOL (faucet.solana.com, other devnet faucets, or any devnet wallet). A paid/free RPC key (Helius,
+   The launcher prints the SOL it needs: about 30 for the 12 core pools (faucet.solana.com, other devnet faucets, or any devnet wallet). A paid/free RPC key (Helius,
    QuickNode) avoids public-RPC rate limits during the program deploy: `RPC_URL=...`.
    If a program deploy dies half-way, reclaim the SOL in abandoned buffers: `solana program close --buffers -k <key> -u devnet`.
 2. **Host it.** Site on Vercel (`RELAYER_URL=https://<relayer> npm run build:site -- --network devnet`, deploy `dist/site/`)
@@ -82,7 +83,7 @@ Tests share `deploy.local.json` and the validator ports: never run two suites at
 - Batched liquidity actions ("Phase 4": hide each add/remove inside a per-minute batch, like sealed swaps). Proposed, not
   started; needs a new circuit, so it belongs before or inside the audit, not after.
 - Copy: the owner may rename "price bins" to "price levels" in user-facing text (undecided).
-- Rebrand directions are in `design/rebrand-options/` (open the `.dc.html` boards in a browser; `canvas.json` lays them out).
+- Rebrand directions are in `archive/design/rebrand-options/` (open the `.dc.html` boards in a browser; `canvas.json` lays them out).
 
 ## Time estimate for an experienced Solana + ZK engineer
 - Devnet live, hosted and walked through: **1 day** (mostly waiting on devnet SOL).
@@ -92,6 +93,6 @@ Tests share `deploy.local.json` and the validator ports: never run two suites at
 ## What only the owner can do
 - Add collaborators on GitHub; create the Vercel / Render accounts (or invite you); devnet SOL top-ups if using the
   owner's deployer.
-- Pick ceremony contributors and multisig signers; buy the mainnet SOL (about 19 SOL peak, about 13.5 SOL stays as rent);
+- Pick ceremony contributors and multisig signers; buy the mainnet SOL (about 25 SOL peak, about 16.5 SOL stays as rent; `DEPLOY.md` Cost);
   provide launch liquidity; book the audit; get legal advice before taking public deposits.
 - Run the mainnet deploy with their own keys.

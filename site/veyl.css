@@ -1,10 +1,9 @@
 /* ============================================================================
-   Veyl design system. One stylesheet for the home page, the protocol and
-   liquidity pages, the docs and the testnet app.
+   Veyl design system. One stylesheet for the home page, the docs and the app.
 
-   Palette: near-black ink ground, oxblood for primary buttons and surfaces,
-   a dusty rose for the signal that travels through the proof (and for
-   highlights), satin silver for dividers, hardware and mono data.
+   Palette: black ground (--paper #0A0B09) and one green accent (#C8F560).
+   Older token names (--oxblood, --wine, --rose, --gold, --blush) are kept
+   as aliases of that accent so earlier rules keep working.
    Type: Manrope for everything that is read, oversized and tightly tracked
    for display; IBM Plex Mono only for instruction names, code and data.
    Dark by default: the instrument render is re-graded for this ground.

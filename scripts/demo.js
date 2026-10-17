@@ -7,8 +7,11 @@ const { spawn } = require('child_process'); const path = require('path'); const 
 const { Keypair, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 const { ROOT, RPC_PORT, startValidator, fund, units, sleep } = require('./lib.js');
 const RELAYER_PORT = Number(process.env.PORT || 8843), WEB_PORT = 8873;
-const MIME = { html: 'text/html', css: 'text/css', js: 'application/javascript', png: 'image/png', webp: 'image/webp', json: 'application/json', wasm: 'application/wasm', zkey: 'application/octet-stream' };
-function serveSite(port) { return http.createServer((req, res) => { let f = req.url.split('?')[0]; f = f === '/' ? '/index.html' : f; const fp = path.join(ROOT, 'site', f); if (!fs.existsSync(fp) || fs.statSync(fp).isDirectory() || f.startsWith('/_')) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': MIME[f.split('.').pop()] || 'application/octet-stream' }); fs.createReadStream(fp).pipe(res); }).listen(port); }
+const MIME = { html: 'text/html', css: 'text/css', js: 'application/javascript', png: 'image/png', svg: 'image/svg+xml', webp: 'image/webp', json: 'application/json', wasm: 'application/wasm', zkey: 'application/octet-stream' };
+/// Serves site/ as it is (edit and reload, no build). The circuits and proving keys are read from zk/ and the logos from brand/,
+/// as build-site.js does for dist/site/, so neither is copied into site/.
+function serveSite(port) { const find = (f) => { const b = path.basename(f); if (f.startsWith('/brand/')) return path.join(ROOT, f); if (b.endsWith('.zkey')) return path.join(ROOT, 'zk/keys', b); if (b.endsWith('.wasm')) return path.join(ROOT, 'zk/build', b); return path.join(ROOT, 'site', f); };
+  return http.createServer((req, res) => { let f = path.posix.normalize(decodeURIComponent(req.url.split('?')[0])); f = f === '/' ? '/index.html' : f; const fp = find(f); if (f.includes('..') || f.startsWith('/_') || !fs.existsSync(fp) || fs.statSync(fp).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': MIME[f.split('.').pop()] || 'application/octet-stream' }); fs.createReadStream(fp).pipe(res); }).listen(port); }
 if (require.main === module) (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-demo-')); const payer = Keypair.generate(); const payerFile = path.join(dir, 'payer.json'); fs.writeFileSync(payerFile, JSON.stringify([...payer.secretKey]));
   console.log('starting a local validator on :' + RPC_PORT); const { val, rpc, conn } = await startValidator(dir, payer, RPC_PORT);

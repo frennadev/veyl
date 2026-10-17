@@ -6,6 +6,8 @@ target/debug/
 target/sbf-solana-solana/
 target/sbpf-solana-solana/
 target/*/
+target/.rustc_info.json
+target/CACHEDIR.TAG
 !target/deploy/
 target/deploy/*.so.tmp
 .anchor/
@@ -41,3 +43,7 @@ veyl-contribution-*.json
 site/_retired/
 e2e/_*
 site/veyl.keys.js
+# circuits and proving keys live in zk/ only (build-site.js and demo.js read them from there)
+site/*.zkey
+site/*.wasm
+__pycache__/

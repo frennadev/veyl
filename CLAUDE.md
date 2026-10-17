@@ -1,6 +1,7 @@
 # Veyl: notes for Claude Code
 
-Read this first, then README.md (architecture), DEPLOY.md (deploy), PRIVACY.md (what's hidden), REVIEW.md (security review).
+This is the condensed brief; HANDOFF.md is the full one (state, setup, ordered tasks). Then README.md (architecture), DEPLOY.md
+(deploy), PRIVACY.md (what's hidden), REVIEW.md (security review).
 
 ## What Veyl is
 Private concentrated liquidity on Solana, "a private Meteora": DLMM-style bin pools where nobody can link a position, swap or
@@ -24,13 +25,14 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 - Pools are curated (Delta-style, not Meteora-style): only the factory authority lists pools; there is no Create page. Open pool
   creation is a roadmap item (ROADMAP.md "Later"), not a current feature: don't add one without the owner asking.
 - Lookup tables: one table holds 256 addresses, so the deploy makes several (`dep.lookupTables`); SDK `V.lookupExtra`, engine `_luts()`.
-- Cost on devnet: all 83 pools ≈ 62 devnet SOL (deploy ~40 peak + seeding ~0.23 SOL/pool); `CORE_ONLY=1` ≈ 38.
+- Cost on devnet: the launcher prints it (dry-run peak + ~0.25 SOL/pool seeding + 2 SOL faucet). `CORE_ONLY=1` (12 pools) ≈ 30;
+  all 83 roughly twice that. Note: CORE_ONLY's 12 pools ≠ lib.js `CORE_POOLS` (5, for tests).
 
 ## Recent features (all tested)
 - No-wallet mode ("Get started" → "No wallet needed"): an in-browser deposit address (`localKeypair/connectLocal/localSweep` in
   site/sol-entry.js), funded from any wallet/exchange; key goes into the encrypted backup. Wallet connect is the second option.
 - Native SOL is wrapped automatically on deposit (`wrapIxs`).
-- Relayer faucet `POST /drip` (devnet/local only, `FAUCET_KEY`): core basket, or a pool's own pair (`tokens: [..]`), 6 h limits.
+- Relayer faucet `POST /drip` (devnet/local only, `FAUCET_KEY` = key file path or `FAUCET_SECRET_KEY` = the key itself): core basket, or a pool's own pair (`tokens: [..]`), 6 h limits.
 - Pro LP tools in app.html: volatility-sized range presets (Tight/Balanced/Wide), position simulator (fees vs holding at ±30%),
   portfolio summary, per-position edge distance / USD worth / fee APR.
 - Receive (Portfolio → Veyl address → Receive): QR code + payment link `app.html#pay=veyl:…&a=<amount>&t=<token>`; opening a link

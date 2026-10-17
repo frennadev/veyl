@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // npm run preflight -- --network <local|devnet|mainnet>
 // Prints a green/red table: tools, build vs program IDs, the Groth16 verifying key baked into veyl_pool vs
-// zk/keys/withdraw_vkey.json (hash compare), zkey/wasm hashes (zk/, site/, dist/site/), the trusted setup (mainnet: the
+// zk/keys/withdraw_vkey.json (hash compare), zkey/wasm hashes (zk/, dist/site/), the trusted setup (mainnet: the
 // multi-party ceremony is re-verified, ceremony/check.mjs), RPC + cluster, deployer balance vs the estimated cost, mints, env,
 // who holds each role of a live deployment, and open blocking findings. Exit code 1 when anything is red.
 // Never prints secret key material. An unreachable RPC is reported as red, not a crash.
@@ -122,12 +122,12 @@ async function preflight({ network, quiet = false }) {
       const pick = (k) => JSON.stringify([k.protocol, k.curve, k.nPublic, k.vk_alpha_1, k.vk_beta_2, k.vk_gamma_2, k.vk_delta_2, k.IC]);
       add(`${name}: zkey embeds ${name}_vkey.json`, pick(ev) === pick(vk) ? 'ok' : 'red', pick(ev) === pick(vk) ? 'snarkjs export matches' : 'the proving key and the verifying key disagree');
     } catch (e) { add(`${name}: zkey embeds ${name}_vkey.json`, 'red', 'could not read the zkey: ' + e.message); }
-    // the site's copies (and the built site, when there is one): site/ holds the plain names; dist/site/ the content-hashed copies
-    for (const dir of ['site', 'dist/site']) {
-      if (dir === 'dist/site' && !fs.existsSync(path.join(R, dir))) continue;
+    // the built site, when there is one: dist/site/ holds content-hashed copies (site/ has none; demo.js serves zk/ directly)
+    for (const dir of ['dist/site']) {
+      if (!fs.existsSync(path.join(R, dir))) continue;
       const files = fs.readdirSync(path.join(R, dir)); const hashed = (ext) => files.find((f) => new RegExp(`^${name}(_final)?\\.[0-9a-f]+\\.${ext}$`).test(f) && (ext === 'wasm' ? !f.includes('_final') : f.includes('_final')));
-      const z = path.join(R, dir, dir === 'site' ? `${name}_final.zkey` : hashed('zkey') || 'missing');
-      const w = path.join(R, dir, dir === 'site' ? `${name}.wasm` : hashed('wasm') || 'missing');
+      const z = path.join(R, dir, hashed('zkey') || 'missing');
+      const w = path.join(R, dir, hashed('wasm') || 'missing');
       const okZ = fs.existsSync(z) && N.sha256File(z) === zH, okW = fs.existsSync(w) && N.sha256File(w) === wasmHash;
       add(`${name}: ${dir}/ zkey + wasm hashes`, okZ && okW ? 'ok' : 'red', okZ && okW ? 'identical to zk/' : (!okZ ? `${name}_final.zkey differs/missing ` : '') + (!okW ? `${name}.wasm differs/missing` : ''));
     }

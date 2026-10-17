@@ -69,7 +69,7 @@ Only one honest contributor is needed, so the goal is that nobody can believe *a
 1. **Announce** the participant list and the order.
 2. **Commit to the beacon** before the first contribution: a Bitcoin block height `H` to be mined after the planned close
    (or a drand round). Nobody can know its value while contributions are open.
-3. **Contributions**, one participant at a time; each contributes to withdraw, transact and position in that order. Someone
+3. **Contributions**, one participant at a time; each contributes to all five circuits (withdraw, transact, position, swap, claim) in that order. Someone
    who does not show up is moved to the end (`skip`).
 4. **Beacon** once block `H` exists (the same value closes every circuit). **Verify. Finalize.** Publish the transcript and
    every intermediate key.
@@ -103,7 +103,7 @@ npm run build && npm test && npm run preflight -- --network mainnet
 ```
 
 `finalize` writes, per circuit, `zk/keys/<name>_final.zkey`, `zk/keys/<name>_vkey.json`, the program's verifying key
-(`programs/veyl_pool/src/vkey.rs`, `vkey_transact.rs`, `vkey_position.rs`), `site/<name>_final.zkey`; and once
+(`programs/veyl_pool/src/vkey.rs` for withdraw, `vkey_<name>.rs` for the others), a `site/<name>_final.zkey` copy (gitignored: the site build reads `zk/keys`); and once
 `zk/keys/SETUP.json` (kind `ceremony`, every circuit's hashes), `zk/keys/contribution.log`, `ceremony/TRANSCRIPT.md` (a
 section per circuit) and `ceremony/transcript.json`. The wasm files do not change. Commit, publish every intermediate key
 from `ceremony/work/`, rebuild and redeploy `veyl_pool`.
@@ -111,7 +111,7 @@ from `ceremony/work/`, rebuild and redeploy `veyl_pool`.
 ## The participant's one command
 
 ```bash
-git clone <repo> && cd veyl-sol && npm ci
+git clone <repo> && cd veyl && npm ci
 npm run ceremony -- contribute --coordinator https://<coordinator>:8853 --token <your token>
 ```
 
@@ -136,6 +136,8 @@ npm run ceremony -- r1cs                                                # every 
 npm run ceremony -- verify --circuit withdraw --zkey zk/keys/withdraw_final.zkey --ptau powersOfTau28_hez_final_14.ptau
 npm run ceremony -- verify --circuit transact --zkey zk/keys/transact_final.zkey --ptau powersOfTau28_hez_final_15.ptau
 npm run ceremony -- verify --circuit position --zkey zk/keys/position_final.zkey --ptau powersOfTau28_hez_final_15.ptau
+npm run ceremony -- verify --circuit swap --zkey zk/keys/swap_final.zkey --ptau powersOfTau28_hez_final_15.ptau
+npm run ceremony -- verify --circuit claim --zkey zk/keys/claim_final.zkey --ptau powersOfTau28_hez_final_14.ptau
 ```
 
 Check that each `verify` prints OK; the contribution hashes match what each contributor posted, at least 3 independent ones

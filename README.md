@@ -2,12 +2,12 @@
 
 > New here? Start with **HANDOFF.md** (state, setup, the ordered task list), then CLAUDE.md.
 
-Private liquidity on Solana. Concentrated (DLMM-style) pools where nobody can link a position, a swap or the fees it earns back to your wallet. **Phase 3** adds sealed batch swaps: each swap's size is encrypted to a 2-of-3 committee key inside its proof, swaps are batched per pool and epoch, only each direction's total is decrypted, and the batch clears with one net swap (two new circuits, `swap` and `claim`; `committee/`). **Phase 2** hides balances, transfers and liquidity position sizes in one shielded pool (two new circuits, `transact` and `position`); entry and exit amounts, every amount at a pool, bin reserves and prices stay public (PRIVACY.md). Phase 1 adds Meteora-grade LP mechanics with that ownership model intact: bin bitmaps (swaps skip empty ranges), claimable per-position fees and a protocol share, limit orders, one-instruction rebalancing, zaps and farm rewards, each with a private variant (one-time keys, proofs, the relayer). Port of the EVM project (`veyl3/`, Robinhood Chain) to three Anchor programs, with the zero-knowledge circuit, proving key and verifying key **unchanged**.
+Private liquidity on Solana. Concentrated (DLMM-style) pools where nobody can link a position, a swap or the fees it earns back to your wallet. **Phase 3** adds sealed batch swaps: each swap's size is encrypted to a 2-of-3 committee key inside its proof, swaps are batched per pool and epoch, only each direction's total is decrypted, and the batch clears with one net swap (two new circuits, `swap` and `claim`; `committee/`). **Phase 2** hides balances, transfers and liquidity position sizes in one shielded pool (two new circuits, `transact` and `position`); entry and exit amounts, every amount at a pool, bin reserves and prices stay public (PRIVACY.md). Phase 1 adds Meteora-grade LP mechanics with that ownership model intact: bin bitmaps (swaps skip empty ranges), claimable per-position fees and a protocol share, limit orders, one-instruction rebalancing, zaps and farm rewards, each with a private variant (one-time keys, proofs, the relayer). Port of the EVM project (`veyl3/`, Robinhood Chain) to three Anchor programs, with the original withdraw circuit and its keys **unchanged** (Phases 2 and 3 added the other four circuits).
 
 **Status: testnet / devnet only.** Not audited. The five proving keys (withdraw, transact, position, swap, claim) were generated on a single machine, and the local batch committee runs on one machine; a proper multi-party key ceremony (public Powers of Tau + a phase-2 ceremony with independent contributors) is required before mainnet. The ceremony kit covers all five circuits and is rehearsed (`ceremony/`), the ceremony itself has not happened. An internal security review (`REVIEW.md`) found and fixed 1 High and 6 Medium issues; it is not an external audit. Nothing here should hold real money.
 
 ```
-veyl-sol/
+veyl/
   programs/veyl_pool/   the shielded pool (one tree, every token: post_proof, shield_deposit/approve/cancel, shield_transact, entry-only CPIs)
                         + the Phase 1 per-mint pools: Poseidon note tree, Groth16 verify (groth16-solana, 3 vkeys), nullifier PDAs, ASP roots, ragequit
   programs/veyl_bin/    bin pools + factory: 128.128 price maths, volatility fee, bitmaps, mint/burn/swap/quote, fee growth + claims,
@@ -45,10 +45,10 @@ npm install
 npm run build        # regenerates programs/veyl_pool/src/vkey*.rs from zk/keys/*_vkey.json, then builds the three programs
 npm test             # local validator on 8933 → deploy → 298 tests (about nineteen minutes: Phase 3 waits out batch epochs and settlement windows; real Groth16 proofs are made in Node)
 npm run e2e          # local validator + relayer + the real app in Chromium with a mock wallet (67 checks; about 17 minutes)
-npm run e2e:smoke    # the production build, every page and view on a desktop and a phone, every control clicked, zero console errors; a 4x slower CPU, a slow network, a reload mid-proof, two tabs, localStorage blocked (about 11 minutes)
+npm run e2e:smoke    # the production build, every page and view on a desktop and a phone, every control clicked, zero console errors; a 4x slower CPU, a slow network, a reload mid-proof, two tabs, localStorage blocked (about 3 minutes)
 npm run ceremony:rehearse -- --ptau <prepared ptau>   # the whole key ceremony (5 circuits) on one machine, then on-chain transact proofs and a full sealed batch with its keys
 ./GO-LIVE.command    # everything local; FUND=<your wallet> gives it mock tokens; site on http://localhost:8873
-NET=devnet ./GO-LIVE.command   # throwaway deployer key, faucet SOL, deploy + mock mints on devnet, relayer + site
+./VEYL-DEVNET.command          # devnet: throwaway deployer key, faucet SOL, deploy + seed, relayer + site + public links (START-HERE-DEVNET.md)
 ```
 
 Ports: validator RPC **8933** (websocket 8934, gossip 11933), relayer **8843**, site **8873**, local committee nodes **8863-8865**. The brief assigned RPC 8913, but a test validator always takes rpc+1 for pubsub and 8914 is a sibling project's RPC port, so the two could not run side by side; `RPC_PORT=8913 npm test` still works when nothing is on 8914.
@@ -84,7 +84,7 @@ Deploying (devnet, and mainnet once the ceremony and an audit are done): **DEPLO
 | `VeylEntrypoint` + `poolOf` registry | `veyl_entry`; pools are derived, no registry, no owner | processor = signer PDA `["signer"]`; its ATAs hold funds only within one instruction |
 | `relay / privateSwap / privateAdd / privateRemove` | `relay / private_swap / private_add / private_remove` | |
 | EIP-712 remove signature | ed25519 instruction + instructions-sysvar introspection; digest = sha256("veyl-remove-v1", program id, borsh(RemoveData)); `Nonce` PDA `["nonce", owner]` | |
-| gas table | compute units (see `site/protocol.html`) | big relayer transactions use a v0 transaction with an address lookup table the deploy creates |
+| gas table | compute units (see `DEPLOY.md`) | big relayer transactions use a v0 transaction with an address lookup table the deploy creates |
 
 ## Audit findings (EVM report) and what changed
 
@@ -178,4 +178,4 @@ The app's **Markets** page lists live liquidity pools across Solana DEXes (Gecko
 
 ## Site
 
-Same design system and copy as the EVM site; chain copy changed to Solana (devnet instead of Robinhood testnet, SOL fees, base58 addresses, program names, compute units). `app.html` without a `veyl.config.js` runs its labelled demonstration; `GO-LIVE.command` writes the config. `PREVIEW=1 npm run dist` builds the shareable demonstration preview.
+`app.html` without a `veyl.config.js` runs its labelled demonstration; `GO-LIVE.command` writes the config. `PREVIEW=1 npm run dist` builds the shareable demonstration preview.
