@@ -83,7 +83,7 @@ async function deployPrograms(rpc, payerFile) {
 /// The core set the local validator and the tests deploy by default (config/local.json); devnet adds the rest via config/devnet.json.
 const CORE_TOKENS = TOKENS.filter((t) => ['SOL', 'USDC', 'USDT', 'JUP', 'BONK'].includes(t.sym));
 const CORE_POOLS = BIN_POOLS.filter((b) => ['sol-usdc', 'sol-usdt', 'jup-sol', 'bonk-sol', 'usdt-usdc'].includes(b.id));
-async function deployAll({ rpc, payerFile, mints = {}, postman, relayer, network = 'local', deploy = true, tokens = CORE_TOKENS, binPools = CORE_POOLS, existing = null, programs = null, protocolShareBps = null, log = () => {} }) {
+async function deployAll({ rpc, payerFile, mints = {}, postman, relayer, network = 'local', deploy = true, tokens = CORE_TOKENS, binPools = CORE_POOLS, existing = null, programs = null, protocolShareBps = null, publicRpc = null, log = () => {} }) {
   const payer = readKey(payerFile); const conn = new Connection(rpc, 'confirmed');
   if (deploy) await deployPrograms(rpc, payerFile);
   const V = new Veyl({ connection: conn, programs: programs || programIds(), payer });
@@ -127,7 +127,7 @@ async function deployAll({ rpc, payerFile, mints = {}, postman, relayer, network
   const tables = await V.fillLookupTables(payer, statics, priorLuts); const table = tables[0]; V.lookupTable = table; V.lookupExtra = tables.slice(1);
   did('lookup tables ' + tables.length + ' (' + statics.length + ' addresses)', tables.length > priorLuts.length);
   const slot = await conn.getSlot('confirmed');
-  const dep = { network, rpc, deployer: payer.publicKey.toBase58(), slot, programs: { pool: V.programs.pool.toBase58(), bin: V.programs.bin.toBase58(), entry: V.programs.entry.toBase58() }, postman: postman.toBase58(), relayer: relayer.toBase58(), lookupTable: table.toBase58(), lookupTables: tables.slice(1).map((t) => t.toBase58()),
+  const dep = { network, rpc: publicRpc || rpc, deployer: payer.publicKey.toBase58(), slot, programs: { pool: V.programs.pool.toBase58(), bin: V.programs.bin.toBase58(), entry: V.programs.entry.toBase58() }, postman: postman.toBase58(), relayer: relayer.toBase58(), lookupTable: table.toBase58(), lookupTables: tables.slice(1).map((t) => t.toBase58()),
     shield: V.shieldPda().toBase58(), shieldOwner: V.shieldOwner().toBase58(),
     tokens: Object.fromEntries(Object.values(T).map((t) => [t.sym, { mint: t.mint.toBase58(), decimals: t.decimals, pool: t.pool.toBase58(), minDeposit: t.minDeposit, price: t.price }])),
     binPools: BP.map((b) => ({ id: b.id, x: b.x, y: b.y, binStep: b.binStep, baseFee: b.baseFee, address: b.address.toBase58() })), deployedAt: new Date().toISOString() };

@@ -159,11 +159,11 @@ async function main() {
   const mints = Object.fromEntries(Object.entries(cfg.mints || {}).filter(([, v]) => v && !N.isVerify(v)));
   const { deployAll } = require('./lib.js');
   if (cfg.protocolShareBps !== undefined && !(Number(cfg.protocolShareBps) >= 0 && Number(cfg.protocolShareBps) <= 2500)) { console.error('config protocolShareBps must be 0..2500 (bps of each swap fee)'); process.exit(1); }
-  const { dep } = await deployAll({ rpc, payerFile: key.file, network, deploy: false, programs, mints, postman, relayer, tokens, binPools, existing, protocolShareBps: cfg.protocolShareBps, log: (m) => console.log(m) });
+  const { dep } = await deployAll({ rpc, payerFile: key.file, network, deploy: false, programs, mints, postman, relayer, tokens, binPools, existing, protocolShareBps: cfg.protocolShareBps, publicRpc: N.isVerify(cfg.rpc) ? null : cfg.rpc, log: (m) => console.log(m) }); // deploy.<network>.json is committed: the public RPC, never an RPC_URL with an API key
   // deploy.<network>.json is written by deployAll; then the site's runtime config from it
   const { makeConfig } = require('./make-config.js');
   const relayerUrl = process.env.RELAYER_URL || (N.isVerify(cfg.relayerUrl) ? undefined : cfg.relayerUrl);
-  fs.writeFileSync(path.join(N.ROOT, 'site/veyl.config.js'), makeConfig(dep, { ...process.env, RELAYER_URL: relayerUrl, CHAIN_NAME: process.env.CHAIN_NAME || cfg.chainName, EXPLORER: process.env.EXPLORER || cfg.explorer }));
+  fs.writeFileSync(path.join(N.ROOT, 'site/veyl.config.js'), makeConfig(dep, { ...process.env, RPC_URL: process.env.SITE_RPC_URL || dep.rpc, RELAYER_URL: relayerUrl, CHAIN_NAME: process.env.CHAIN_NAME || cfg.chainName, EXPLORER: process.env.EXPLORER || cfg.explorer }));
   console.log(`\nwrote deploy.${network}.json and site/veyl.config.js`);
   // 3. Phase 3: the batch committee and sealed pools
   const sealed = await deploySealed({ cfg, network, rpc, keyFile: key.file, dep });

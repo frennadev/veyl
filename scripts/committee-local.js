@@ -3,7 +3,7 @@
 // 127.0.0.1:8863.. with fresh node keys, which run the dealerless key generation among themselves over HTTP. Returns the
 // registration for set_committee (from the transcript every node wrote) and the processes. Never for real funds: one
 // machine runs every member, so whoever controls it holds all the shares (DEPLOY.md, "Batch committee").
-//   node scripts/committee-local.js [--n 3] [--t 2] [--dir .localnet/committee]     (keeps running; Ctrl-C stops)
+//   node scripts/committee-local.js [--n 3] [--t 2] [--dir .localnet/committee] [--deploy deploy.devnet.json] [--session local-devnet-…]
 //   COMMITTEE_LOG=<file>: append every node's output there (tests otherwise discard it)
 'use strict';
 const fs = require('fs'); const path = require('path'); const { spawn } = require('child_process');
@@ -32,7 +32,7 @@ async function startLocalCommittee({ n = 3, t = 2, basePort = Number(process.env
 module.exports = { startLocalCommittee };
 if (require.main === module) {
   const a = process.argv.slice(2); const arg = (k, d) => { const i = a.indexOf('--' + k); return i >= 0 ? a[i + 1] : d; };
-  startLocalCommittee({ n: Number(arg('n', 3)), t: Number(arg('t', 2)), dir: path.resolve(arg('dir', path.join(__dirname, '../.localnet/committee'))), deployFile: arg('deploy', null), rpc: process.env.RPC_URL || null, log: console.log })
+  startLocalCommittee({ n: Number(arg('n', 3)), t: Number(arg('t', 2)), dir: path.resolve(arg('dir', path.join(__dirname, '../.localnet/committee'))), deployFile: arg('deploy', null), rpc: process.env.RPC_URL || null, ...(arg('session') ? { session: arg('session') } : {}), log: console.log })
     .then(async (c) => { console.log('committee up:', c.peers.map((p) => p.url).join(' '), '\njoint key', D.hexP(c.registration.pk).slice(0, 32) + '…', 'transcript sha256', c.registration.transcript.toString('hex'));
       // the nodes pay for their share transactions: on a local validator, airdrop them some SOL
       if (process.env.RPC_URL) { const { Connection, LAMPORTS_PER_SOL } = require('@solana/web3.js'); const conn = new Connection(process.env.RPC_URL, 'confirmed'); for (const k of c.keys) { try { await conn.requestAirdrop(k.publicKey, 10 * LAMPORTS_PER_SOL); } catch { /* not a test validator */ } } }

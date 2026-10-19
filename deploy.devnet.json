@@ -2,7 +2,7 @@
   "network": "devnet",
   "rpc": "https://api.devnet.solana.com",
   "deployer": "HfbNvwmchf8uXzeAJkqPt7XJK1etQYkMA32Eyr2YUr1i",
-  "slot": 512113182,
+  "slot": 512762851,
   "programs": {
     "pool": "BudA5kQySdfhfocWhPiDUP888tuoqL9aRxNiq9Qon73V",
     "bin": "6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk",
@@ -405,5 +405,11 @@
       "address": "2uBK1s7fWVGHpmwt57DR7osxYWxVrnr6kWrsRTYUHRrb"
     }
   ],
-  "deployedAt": "2026-10-17T15:06:23.560Z"
+  "deployedAt": "2026-10-19T10:08:22.517Z",
+  "committeeTranscript": "d4373a0c80305e471c038ccbe3fd44422e449d5b75026a08e08b097cf817482d",
+  "sealedPools": [
+    "sol-usdc",
+    "sol-usdt",
+    "usdt-usdc"
+  ]
 }
