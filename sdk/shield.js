@@ -81,6 +81,8 @@ const bytes = (x) => { if (x === undefined || x === null) return Buffer.alloc(0)
 /// TransactExt { recipient, ext_amount, relayer, fee, processor, action, mint, enc_out: Vec<Vec<u8>> }
 function encodeExt(e) { const act = e.action ? bytes(e.action) : ZERO32; if (act.length !== 32) throw new Error('action must be 32 bytes');
   return Buffer.concat([pk(e.recipient || DEFAULT_KEY), i64(e.extAmount || 0n), pk(e.relayer || DEFAULT_KEY), u64(e.fee || 0n), pk(e.processor || DEFAULT_KEY), act, pk(e.mint || DEFAULT_KEY), vec(e.encOut || [Buffer.alloc(0), Buffer.alloc(0)], (c) => { const b = bytes(c); return Buffer.concat([u32(b.length), b]); })]); }
+/// The inverse of encodeExt, from a Reader (instruction data: shield_transact, transact_cpi).
+const decodeExt = (r) => ({ recipient: r.pk(), extAmount: r.i64(), relayer: r.pk(), fee: r.u64(), processor: r.pk(), action: r.bytes(32), mint: r.pk(), encOut: r.vec(() => r.bytes(r.u32())) });
 const extHash = (e) => hashToField(Buffer.from('veyl-transact'), encodeExt(e));
 const publicAmountOf = (e) => mod(BigInt(e.extAmount || 0n) - BigInt(e.fee || 0n));
 
@@ -96,6 +98,11 @@ class Tree {
     for (let d = 0; d < this.depth; d++) { const left = idx % 2 === 0; const sib = left ? this.z[d] : this.levels[d][idx - 1]; node = left ? P(node, sib) : P(sib, node); idx >>= 1; this.levels[d + 1][idx] = node; } return this.levels[0].length - 1; }
   path(index) { const sib = []; let idx = Number(index); for (let d = 0; d < this.depth; d++) { const s = idx ^ 1; sib.push(s < this.levels[d].length ? this.levels[d][s] : this.z[d]); idx >>= 1; } return sib; }
   indexOf(c) { const s = String(c); return this.levels[0].findIndex((x) => String(x) === s); }
+  /// The tree of `leaves`: `old` extended in place when its leaves are a prefix of them (an incremental sync hashes only
+  /// the new leaves), a new tree otherwise.
+  static grow(old, leaves) { const n = old ? old.levels[0].length : -1; if (n < 0 || n > leaves.length) return new Tree(leaves.map(BigInt));
+    for (let i = 0; i < n; i++) if (old.levels[0][i] !== BigInt(leaves[i])) return new Tree(leaves.map(BigInt));
+    for (let i = n; i < leaves.length; i++) old.insert(leaves[i]); return old; }
 }
 
 // ------------------------------------------------------------------------------------------------ transact witness
@@ -129,6 +136,10 @@ function encodeLpCore(r) { return Buffer.concat([pk(r.binPool), i32(r.lo), vec(r
   u64(r.claimFee[0]), u64(r.claimFee[1]), u64(r.leftoverFee[0]), u64(r.leftoverFee[1]), be32(r.receiptOwner[0]), be32(r.receiptOwner[1]), be32(r.receiptBlinding[0]), be32(r.receiptBlinding[1]),
   u64(r.maxCharge[0]), u64(r.maxCharge[1]), pk(r.relayer), i64(r.deadline), (() => { const b = bytes(r.ciphertext); return Buffer.concat([u32(b.length), b]); })()]); }
 const i128 = (n) => { let v = BigInt(n); if (v < 0n) v += 1n << 128n; return u128(v); };
+/// The inverse of encodeLpCore, from a Reader (a shield_lp request buffer, rebuilt from its write_buffer instructions).
+function decodeLpCore(r) { const c = { binPool: r.pk(), lo: r.i32(), deltas: r.vec(() => { const v = r.u128(); return v >= 1n << 127n ? v - (1n << 128n) : v; }), hintX: r.vec(() => r.u64()), hintY: r.vec(() => r.u64()) };
+  c.zap = r.u8() === 1 ? { xIn: r.bool(), amount: r.u64(), minOut: r.u64() } : null; c.claimFee = [r.u64(), r.u64()]; c.leftoverFee = [r.u64(), r.u64()];
+  c.receiptOwner = [r.be32(), r.be32()]; c.receiptBlinding = [r.be32(), r.be32()]; c.maxCharge = [r.u64(), r.u64()]; c.relayer = r.pk(); c.deadline = r.i64(); c.ciphertext = r.bytes(r.u32()); return c; }
 const lpExtHash = (r) => hashToField(Buffer.from('veyl-lp'), encodeLpCore(r));
 const lpAction = (r) => sha(Buffer.from('veyl-lp-action'), encodeLpCore(r));
 /// Fees a position can claim from growth H: per token { P, q, r } with P = sum(shares * H) - debt (must be in [0, 2^128)).
@@ -168,7 +179,7 @@ function positionInput({ tree, sk, binPool, lo, note, delta, growth, assets, fee
 /// Groth16 proof -> the 256 bytes the programs take, and the public signals (any count).
 
 module.exports = { bytes, DEPTH, K, SHARE_BITS, NOTE, P, mod, hashToField, assetOf, orderAssetOf, posAssetOf, keysFromSeed, oneTime, encodeAddress, decodeAddress, commitmentOf, nullifierOf, randField,
-  seal, open, encodeNote, encodePosition, decodePlain, assetOfNote, encodeExt, extHash, publicAmountOf, Tree, transactInput, hash16, positionDigest, positionCommitment, bundleOf, encodeLpCore, lpExtHash, lpAction,
+  seal, open, encodeNote, encodePosition, decodePlain, assetOfNote, encodeExt, decodeExt, extHash, publicAmountOf, Tree, transactInput, hash16, positionDigest, positionCommitment, bundleOf, encodeLpCore, decodeLpCore, lpExtHash, lpAction,
   claimable, nextPosition, positionInput, packProofN, i128, DEFAULT_KEY };
 
 // ================================================================================================ instruction builders
@@ -270,31 +281,102 @@ function install(Veyl) {
   P_.shieldReturnRewardsIx = async function (pool, index, ids) { const p = await this.binPool(pool); const r = p.rewards[index]; const signer = this.signerPda();
     return this.entryIx('shield_return_rewards', Buffer.concat([u8(index), vec(ids, i32)]), [R(this.entryPda()), R(signer), W(pool), R(r.mint), W(r.vault), W(this.ata(r.mint, r.funder, r.tokenProgram)), R(r.tokenProgram), R(this.programs.bin),
       ...this.binRemaining(pool, ids, this.shieldOwner(), signer, [V_.chunkOf(p.activeId)])]); };
-  /// The whole shielded tree from the chain: leaves in order, ciphertexts and receipts by commitment, pending deposits.
-  P_.readShield = async function () {
-    const addr = this.shieldPda(); let before; const sigs = [];
-    for (;;) { const page = await this.conn.getSignaturesForAddress(addr, { before, limit: 1000 }, 'confirmed'); sigs.push(...page); if (page.length < 1000) break; before = page[page.length - 1].signature; }
-    sigs.reverse(); const leaves = []; const cts = new Map(); const receipts = new Map(); const pending = new Map(); const nullified = new Set();
+  /// Every instruction of a fetched transaction, top-level and inner (CPIs): { program, accounts, data }.
+  P_.ixsOf = function (t) { const m = t.transaction.message; const la = t.meta && t.meta.loadedAddresses;
+    const keys = [...m.staticAccountKeys, ...(la ? [...la.writable, ...la.readonly] : [])].map((k) => new PublicKey(k));
+    const out = m.compiledInstructions.map((i) => ({ program: keys[i.programIdIndex], accounts: [...i.accountKeyIndexes].map((j) => keys[j]), data: Buffer.from(i.data) }));
+    for (const g of (t.meta && t.meta.innerInstructions) || []) for (const i of g.instructions) out.push({ program: keys[i.programIdIndex], accounts: (i.accounts || []).map((j) => keys[j]), data: Buffer.from(bs58.decode(i.data)) });
+    return out; };
+  /// A veyl_entry request buffer as it was when `sig` (an instruction reading it) ran, rebuilt from its open_buffer and
+  /// write_buffer transactions (they come before `sig` in the buffer account's history). Null when they cannot be found.
+  P_.bufferBytes = async function (buffer, sig) { const D = (n) => V_.disc(n).toString('hex'); const page = await this.conn.getSignaturesForAddress(new PublicKey(buffer), { before: sig, limit: 200 }, 'confirmed');
+    const writes = []; let len = null;
+    for (const s of page) { if (s.err) continue; const t = await this.conn.getTransaction(s.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); if (!t) continue;
+      for (const x of this.ixsOf(t).reverse()) { if (!x.program.equals(this.programs.entry) || !x.accounts[1] || !x.accounts[1].equals(new PublicKey(buffer))) continue; const tag = x.data.subarray(0, 8).toString('hex');
+        if (tag === D('write_buffer')) { const r = new Reader(x.data.subarray(16)); const o = r.u32(); writes.push({ o, b: r.bytes(r.u32()) }); } else if (tag === D('open_buffer')) { len = new Reader(x.data.subarray(16)).u32(); break; } }
+      if (len !== null) break; } // newest first: the open_buffer closest before `sig` starts this use of the buffer
+    if (len === null) return null; const buf = Buffer.alloc(len); for (const w of writes.reverse()) w.b.copy(buf, w.o); return buf; };
+  /// Note payloads a transaction carries in its instruction data that its logs do not show (Solana drops logs past ~10 KB):
+  /// the ext of shield_transact / shield_deposit / transact_cpi, the payloads of consume_swap / consume_claim, and a
+  /// shield_lp's position payload (in its request buffer, fetched only when the PositionCiphertext event is missing).
+  /// Each is bound into the action's proof; a scanner still checks it against the commitment.
+  P_.ixCiphertexts = async function (t, sig, evs) { const D = (n) => V_.disc(n).toString('hex'); const out = [];
+    const logged = new Set(evs.filter((e) => e.name === 'NoteCiphertext' || e.name === 'PositionCiphertext').map((e) => Buffer.from(e.data).toString('hex')));
+    for (const x of this.ixsOf(t)) { const tag = x.data.subarray(0, 8).toString('hex'); const r = new Reader(x.data.subarray(8));
+      try {
+        if (x.program.equals(this.programs.pool)) {
+          if (tag === D('shield_transact') || tag === D('shield_deposit') || tag === D('transact_cpi')) out.push(...decodeExt(r).encOut);
+          else if (tag === D('consume_swap') || tag === D('consume_claim')) { r.skip(40); /* ext_hash, fee */ out.push(...r.vec(() => r.bytes(r.u32()))); }
+        } else if (x.program.equals(this.programs.entry) && tag === D('shield_lp') && !evs.some((e) => e.name === 'PositionCiphertext')) { const buf = await this.bufferBytes(x.accounts[3], sig); if (buf) out.push(decodeLpCore(new Reader(buf)).ciphertext); }
+      } catch { /* not one of ours, or not decodable */ } }
+    return out.filter((b) => b.length >= 48 && !logged.has(b.toString('hex'))); };
+  /// sendV0, after a simulation shows that Solana's log cut (10,000 bytes) would leave every tree leaf and receipt the
+  /// transaction adds in its logs (logCut); otherwise nothing is sent and it throws (code 'LOG_CUT'). A tree leaf missing
+  /// from the logs breaks the tree for every reader, a receipt missing loses its note; payloads past the cut are fine
+  /// (ixCiphertexts recovers them), and so is a cut UI event.
+  P_.sendV0Checked = async function (ixs, signers = [], cu = 1_400_000) { const tx = await this.buildV0(ixs, signers, cu); let why = null;
+    try { const v = (await this.conn.simulateTransaction(tx, { sigVerify: false, commitment: 'confirmed', accounts: { encoding: 'base64', addresses: [this.shieldPda().toBase58()] } })).value;
+      if (!v.err) { const a = v.accounts && v.accounts[0]; why = logCut(v.logs, a ? Buffer.from(a.data[0], 'base64').readBigUInt64LE(8 + 96) /* Shield.next_index */ : null); } } catch { /* no simulation: the send's own preflight still runs */ }
+    if (why) { const e = new Error('This action is too big for one Solana transaction\'s logs (' + why + '): nothing was sent. Split it (fewer funding legs, or claim fees on their own) and try again.'); e.code = 'LOG_CUT'; throw e; }
+    return this.sendSigned(tx); };
+  /// The shielded tree from the chain: leaves in order, ciphertexts and receipts by commitment, pending deposits, spent
+  /// nullifiers, approved deposits per mint (the crowd a token's deposit blends into), `newest` (the last signature read) and
+  /// `truncated` (signatures whose logs Solana cut: events after the cut, a tree leaf among them, are missing).
+  /// With `prev` (an earlier result, or its serializeShield form) only the newer signatures are read ('until'); the caller
+  /// keeps checking the root and reads in full when that fails. A leaf with no payload in the logs gets the payloads its
+  /// transaction carries in instruction data (`alt` when there are several; scan() keeps the one matching the commitment).
+  P_.readShield = async function ({ prev = null } = {}) {
+    const addr = this.shieldPda(); const until = (prev && prev.newest) || undefined; let before; const sigs = [];
+    for (;;) { const page = await this.conn.getSignaturesForAddress(addr, { before, until, limit: 1000 }, 'confirmed'); sigs.push(...page); if (page.length < 1000) break; before = page[page.length - 1].signature; }
+    const st = loadShield(until ? prev : null); /* a state without its newest signature cannot be extended */ const { leaves, ciphertexts: cts, receipts, pending, nullified, deposits } = st; if (sigs.length) st.newest = sigs[0].signature;
+    sigs.reverse();
     for (const s of sigs) { if (s.err) continue; const t = await this.conn.getTransaction(s.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); if (!t) continue;
-      for (const e of V_.parseEvents(t.meta.logMessages)) {
-        if (e.name === 'NoteInserted') leaves[Number(e.index)] = e.commitment;
+      const evs = V_.parseEvents(t.meta.logMessages); const ins = []; if ((t.meta.logMessages || []).includes('Log truncated')) st.truncated.push(s.signature);
+      for (const e of evs) {
+        if (e.name === 'NoteInserted') { leaves[Number(e.index)] = e.commitment; ins.push(String(e.commitment)); }
         else if (e.name === 'NoteCiphertext' || e.name === 'PositionCiphertext') cts.set(String(e.commitment), { data: e.data, position: e.name === 'PositionCiphertext', sig: s.signature });
         else if (e.name === 'ReceiptNote') receipts.set(String(e.commitment), { ...e, sig: s.signature });
         else if (e.name === 'DepositPending') pending.set(e.pending.toBase58(), { ...e, sig: s.signature });
-        else if (e.name === 'DepositApproved' || e.name === 'DepositCancelled') pending.delete(e.pending.toBase58());
-        else if (e.name === 'Nullified') nullified.add(String(e.nullifier)); } }
+        else if (e.name === 'DepositApproved' || e.name === 'DepositCancelled') { const p = pending.get(e.pending.toBase58()); if (p && e.name === 'DepositApproved') { const m = String(p.mint); deposits[m] = (deposits[m] || 0) + 1; } pending.delete(e.pending.toBase58()); }
+        else if (e.name === 'Nullified') nullified.add(String(e.nullifier)); }
+      const orphans = ins.filter((c) => !cts.has(c) && !receipts.has(c)); // a position's fee notes have no payload of their own: usually nothing to recover
+      if (orphans.length) { const rec = await this.ixCiphertexts(t, s.signature, evs); if (rec.length) for (const c of orphans) cts.set(c, { data: rec[0], alt: rec.slice(1), recovered: true, sig: s.signature }); } }
     for (let i = 0; i < leaves.length; i++) if (leaves[i] === undefined) throw new Error('gap in the shielded tree history at ' + i);
-    return { leaves, ciphertexts: cts, receipts, pending: [...pending.values()], nullified };
+    return { leaves, ciphertexts: cts, receipts, pending: [...pending.values()], nullified, deposits, newest: st.newest, truncated: st.truncated };
   };
 }
+/// What Solana's log cut would lose of a transaction's notes: null when nothing was cut, or when the logs still hold every
+/// tree leaf it adds (`nextIndex`: the tree's size after it, from a simulation; null = unknown, skips that test) and the
+/// last NoteInserted is not the final line kept (a receipt's ReceiptNote follows its NoteInserted); else the reason.
+function logCut(logs, nextIndex = null) { logs = logs || []; if (!logs.includes('Log truncated')) return null; let last = -1, lastAt = -1;
+  logs.forEach((l, i) => { if (!l.startsWith('Program data: ')) return; const e = V_.parseEvents([l])[0]; if (e && e.name === 'NoteInserted') { last = Math.max(last, Number(e.index)); lastAt = i; } });
+  if (nextIndex !== null && nextIndex !== undefined && BigInt(last + 1) < BigInt(nextIndex)) return 'tree leaves from index ' + (last + 1) + ' would be missing';
+  if (lastAt >= 0 && logs[lastAt + 1] === 'Log truncated') return 'the last new note\'s event would be cut';
+  return null; }
+/// readShield's result as plain JSON (what the relayer serves at /shield and the browser caches), and back (loadShield:
+/// Maps and Sets again, for readShield's `prev`). Payloads travel as base64.
+const B64_ = (x) => Buffer.from(bytes(x)).toString('base64');
+function serializeShield(r) { const list = (m) => (m instanceof Map ? [...m] : (m || []).map((x) => [String(x.commitment), x]));
+  return { leaves: r.leaves.map(String), ciphertexts: list(r.ciphertexts).map(([c, x]) => ({ commitment: String(c), data: B64_(x.data), position: !!x.position, ...(x.alt && x.alt.length ? { alt: x.alt.map(B64_) } : {}) })),
+    receipts: (r.receipts instanceof Map ? [...r.receipts.values()] : r.receipts || []).map((x) => ({ index: Number(x.index), commitment: String(x.commitment), asset: String(x.asset), amount: String(x.amount), owner: String(x.owner), blinding: String(x.blinding) })),
+    pending: (r.pending || []).map((x) => ({ pending: String(x.pending), depositor: String(x.depositor), mint: String(x.mint), amount: String(x.amount), commitments: (x.commitments || []).map(String) })),
+    nullified: [...(r.nullified || [])].map(String), deposits: { ...(r.deposits || {}) }, newest: r.newest || null, truncated: [...(r.truncated || [])] }; }
+function loadShield(p) { const st = { leaves: [], ciphertexts: new Map(), receipts: new Map(), pending: new Map(), nullified: new Set(), deposits: {}, newest: null, truncated: [] }; if (!p) return st;
+  st.leaves = (p.leaves || []).map(BigInt); st.newest = p.newest || null; st.truncated = [...(p.truncated || [])]; st.deposits = { ...(p.deposits || {}) }; st.nullified = new Set([...(p.nullified || [])].map(String));
+  for (const [c, x] of p.ciphertexts instanceof Map ? [...p.ciphertexts] : (p.ciphertexts || []).map((x) => [String(x.commitment), x])) st.ciphertexts.set(String(c), { ...x, data: bytes(x.data), ...(x.alt ? { alt: x.alt.map(bytes) } : {}) });
+  for (const x of p.receipts instanceof Map ? p.receipts.values() : p.receipts || []) st.receipts.set(String(x.commitment), x);
+  for (const x of p.pending || []) st.pending.set(String(x.pending), x);
+  return st; }
 install(V_.Veyl);
-Object.assign(module.exports, { KIND, install, encodeLpRequest, encodeSwapCore, encodeOrderCore, encodeOrderWithdrawCore, encodeMigrate, swapAction, orderAction, orderWithdrawAction, proofId, MIGRATE, encRoute });
+Object.assign(module.exports, { KIND, install, serializeShield, loadShield, logCut, encodeLpRequest, encodeSwapCore, encodeOrderCore, encodeOrderWithdrawCore, encodeMigrate, swapAction, orderAction, orderWithdrawAction, proofId, MIGRATE, encRoute });
 
 // ================================================================================================ the wallet (device side)
 /// Everything a Veyl account knows, rebuilt from the chain with its keys: notes (token, order and position notes, by
 /// decrypting the payloads addressed to its viewing key and by recognising receipts paid to its one-time keys), which of
 /// them are spent (nullifiers), balances, coin selection, and the requests (external data + circuit inputs) for every
 /// action. Proving and sending are the caller's (Node: sdk/prover.js; browser: the engine's Web Worker and the relayer).
+/// A note worth keeping a record of: an amount, a sealed swap, or a position that still holds shares.
+const worth = (n) => (n.kind === NOTE.SWAP ? true : n.kind === NOTE.POSITION ? n.shares.some((x) => BigInt(x) > 0n) : BigInt(n.amount || 0) > 0n);
 class ShieldWallet {
   constructor(seed, { mints = {}, pools = [] } = {}) {
     this.k = keysFromSeed(seed); this.seed = this.k.seed; this.ot = 0; this.notes = []; this.mints = mints; this.pools = pools; // mints: base58 -> { sym, decimals }; pools: [{ address, mintX, mintY }]
@@ -305,21 +387,38 @@ class ShieldWallet {
   /// The next one-time key (for a receipt: swap output, removal proceeds, order shares, leftovers).
   nextOneTime() { return oneTime(this.seed, this.ot++); }
   poolOf(addr) { const a = new PublicKey(addr).toBase58(); return this.pools.find((p) => new PublicKey(p.address).toBase58() === a); }
-  /// Rebuild every note from the shielded tree's state: { leaves, ciphertexts: [{ commitment, data, position }] | Map, receipts: [...] | Map, nullified }.
-  scan(state) {
-    const tree = state.tree || new Tree(state.leaves.map(BigInt)); this.tree = tree; const idx = new Map(); tree.leaves.forEach((l, i) => idx.set(String(l), i));
+  /// The notes one plaintext (a decrypted payload, or an outbox entry) opens for this account, each with its commitment:
+  /// [the note itself, ...fee notes] (a position's plaintext also carries the fee notes its action created). Null if not ours.
+  notesOfPlain(d) {
+    if (!d) return null;
+    if (d.kind === NOTE.SWAP) { const key = hashToField(Buffer.from('veyl-batch'), pk(d.binPool), u64(d.seq)); return [{ ...d, batchKey: key, commitment: P(key, d.direction, d.amount, this.k.pk, d.blinding), sk: this.k.sk }]; }
+    if (d.kind === NOTE.POSITION) { const asset = posAssetOf(d.binPool, d.lo); const out = [{ ...d, commitment: P(asset, positionDigest(d.shares, d.debt), this.k.pk, d.blinding), sk: this.k.sk, asset }];
+      const pool = this.poolOf(d.binPool); if (pool) [pool.mintX, pool.mintY].forEach((m, a) => { if (d.claims[a] > 0n) out.push({ kind: NOTE.TOKEN, mint: String(m), amount: d.claims[a], blinding: d.claimBlinding[a], asset: assetOf(m), commitment: commitmentOf(assetOf(m), d.claims[a], this.k.pk, d.claimBlinding[a]), sk: this.k.sk, fromPosition: true }); });
+      return out; }
+    if (d.kind === NOTE.TOKEN || d.kind === NOTE.ORDER) { const asset = assetOfNote(d); return [{ ...d, asset, commitment: commitmentOf(asset, d.amount, this.k.pk, d.blinding), sk: this.k.sk }]; }
+    return null; }
+  /// Outbox entries for the notes a request creates for this account, from its ciphertexts (the ones this viewing key opens):
+  /// [{ c: commitment, p: plaintext (hex), nf: the nullifiers the action publishes, at }]. Kept by the caller BEFORE the
+  /// request is sent: if the chain drops the note's encrypted copy, scan(state, outbox) still finds the note by its
+  /// commitment. Empty notes (zero amounts, an emptied position without fee notes) are left out.
+  outboxOf(ciphertexts, nf = []) { const out = [];
+    for (const ct of ciphertexts) { const plain = open(this.k.viewSecret, bytes(ct)); if (!plain) continue; let ns; try { ns = this.notesOfPlain(decodePlain(plain)); } catch { continue; }
+      if (ns && ns.some(worth)) out.push({ c: String(ns[0].commitment), p: plain.toString('hex'), nf: nf.map(String), at: Date.now() }); }
+    return out; }
+  /// Rebuild every note from the shielded tree's state: { leaves, ciphertexts: [{ commitment, data, alt?, position }] | Map,
+  /// receipts: [...] | Map, nullified }. `alt`: other candidate payloads for that commitment (recovered from instruction data).
+  /// `outbox`: notes this account planned (outboxOf); one whose commitment is a leaf but which no payload delivered is
+  /// adopted from its plaintext (marked `outbox`). After a scan, `found` holds the commitments a payload delivered.
+  scan(state, outbox = []) {
+    const tree = state.tree || new Tree(state.leaves.map(BigInt)); this.tree = tree; const idx = new Map(); tree.leaves.forEach((l, i) => idx.set(String(l), i)); this.leafIndex = idx;
     const notes = []; const add = (n) => { const i = idx.get(String(n.commitment)); if (i === undefined) return; if (n.mint && typeof n.mint !== 'string') n.mint = new PublicKey(n.mint).toBase58(); n.index = i; n.nullifier = nullifierOf(n.commitment, i, n.sk); notes.push(n); };
-    const cts = state.ciphertexts instanceof Map ? [...state.ciphertexts].map(([c, x]) => ({ commitment: c, ...x })) : state.ciphertexts;
-    for (const ct of cts) { const plain = open(this.k.viewSecret, bytes(ct.data)); if (!plain) continue; let d; try { d = decodePlain(plain); } catch { continue; } if (!d) continue;
-      if (d.kind === NOTE.SWAP) {
-        const key = hashToField(Buffer.from('veyl-batch'), pk(d.binPool), u64(d.seq)); const c = P(key, d.direction, d.amount, this.k.pk, d.blinding); if (String(c) !== String(ct.commitment)) continue;
-        add({ ...d, batchKey: key, commitment: c, sk: this.k.sk }); continue; }
-      if (d.kind === NOTE.POSITION) {
-        const c = P(posAssetOf(d.binPool, d.lo), positionDigest(d.shares, d.debt), this.k.pk, d.blinding); if (String(c) !== String(ct.commitment)) continue;
-        add({ ...d, commitment: c, sk: this.k.sk, asset: posAssetOf(d.binPool, d.lo) });
-        const pool = this.poolOf(d.binPool); if (pool) [pool.mintX, pool.mintY].forEach((m, a) => { if (d.claims[a] > 0n) add({ kind: NOTE.TOKEN, mint: String(m), amount: d.claims[a], blinding: d.claimBlinding[a], asset: assetOf(m), commitment: commitmentOf(assetOf(m), d.claims[a], this.k.pk, d.claimBlinding[a]), sk: this.k.sk, fromPosition: true }); });
-      } else { const asset = assetOfNote(d); const c = commitmentOf(asset, d.amount, this.k.pk, d.blinding); if (String(c) !== String(ct.commitment)) continue; add({ ...d, asset, commitment: c, sk: this.k.sk }); } }
-    const recs = state.receipts instanceof Map ? [...state.receipts.values()] : state.receipts; const mine = new Map(); const look = Math.max(this.ot, 0) + 32;
+    const found = new Set(); this.found = found;
+    const cts = state.ciphertexts instanceof Map ? [...state.ciphertexts].map(([c, x]) => ({ commitment: c, ...x })) : state.ciphertexts || [];
+    for (const ct of cts) for (const data of [ct.data, ...(ct.alt || [])]) { const plain = open(this.k.viewSecret, bytes(data)); if (!plain) continue; let ns; try { ns = this.notesOfPlain(decodePlain(plain)); } catch { continue; }
+      if (!ns || String(ns[0].commitment) !== String(ct.commitment)) continue; ns.forEach(add); found.add(String(ct.commitment)); break; }
+    for (const o of outbox || []) { if (found.has(o.c) || !idx.has(o.c)) continue; let ns; try { ns = this.notesOfPlain(decodePlain(bytes(o.p))); } catch { continue; }
+      if (ns && String(ns[0].commitment) === o.c) ns.forEach((n) => add({ ...n, outbox: o.c })); }
+    const recs = state.receipts instanceof Map ? [...state.receipts.values()] : state.receipts || []; const mine = new Map(); const look = Math.max(this.ot, 0) + 32;
     for (let i = 0; i < look; i++) { const o = oneTime(this.seed, i); mine.set(String(o.pk), o); }
     for (const r of recs) { const o = mine.get(String(r.owner)); if (!o) continue; if (o.i >= this.ot) this.ot = o.i + 1; const info = this.assets.get(String(r.asset)) || this.orderAssetInfo(r.asset);
       add({ ...(info || { kind: -1 /* an asset this wallet cannot name yet (e.g. an order it has not listed) */ }), amount: BigInt(r.amount), blinding: BigInt(r.blinding), asset: BigInt(r.asset), commitment: BigInt(r.commitment), sk: o.sk, receipt: true }); }
@@ -391,4 +490,4 @@ function planExact(p, bins, ids, ax, ay) {
 }
 /// What `shares` of bin `b` are worth now (floor), per token.
 const valueOfShares = (b, s) => (!b || !b.shares ? { x: 0n, y: 0n } : { x: (b.x * BigInt(s)) / b.shares, y: (b.y * BigInt(s)) / b.shares });
-Object.assign(module.exports, { ShieldWallet, planExact, valueOfShares });
+Object.assign(module.exports, { ShieldWallet, planExact, valueOfShares, worth });

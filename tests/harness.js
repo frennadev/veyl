@@ -9,6 +9,13 @@ const t0 = Date.now(); const lap = () => ((Date.now() - t0) / 1000).toFixed(1) +
 const check = (n, ok, extra = '') => { ok ? counts.pass++ : counts.fail++; console.log((ok ? '  ok  ' : '  FAIL') + ' ' + n + (extra !== '' ? '  ' + String(extra).slice(0, 200) : '')); };
 /// true when the promise rejects with an error (or program logs) matching re; prints any other error
 const refused = async (p, re) => { try { await p; return false; } catch (e) { const t = String(e.message) + JSON.stringify(e.logs || e.transactionLogs || ''); if (!re.test(t)) console.log('    unexpected error:', t.slice(0, 600)); return re.test(t); } };
+/// Log volume of a transaction: Solana keeps 10,000 bytes of log messages per transaction (every line counts in full) and
+/// replaces the rest with one 'Log truncated' line, events included. LOGS[label] = the bytes of the biggest one seen.
+const LOG_LIMIT = 10_000; const LOGS = {};
+const logsOf = async (conn, sig, label) => { const t = await conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const l = (t && t.meta && t.meta.logMessages) || [];
+  const o = { bytes: l.reduce((s, x) => s + Buffer.byteLength(x), 0), lines: l.length, truncated: l.some((x) => x === 'Log truncated'), logs: l }; if (label) LOGS[label] = Math.max(LOGS[label] || 0, o.bytes);
+  /* LOG_DUMP=<file>: every measured transaction's log lines, for finding what fills them */
+  if (label && process.env.LOG_DUMP) fs.appendFileSync(process.env.LOG_DUMP, `== ${label}  ${o.bytes} bytes, ${o.lines} lines\n${l.join('\n')}\n`); return o; };
 const CU = {}; const cuOf = async (conn, sig, label) => { const t = await conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const m = (t.meta.logMessages || []).map((l) => l.match(/consumed (\d+) of \d+ compute units/)).filter(Boolean); if (m.length) CU[label] = Math.max(...m.map((x) => Number(x[1]))); };
 
 /// A local validator on a fresh ledger in a temp dir, with a funded payer. done(code) stops it, deletes the ledger
@@ -23,11 +30,11 @@ async function freshValidator(prefix = 'veyl-') {
 /// n new keypairs, each airdropped `sol` SOL
 async function funded(conn, n, sol = 50) { const ks = Array.from({ length: n }, () => Keypair.generate()); for (const k of ks) await conn.confirmTransaction(await conn.requestAirdrop(k.publicKey, sol * LAMPORTS_PER_SOL), 'confirmed'); return ks; }
 /// prints the compute units and the totals, then done(1) on any failure
-function finish(done, { cu = true } = {}) { if (cu) console.log('\ncompute units:', JSON.stringify(CU)); console.log(`\n${counts.pass} passed, ${counts.fail} failed  (${lap()})`); (done || process.exit)(counts.fail ? 1 : 0); }
+function finish(done, { cu = true } = {}) { if (cu) console.log('\ncompute units:', JSON.stringify(CU)); if (Object.keys(LOGS).length) console.log('\nlog bytes (limit ' + LOG_LIMIT + '):', JSON.stringify(LOGS)); console.log(`\n${counts.pass} passed, ${counts.fail} failed  (${lap()})`); (done || process.exit)(counts.fail ? 1 : 0); }
 /// an engine/ ES module (market.js, markets.js), bundled for Node with esbuild
 function loadEngine(file) {
   const code = require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../engine', file)], bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
   const box = { exports: {} }; new Function('module', 'exports', 'require', code)(box, box.exports, require); return box.exports;
 }
 
-module.exports = { counts, check, refused, CU, cuOf, lap, freshValidator, funded, finish, loadEngine };
+module.exports = { counts, check, refused, CU, cuOf, LOGS, LOG_LIMIT, logsOf, lap, freshValidator, funded, finish, loadEngine };

@@ -6,7 +6,10 @@ edition = "2021"
 crate-type = ["cdylib", "lib"]
 name = "veyl_pool"
 [features]
-default = []
+# no-log-ix-name: no "Instruction: X" log line per call (every transact_cpi / deposit_receipt / consume_* CPI saved ~40 bytes
+# of the ~10 KB a transaction may log; nothing reads them). veyl_entry keeps its own: e2e/run.js, e2e/devnet.js find sealed
+# swaps by the "Instruction: SubmitSwap" line.
+default = ["no-log-ix-name"]
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []

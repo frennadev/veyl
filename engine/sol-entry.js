@@ -8,6 +8,7 @@ const S = require('../sdk/veyl.js');
 const { Veyl, H, rand, merklePath, packProof, withdrawInput, newNote, encodeAction, contextOf, removeDigest, signedDigest, STATE_DEPTH, ASP_DEPTH, priceOf, chunkOf, slotOf, j, shapeWeights, sideWeights, distribute, sharesForMint, EMPTY_BIN, MIN_LIQUIDITY } = S;
 const snarkjs = () => { if (!window.snarkjs) throw new Error('snarkjs is not loaded'); return window.snarkjs; };
 const Z = require('../sdk/shield.js');
+import { walletList, onWallets, waitForWallet, setChain } from './wallets.js';
 import { installShield } from './shield-engine.js';
 import { installSealed } from './sealed-engine.js';
 import { Market, parsePyth, parseJupiter, parseCandles, ORIGINS as MARKET_ORIGINS } from './market.js';
@@ -66,6 +67,7 @@ export class Engine {
   /// cfg = window.VEYL_CONFIG: { chainName, rpc, explorer, relayer, programs, zk:{wasm,zkey}, tokens:{SYM:{mint,decimals,pool}}, binPools:[...] }
   constructor(cfg) {
     this.cfg = cfg; this.conn = new Connection(cfg.rpc, 'confirmed');
+    setChain(cfg.cluster); // Wallet Standard sign requests name this chain
     this.V = new Veyl({ connection: this.conn, programs: cfg.programs });
     this.store = new Store('veyl:sol:' + cfg.programs.entry);
     this.account = null; this.wallet = null; this.pk = null; this.onLog = () => {};
@@ -81,17 +83,28 @@ export class Engine {
   fmt(sym, v) { return Number(BigInt(v)) / 10 ** this.tok(sym).decimals; }
   async ping() { return this.conn.getSlot('confirmed'); }
 
-  // ---- wallet (Phantom / Solflare / Backpack through window.solana or their own globals)
-  static wallets() {
-    const out = []; const add = (n, p) => { if (p && !out.some(([, q]) => q === p)) out.push([n, p]); };
-    add('Phantom', window.phantom && window.phantom.solana); add('Solflare', window.solflare); add('Backpack', window.backpack);
-    add(window.solana && window.solana.isPhantom ? 'Phantom' : 'Wallet', window.solana); return out;
-  }
-  async connect(w) {
-    w = w || (Engine.wallets()[0] || [])[1]; if (!w) throw new Error('No Solana wallet found. Install Phantom, Solflare or Backpack, then reload.');
-    const r = await w.connect(); this.wallet = w; this.pk = new PublicKey(String((r && r.publicKey) || w.publicKey)); this.account = this.pk.toBase58();
+  // ---- wallet: every Wallet Standard wallet, then injected globals (engine/wallets.js)
+  static wallets() { return walletList().map((p) => [p.name, p]); }
+  static walletList() { return walletList(); }
+  static onWallets(cb) { return onWallets(cb); }
+  /// silent: reconnect only if the wallet already trusts this site (no prompt). The wallet's name is remembered for that.
+  async connect(w, { silent = false } = {}) {
+    w = w || walletList()[0]; if (!w) throw new Error('No Solana wallet found. Install Phantom, Solflare or Backpack, then reload.');
+    const r = await w.connect(silent ? { silent: true } : undefined); this._unwatch?.();
+    this.wallet = w; this.pk = new PublicKey(String((r && r.publicKey) || w.publicKey)); this.account = this.pk.toBase58();
+    if (!w.isLocal) { this.isLocal = false; this.store.data.wallet = w.name || null; this.store.data.useLocal = false; this.store.save(); }
+    this._unwatch = w.onChange ? w.onChange((a) => { if (!a) this.disconnect(); else { this.pk = new PublicKey(a); this.account = a; this._accountChanged(); } }) : null;
     return this.account;
   }
+  /// The last wallet used here, without a prompt; null when it isn't installed or no longer trusts this site.
+  async reconnect() { const name = this.store.data.wallet; if (!name || this.wallet) return null; const w = await waitForWallet(name); if (!w || this.wallet) return null; // gone, or connected some other way meanwhile
+    try { return await this.connect(w, { silent: true }); } catch { return null; } }
+  /// Forget the connection (the deposit address key stays in this browser, for "No wallet needed" to pick up again).
+  async disconnect() { const w = this.wallet; this._unwatch?.(); this._unwatch = null; this.wallet = null; this.pk = null; this.account = null; this.isLocal = false;
+    this.store.data.wallet = null; this.store.data.useLocal = false; this.store.save(); if (w && !w.isLocal) await w.disconnect?.(); this._accountChanged(); }
+  /// cb(account | null) when the connected account changes from the wallet's side (switch account, disconnect).
+  onAccount(cb) { (this._accountCbs ||= new Set()).add(cb); return () => this._accountCbs.delete(cb); }
+  _accountChanged() { for (const cb of this._accountCbs || []) { try { cb(this.account); } catch { /* a listener's problem */ } } }
   async _send(ixs, cu = 400_000) {
     const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: cu }), ...ixs);
     tx.feePayer = this.pk; tx.recentBlockhash = (await this.conn.getLatestBlockhash()).blockhash;
@@ -109,7 +122,7 @@ export class Engine {
   localKeypair() { const d = this.store.data; if (!Array.isArray(d.depositKey)) { d.depositKey = Array.from(Keypair.generate().secretKey); this.store.save(); } return Keypair.fromSecretKey(Uint8Array.from(d.depositKey)); }
   localAdapter() { const kp = this.localKeypair(); const sign = (tx) => { if (tx instanceof VersionedTransaction) tx.sign([kp]); else tx.partialSign(kp); return tx; };
     return { isLocal: true, publicKey: kp.publicKey, connect: async () => ({ publicKey: kp.publicKey }), signTransaction: async (tx) => sign(tx), signAllTransactions: async (txs) => txs.map(sign) }; }
-  async connectLocal() { const a = await this.connect(this.localAdapter()); this.isLocal = true; this.store.data.useLocal = true; this.store.save(); return a; }
+  async connectLocal() { const a = await this.connect(this.localAdapter()); this.isLocal = true; this.store.data.useLocal = true; this.store.data.wallet = null; this.store.save(); return a; }
   async solBalanceOf() { return this.pk ? BigInt(await this.conn.getBalance(this.pk)) : 0n; }
   /// Empties the deposit address to `to`: every token, then the SOL left after fees (wrapped SOL is unwrapped first). Public.
   async localSweep(to) { if (!this.isLocal) throw new Error('Only the deposit address kept in this browser can be emptied from here.');
@@ -199,6 +212,7 @@ export class Engine {
     this.log('Relayer submits it. Your wallet never touches this transaction');
     const r = await fetch(this.cfg.relayer + '/submit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: j(req) }).then((x) => x.json());
     if (r.error) throw new Error(r.error);
+    this._syncFresh = true; // the next shieldSync waits for a tree that includes this action
     return r;
   }
   /// After a spend lands: mark spent notes, place the change note at its tree index.
@@ -516,7 +530,12 @@ export class Engine {
   /// Recent swaps across the deployment's pools (from the cache poolActivity filled), newest first.
   recentChain(n = 40) { const out = []; for (const [addr, A] of Object.entries(this._act || {})) { const c = this.poolCfg(addr); if (!c) continue; for (const s of A.swaps) out.push({ ...s, pool: addr, x: c.x, y: c.y }); } return out.sort((a, b) => b.t - a.t).slice(0, n); }
   async exportEncrypted(pass) { return encryptBackup(this.store.export(), pass); }
-  async importEncrypted(text, pass) { const n = this.store.import(await decryptBackup(text, pass)); try { this.shieldInit(); await this.shieldSync(); } catch { /* rescanned on the next refresh */ } return n; }
+  async importEncrypted(text, pass) { const plain = await decryptBackup(text, pass); const n = this.store.import(plain); let b = null; try { b = JSON.parse(plain); } catch { /* checked by import */ }
+    // the backup's outbox (notes planned before it was made, possibly known nowhere else) joins this one before the rescan
+    try { const s = this.store.data.shield; if (b && b.shield && b.shield.seed && b.shield.seed === s.seed) { const ob = (s.outbox ||= []); for (const o of b.shield.outbox || []) if (o && o.c && !ob.some((x) => x.c === o.c)) ob.push(o); this.store.save(); } } catch { /* restored without it */ }
+    try { this.shieldInit(); await this.shieldSync(); } catch { /* rescanned on the next refresh */ }
+    try { if (!this.store.data.backedUpAt && b && b.shield && b.shield.seed && b.shield.seed === this.store.data.shield.seed) this.markBackedUp(); } catch { /* restored, just not marked */ }
+    return n; } // a file that restores this seed is a backup of it
   async ragequit(note) { if (!this.pk) throw new Error('Connect the wallet you deposited from.');
     const sig = await this._send([await this.V.ragequitIx(this.pk, new PublicKey(this.tok(note.sym).mint), { value: BigInt(note.value), label: BigInt(note.label), nullifier: BigInt(note.nullifier), secret: BigInt(note.secret) })], 200_000); note.spent = true; this.store.save(); return sig; }
 }
@@ -551,7 +570,66 @@ installSealed(Engine);
   /// Phase 1 notes still on this device (they can move into the shielded pool, or be ragequit).
   P.legacyNotes = function () { return this.store.data.notes.filter((n) => !n.spent && n.index !== undefined && !n.migrated); };
 }
-export { PrivacyError, H, merklePath, PublicKey, Keypair, Veyl, Store };
+
+// ------------------------------------------------------------- safety rails: a backup before the first deposit, linkability hints
+/// Until it is backed up, the seed (the whole private balance) lives only in this browser. Before the first deposit the UI
+/// asks for one of two things, kept in this account's store and tied to its seed: a downloaded backup (the UI calls
+/// markBackedUp() once it has handed the exportEncrypted() file to the browser), or the explicit "I understand"
+/// (ackNoBackup()). Deposits refuse with BackupRequiredError (code 'BACKUP_REQUIRED') while neither exists, on every real
+/// network; config `requireBackup: false` or `engine.requireBackup = false` turns that off (scripted tests). The Sandbox
+/// (play money) never asks.
+class BackupRequiredError extends Error { constructor() { super('Back up this account first, or confirm that you understand: without a backup, losing this browser loses the money.'); this.code = 'BACKUP_REQUIRED'; } }
+const CROWD_MIN = 50, LINK_SOON = 3_600_000, LINK_RECENT = 7 * 86_400_000, DEP_LOG = 50; // crowd as on the Privacy page; "soon" = 1 h; amounts matched over 7 days
+const agoText = (ms) => { const m = Math.max(1, Math.round(ms / 60_000)); return m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+const NETWORK_TIP = { id: 'network', text: 'The relayer sees your IP address when it sends for you. A VPN or Tor keeps that private too.' };
+{ const P = Engine.prototype;
+  const seedTag = (d) => String((d.shield && d.shield.seed) || '').slice(-12);
+  const isDemo = (e) => !!(e.sandbox || e.cfg.sandbox);
+  P.backupAcked = function () { const a = this.store.data.noBackupAck; return !!a && a.seed === seedTag(this.store.data); };
+  /// True while the UI should show the backup step before a deposit: real money, no backup made, no "I understand" given.
+  P.backupStepNeeded = function () { if (!this.zw) this.shieldInit(); return !isDemo(this) && !this.store.data.backedUpAt && !this.backupAcked(); };
+  /// Whether a deposit refuses right now (the step is open and enforcement is on).
+  P.backupEnforced = function () { const on = this.requireBackup ?? this.cfg.requireBackup ?? true; return on !== false && this.backupStepNeeded(); };
+  /// { required, done, backedUpAt, ackAt, stepNeeded, enforced }: required = this network asks (not the Sandbox); done = a
+  /// backup was made or the risk acknowledged; stepNeeded = required && !done; enforced = a deposit refuses now.
+  P.backupState = function () { const d = this.store.data; const stepNeeded = this.backupStepNeeded();
+    return { required: !isDemo(this), done: !isDemo(this) && !stepNeeded, backedUpAt: d.backedUpAt || null, ackAt: this.backupAcked() ? d.noBackupAck.at : null, stepNeeded, enforced: this.backupEnforced() }; };
+  /// "I understand: without a backup, losing this browser loses the money." Returns the time stored. A backup can still be made later.
+  P.ackNoBackup = function () { const d = this.store.data; if (!this.zw) this.shieldInit(); d.noBackupAck = { at: Date.now(), seed: seedTag(d) }; this.store.save(); return d.noBackupAck.at; };
+  /// Call once the encrypted backup file (exportEncrypted) has been handed to the browser to save. Returns the time stored.
+  P.markBackedUp = function () { this.store.data.backedUpAt = Date.now(); this.store.save(); return this.store.data.backedUpAt; };
+  /// Refuses (BackupRequiredError) while the backup step is open and enforced; the deposit paths call it first.
+  P.assertBackup = function () { if (this.backupEnforced()) throw new BackupRequiredError(); };
+  const logDeposit = (e, sym, amount, r) => { const d = e.store.data; const log = (d.depLog ||= []); let v; try { v = r && r.value != null ? BigInt(r.value) : e.unit(sym, amount); } catch { return; }
+    log.unshift({ sym, amount: String(v), at: Date.now(), tx: r && r.tx ? String(r.tx) : null }); log.length = Math.min(log.length, DEP_LOG); e.store.save(); };
+  const shieldDep = P.shieldDeposit; P.shieldDeposit = async function (sym, amount) { this.assertBackup(); const r = await shieldDep.call(this, sym, amount); logDeposit(this, sym, amount, r); return r; };
+  // the Sandbox has its own shieldDeposit (never asks for a backup): its deposits are logged here for linkRisks
+  const dep = P.deposit; P.deposit = async function (sym, amount) { const r = await dep.call(this, sym, amount); if (isDemo(this)) logDeposit(this, sym, amount, r); return r; };
+  /// This account's deposits of `sym`, newest first, within `within` ms: [{ sym, amount (atoms, string), at, tx }].
+  P.recentDeposits = function (sym, within = LINK_RECENT) { const d = this.store.data, now = Date.now(); const all = [...(d.depLog || [])];
+    for (const p of (d.shield && d.shield.pending) || []) if (p.at && !all.some((x) => x.tx && x.tx === String(p.tx))) all.push({ sym: p.sym, amount: String(p.amount), at: p.at, tx: p.tx ? String(p.tx) : null });
+    return all.filter((x) => x.sym === sym && now - x.at < within).sort((a, b) => b.at - a.at); };
+  /// The crowd a withdrawal blends into, from the last shielded sync: { token: approved deposits of that token into the
+  /// shielded pool (null when unknown), total: notes in the shielded tree (the Privacy page's number), min: CROWD_MIN }.
+  P.crowdSize = function (sym) { const st = this.shieldState; const total = st && st.leaves ? st.leaves.length : null; let token = null;
+    try { if (sym && st && st.deposits) token = Number(st.deposits[this.tok(sym).mint] || 0); } catch { /* unknown token */ } return { token, total, min: CROWD_MIN }; };
+  /// Hints (never a refusal) before private money leaves for a Solana address: what an onlooker could use to match the
+  /// withdrawal to this account's deposit. A send to a Veyl address keeps the amount and both parties hidden: only the tip.
+  /// Returns { warnings: [{ id: 'amount' | 'timing' | 'crowd', text }], tip: { id: 'network', text }, crowd: crowdSize(sym) }.
+  /// The hard refusals (guardRecipient: own wallet, address with history) are unchanged.
+  P.linkRisks = function (sym, amount, to) { const crowd = this.crowdSize(sym); const out = [];
+    if (String(to || '').startsWith('veyl:')) return { warnings: out, tip: NETWORK_TIP, crowd };
+    let v = 0n; try { v = this.unit(sym, amount); } catch { /* not a number yet */ } const now = Date.now(); const deps = this.recentDeposits(sym);
+    const same = v > 0n && deps.find((x) => { const a = BigInt(x.amount); const dd = a > v ? a - v : v - a; return dd * 100n <= a; }); // equal, or within 1%
+    if (same) out.push({ id: 'amount', text: (BigInt(same.amount) === v ? 'This is the same amount' : 'This is almost the same amount') + ` you deposited ${agoText(now - same.at)}. A different amount, or a few smaller withdrawals, is harder to match.` });
+    const last = deps[0]; if (last && now - last.at < LINK_SOON) out.push({ id: 'timing', text: `You deposited ${sym} ${agoText(now - last.at)}. Waiting longer lets more deposits and withdrawals happen in between.` });
+    const n = crowd.token != null ? crowd.token : crowd.total; const what = crowd.token != null ? `private ${sym} deposit` : 'private deposit';
+    if (n != null && n < CROWD_MIN) out.push({ id: 'crowd', text: (n === 0 ? `No ${what}s yet, so there is nobody to blend in with.` : `Only ${n} ${what}${n === 1 ? '' : 's'} so far, so there are few to blend in with.`) + ' Privacy gets stronger as more people use Veyl.' });
+    return { warnings: out, tip: NETWORK_TIP, crowd };
+  };
+}
+Engine.CROWD_MIN = CROWD_MIN;
+export { PrivacyError, BackupRequiredError, H, merklePath, PublicKey, Keypair, Veyl, Store };
 export const Shield = Z;
 export { Market, parsePyth, parseJupiter, parseCandles, MARKET_ORIGINS, Markets, MARKET_SOURCES, MARKETS_ORIGINS, mergeRows };
 export const SDK = { shapeWeights, sideWeights, distribute, priceOf, chunkOf };

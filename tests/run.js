@@ -11,7 +11,7 @@ const S = require('../sdk/veyl.js'); const { Veyl, H, be32, labelOf, contextOf, 
 const { prove, verifyLocal } = require('../sdk/prover.js');
 const { deployAll, deployPrograms, programIds, createMint, fund, units, sleep, priceQ } = require('../scripts/lib.js');
 const { Relayer } = require('../relayer/relayer.js');
-const { counts, check, refused, CU, cuOf, lap, freshValidator, funded, finish } = require('./harness.js');
+const { counts, check, refused, CU, cuOf, logsOf, lap, freshValidator, funded, finish } = require('./harness.js');
 
 (async () => {
   const { rpc, conn, payer, payerFile, done } = await freshValidator('veyl-sol-');
@@ -273,7 +273,7 @@ const { counts, check, refused, CU, cuOf, lap, freshValidator, funded, finish } 
     w = withdrawInput({ note: bobChange, withdrawnValue: units(150, 6), context: ctxS, leaves, labels }); pr = await prove(w.input); console.log('  proof 5 (swap) at', lap());
     await R.send([V.postWithdrawalIx(relayer.publicKey, POOL, pr.proof, pr.pubs, EP)], [], 1_400_000);
     check('a relay cannot execute a proof made for a swap (action tag is in the context)', await refused(R.send([await V.relayIx(relayer.publicKey, USDC, pr.pubs[1], { recipient: fresh.publicKey, feeRecipient: relayer.publicKey, feeBps: FEE_BPS, deadline })], [], 400_000), /BadContext/));
-    sig = await R.sendV0([await V.privateSwapIx(relayer.publicKey, USDC, pr.pubs[1], d)], [], 1_400_000); await cuOf(conn, sig, 'private_swap (1 hop)');
+    sig = await R.sendV0([await V.privateSwapIx(relayer.publicKey, USDC, pr.pubs[1], d)], [], 1_400_000); await cuOf(conn, sig, 'private_swap (1 hop)'); await logsOf(conn, sig, 'private_swap (1 hop)');
     check('private_swap goes through as a v0 transaction with the relayer\'s lookup table', (await conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 })).version === 0);
     const evs = await V.events(sig); ev = evs.find((e) => e.name === 'PrivateSwapped'); const dep2 = evs.find((e) => e.name === 'Deposited');
     check('private swap: 150 USDC note -> fee -> SOL via the bin pool -> new SOL note deposited for the refund key', ev && ev.amountIn === units(149.925, 6) && ev.amountOut === qs.out && dep2 && dep2.pool.equals(POOL_SOL) && dep2.value === qs.out && dep2.precommitment === BigInt(outNote.precommitment) && dep2.beneficiary.equals(refundKey.publicKey), `out ${qs.out} lamports`);
@@ -339,7 +339,7 @@ const { counts, check, refused, CU, cuOf, lap, freshValidator, funded, finish } 
     await R.send(pre);
     check('M-5: a private add without min_shares is refused (MinSharesRequired)', await refused(R.sendV0([await V.privateAddIx(relayer.publicKey, [{ mint: USDC, nullifierHash: pr.pubs[1] }], { ...d, minShares: [] })], [], 1_400_000), /MinSharesRequired/));
     check('private_add with mismatched amounts is refused', await refused(R.sendV0([await V.privateAddIx(relayer.publicKey, [{ mint: USDC, nullifierHash: pr.pubs[1] }], { ...d, amountsY: [per, per, per + 1n] })], [], 1_400_000), /BadContext|AmountMismatch/));
-    sig = await R.sendV0([await V.privateAddIx(relayer.publicKey, [{ mint: USDC, nullifierHash: pr.pubs[1] }], d)], [], 1_400_000); await cuOf(conn, sig, 'private_add (1 leg, 3 bins)');
+    sig = await R.sendV0([await V.privateAddIx(relayer.publicKey, [{ mint: USDC, nullifierHash: pr.pubs[1] }], d)], [], 1_400_000); await cuOf(conn, sig, 'private_add (1 leg, 3 bins)'); await logsOf(conn, sig, 'private_add (1 leg, 3 bins)');
     ev = (await V.events(sig)).find((e) => e.name === 'PrivateAdded');
     const posShares = await Promise.all(addIds.map((id) => V.sharesOf(BPX.address, owner.publicKey, EP, id)));
     check('private add: 600 USDC note -> 3 bins owned by the one-time key (authority = entry signer), at least min_shares each', ev && ev.shares.length === 3 && posShares.every((s, i) => s === ev.shares[i] && s > 0n && s >= d.minShares[i]) && (await bal(USDC, EP)) === 0n);
@@ -355,7 +355,7 @@ const { counts, check, refused, CU, cuOf, lap, freshValidator, funded, finish } 
     check('a signature over different data is refused', await refused(R.sendV0([V.removeSigIx(owner.publicKey, sign({ ...rd, feeBps: 1 }), rd), await V.privateRemoveIx(relayer.publicKey, rd)], [], 1_400_000), /BadSignature|precompile|InvalidAccountData|0x/i));
     check('a wrong nonce is refused', await refused(R.sendV0([V.removeSigIx(owner.publicKey, sign({ ...rd, nonce: 3n }), { ...rd, nonce: 3n }), await V.privateRemoveIx(relayer.publicKey, { ...rd, nonce: 3n })], [], 1_400_000), /BadNonce/));
     const poolSolBefore = (await V.pool(POOL_SOL)).nextIndex, poolUsdcBefore = (await V.pool(POOL)).nextIndex;
-    sig = await R.sendV0([V.removeSigIx(owner.publicKey, sigOk, rd), await V.privateRemoveIx(relayer.publicKey, rd)], [], 1_400_000); await cuOf(conn, sig, 'private_remove (3 bins)');
+    sig = await R.sendV0([V.removeSigIx(owner.publicKey, sigOk, rd), await V.privateRemoveIx(relayer.publicKey, rd)], [], 1_400_000); await cuOf(conn, sig, 'private_remove (3 bins)'); await logsOf(conn, sig, 'private_remove (3 bins)');
     const evr = await V.events(sig); ev = evr.find((e) => e.name === 'PrivateRemoved'); const deps = evr.filter((e) => e.name === 'Deposited');
     check('private remove (half): shares burned (fees included: some SOL now too), proceeds re-deposited as two new notes', ev && ev.amountY > 0n && ev.amountX > 0n && deps.length === 2 && deps.some((e) => e.pool.equals(POOL_SOL) && e.precommitment === BigInt(nX.precommitment) && e.beneficiary.equals(owner.publicKey)) && deps.some((e) => e.pool.equals(POOL) && e.precommitment === BigInt(nY.precommitment)), `x ${ev.amountX} y ${ev.amountY}`);
     check('USDC proceeds ≈ half of 600 USDC less what was traded away into SOL', ev.amountY < units(300, 6) && ev.amountY > units(150, 6));

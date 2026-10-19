@@ -17,6 +17,7 @@ const S = require('../sdk/veyl.js'); const Z = require('../sdk/shield.js'); cons
 const { proveTransact, proveSwap, proveClaim, TIMES, verifyCircuit } = require('../sdk/prover.js');
 const { Relayer } = require('../relayer/relayer.js');
 const CM = require('../committee/lib.js');
+const { logsOf } = require('./harness.js');
 
 module.exports = async function phase3(C) {
   const { conn, payer, V, as, alice, bob, carol, mallory, relayer, postman, dep, T, check, refused, cuOf, CU, units, sleep, lap } = C;
@@ -92,7 +93,7 @@ module.exports = async function phase3(C) {
     await R.send([V.cancelProofIx(me, SE.KIND.SWAP, wrongPkPr.pubs, me)]); }
   const submitted = [];
   for (const x of reqs) { const r = await svc.submit(Jo({ kind: 'sealedSwap', binPool: POOL, seq: 0n, direction: x.d, c1: J.enc(x.r.c1), c2: J.enc(x.r.c2), ext: x.r.ext, p: pt(x.pr) }));
-    for (const s2 of r.txs) await cuOf(conn, s2, 'post_proof / submit_swap'); const e = await evOf(r.txHash, 'SealedSwapSubmitted'); submitted.push({ ...x, sig: r.txHash, ev: e }); }
+    for (const s2 of r.txs) await cuOf(conn, s2, 'post_proof / submit_swap'); const e = await evOf(r.txHash, 'SealedSwapSubmitted'); submitted.push({ ...x, sig: r.txHash, ev: e }); await logsOf(conn, r.txHash, 'submit_swap'); }
   CU.submit_swap = (await (async () => { const t = await conn.getTransaction(submitted[0].sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); return Math.max(...t.meta.logMessages.map((l) => (l.match(/consumed (\d+) of/) || [0, 0])[1]).map(Number)); })());
   { const t = await conn.getTransaction(submitted[0].sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const logs = t.meta.logMessages.join('\n');
     check('P3 six sealed swaps through the relayer: each event names only the batch, the direction and the running count; no amount appears anywhere in the transaction',
@@ -152,7 +153,7 @@ module.exports = async function phase3(C) {
   const p0 = await V.binPool(POOL); const price = S.priceOf(p0.basePrice, p0.binStep, p0.activeId);
   const twin = await SE.clearing({ totals, price, quote: async (xForY, a) => (await V.quoteLocal(POOL, xForY, a)).out });
   const vs = [await vault(SOL), await vault(USDC)];
-  sig = await V.sendV0([await V.settleBatchIx(payer.publicKey, POOL, 0n)], [], 1_400_000); await cuOf(conn, sig, 'settle_batch (net swap)');
+  sig = await V.sendV0([await V.settleBatchIx(payer.publicKey, POOL, 0n)], [], 1_400_000); await cuOf(conn, sig, 'settle_batch (net swap)'); await logsOf(conn, sig, 'settle_batch (net swap)');
   const set = await evOf(sig, 'BatchSettled'); b0 = await V.batch(POOL, 0n);
   check('P3 settle (anyone): the directions net at the active bin\'s price, ONE swap of the excess through the bins; ratios == the JS twin\'s', b0.state === 'settled' && set.xForY === twin.xForY && set.netIn === twin.netIn && set.netOut === twin.netOut && set.num.every((x, k) => x === twin.num[k]) && set.den.every((x, k) => x === twin.den[k]),
     `net ${set.xForY ? 'X->Y' : 'Y->X'} ${set.netIn} -> ${set.netOut}, CU ${CU['settle_batch (net swap)']}`);
@@ -173,7 +174,7 @@ module.exports = async function phase3(C) {
       check('P3 ...nor can a claim use the other direction\'s ratio', await refused(svc.submit(Jo({ kind: 'sealedClaim', binPool: POOL, seq: 0n, direction: x.d, ext: other.ext, p: pt(op) })), /BadContext/));
       check('P3 a real claim proof verifies locally (snarkjs): [root, nullifier, out note, batch key, bundle, ext hash]', await verifyCircuit('claim', op.raw), `${TIMES.claim[0]} ms`); }
     const req = SE.sealedClaimRequest(w, { swap: sw, terms, fee: f, relayerToken: V.ata(mOut, me) }); const pr = await proveClaim(req.input);
-    const r = await svc.submit(Jo({ kind: 'sealedClaim', binPool: POOL, seq: 0n, direction: x.d, ext: req.ext, p: pt(pr) })); await cuOf(conn, r.txHash, 'claim_swap');
+    const r = await svc.submit(Jo({ kind: 'sealedClaim', binPool: POOL, seq: 0n, direction: x.d, ext: req.ext, p: pt(pr) })); await cuOf(conn, r.txHash, 'claim_swap'); await logsOf(conn, r.txHash, 'claim_swap');
     await sync(w); const gross = (sw.amount * terms.num) / terms.den; claimed[x.d].push(gross);
     x.claimOk = w.balance(mOut) === before + gross - f && w.sealedSwaps().length === 0; x.claimPr = pr; x.claimReq = req; }
   check('P3 six claims through the relayer: each seller receives exactly floor(amount x num / den) - fee as a new hidden note (the chain sees a nullifier, a commitment, the fee)', submitted.every((x) => x.claimOk), 'CU ' + CU.claim_swap);

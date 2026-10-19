@@ -70,7 +70,8 @@ async function rpcCall(url, method, params = [], timeoutMs = 8000) {
 }
 
 /// Where the program binaries for a network are: the mainnet build profile (fresh IDs, `npm run build:mainnet`) or the dev one.
-const soDirOf = (network) => path.join(ROOT, network === 'mainnet' ? 'target/deploy-mainnet' : 'target/deploy');
+/// SO_DIR overrides where the program binaries come from (e.g. the committed builds while target/deploy holds untested ones).
+const soDirOf = (network) => process.env.SO_DIR ? path.resolve(process.env.SO_DIR) : path.join(ROOT, network === 'mainnet' ? 'target/deploy-mainnet' : 'target/deploy');
 /// Program keypairs: PROGRAM_KEYPAIR_DIR (or MAINNET_KEYPAIR_DIR on mainnet), else the repo's public dev keypairs (not on mainnet).
 function programKeypairDir(network, env = process.env) {
   const d = env.PROGRAM_KEYPAIR_DIR || (network === 'mainnet' ? env.MAINNET_KEYPAIR_DIR : null);

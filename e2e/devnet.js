@@ -17,7 +17,7 @@ const S = require('../sdk/veyl.js'); const { Veyl } = S; const Z = require('../s
 const { ROOT, fund, units, sleep, readKey } = require('../scripts/lib.js');
 const { build } = require('../scripts/build-site.js'); const { serveDist } = require('../scripts/serve-dist.js');
 const { check, lap, chromePath, finish: report } = require('./harness.js');
-const RELAYER_PORT = 8843, WEB_PORT = 8873; const WEB = 'http://127.0.0.1:' + WEB_PORT; const REL = 'http://127.0.0.1:' + RELAYER_PORT;
+const RELAYER_PORT = Number(process.env.RELAYER_PORT || 8843), WEB_PORT = Number(process.env.WEB_PORT || 8873); /* other ports while e2e/run.js runs */ const WEB = 'http://127.0.0.1:' + WEB_PORT; const REL = 'http://127.0.0.1:' + RELAYER_PORT;
 const KEYS = path.join(os.homedir(), 'keys/veyl'); const keyFile = (env, name) => process.env[env] || path.join(KEYS, 'devnet-' + name + '.json');
 const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-devnet-shots'); fs.mkdirSync(SHOTS, { recursive: true });
 const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catch { /* storage blocked */ } };
@@ -76,10 +76,12 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
     const mints = Object.fromEntries(Object.values(T).map((t) => [t.mint.toBase58(), { sym: t.sym, decimals: t.decimals }]));
     const friend = new Z.ShieldWallet(require('crypto').randomBytes(32), { mints, pools: [] });
     const scan = async (w) => { const st = await V.readShield(); st.tree = new Z.Tree(st.leaves); w.scan(st); };
+    /* a real network asks for a backup (or an explicit acknowledgement) before the first deposit: this test acknowledges */
+    const ackBackup = async (pg) => { const b = await pg.waitForSelector('#dAck, #dAmt', { timeout: 15000 }).catch(() => null); if (b && (await pg.$('#dAck'))) { await pg.click('#dAck'); await pg.waitForSelector('#dAmt', { timeout: 15000 }); } };
     const until = async (fn, ms, step = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await sleep(step); } return false; };
     // each section reports on its own: a failure is recorded and the run goes on with the next one
     const ONLY = (process.env.ONLY || '').split(',').map((x) => x.trim()).filter(Boolean); // e.g. ONLY=deposits,swap,position (prerequisites included by hand)
-    const section = async (name, fn) => { if (ONLY.length && !ONLY.some((k) => name.includes(k))) { console.log('  (skipped: ' + name + ')'); return; } try { await fn(); } catch (e) { check(name + ': ran to the end', false, String(e.message).split('\n')[0].slice(0, 200)); await page.click('#doneBtn, #errClose', { timeout: 3000 }).catch(() => {}); await sleep(500); } };
+    const section = async (name, fn) => { if (ONLY.length && !ONLY.some((k) => name.startsWith(k))) { console.log('  (skipped: ' + name + ')'); return; } try { await fn(); } catch (e) { check(name + ': ran to the end', false, String(e.message).split('\n')[0].slice(0, 200)); await page.click('#doneBtn, #errClose', { timeout: 3000 }).catch(() => {}); await sleep(500); } };
 
     // test tokens from the relayer's faucet, through the account menu
     await page.click('#acctBtn'); await page.click('#acctPop [data-drip]');
@@ -95,7 +97,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
     await section('deposits', async () => {
       // a deposit taken back before the publisher admits it (the depositor's own exit; admissions are paused until after it)
       const next0 = (await V.shield()).nextIndex;
-      await page.click('[data-open="deposit"]'); await sleep(600); await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '25'); await page.click('#dGo'); await page.waitForSelector('#doneBtn, #errClose', DLG); await page.click('#doneBtn, #errClose'); await sleep(1500); await toPortfolio();
+      await page.click('[data-open="deposit"]'); await sleep(600); await ackBackup(page); await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '25'); await page.click('#dGo'); await page.waitForSelector('#doneBtn, #errClose', DLG); await page.click('#doneBtn, #errClose'); await sleep(1500); await toPortfolio();
       await page.waitForSelector('#noteList [data-cancel]', { timeout: 60000 }).catch(() => {});
       const w0 = await V.tokenBalance(USDC, user.publicKey); const pend = (await V.readShield()).pending.find((p) => p.depositor.equals(user.publicKey) && p.amount === units(25, 6)); let tb = pend ? 'no Take back button' : 'no pending 25 USDC deposit on chain';
       if (pend && (await page.$('#noteList [data-cancel="' + pend.pending.toBase58() + '"]'))) { await page.click('#noteList [data-cancel="' + pend.pending.toBase58() + '"]'); tb = await finish(); }
@@ -103,7 +105,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
       check('take back a pending deposit from the UI: the wallet gets the 25 USDC back', tookBack, tb.slice(0, 120));
       await startRelayer(5000); // the publisher's automatic admissions from here on
       // a shielded deposit: transact proof in the Web Worker, wallet-signed; the relayer's publisher admits it into the tree
-      await page.click('[data-open="deposit"]'); await sleep(600); await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '500'); await page.click('#dGo');
+      await page.click('[data-open="deposit"]'); await sleep(600); await ackBackup(page); await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '500'); await page.click('#dGo');
       await page.waitForSelector('#doneBtn, #errClose', DLG); const dTxt = await dlgText(); await page.click('#doneBtn, #errClose'); await sleep(1500);
       check('shielded deposit through the UI on devnet: 500 USDC waits outside the tree (depositor + amount public)', /Deposited 500(\.0+)? USDC/.test(dTxt), dTxt.slice(0, 120));
       const admitted = await until(async () => !(await V.readShield()).pending.some((p) => p.depositor.equals(user.publicKey)), 180000, 5000);
@@ -148,7 +150,10 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
       zp = (await aggOf()).find((x) => x.lo === zp.lo) || zp; // in the same 16-bin window the add merges into the same position (a new note, a new id)
       const claimSel = '#posList [data-pa="claim"][data-id="' + zp.id + '"]'; let enabled = false;
       for (let i = 0; i < 9 && !enabled; i++) { await toPortfolio(); enabled = await page.$eval(claimSel, (b) => !b.disabled).catch(() => false); if (!enabled) await sleep(10000); }
-      if (!enabled) { // the numbers behind a disabled Claim: the note, the on-chain fee growth, what the engine computes
+      if (!enabled) { const dump = () => page.evaluate(() => window.veylEngine.zw.notes.filter((n) => n.kind === 2 || n.lo !== undefined).map((n) => ({ lo: n.lo, spent: !!n.spent, kind: n.kind, shares: (n.shares || []).filter((x) => String(x) !== '0').length, c: String(n.commitment || '').slice(0, 10) })));
+        console.log('    position notes after the second add:', JSON.stringify(await dump()), 'window of the first:', zp.lo);
+        await page.evaluate(() => window.veylEngine.shieldSync()); console.log('    ...after a forced shieldSync:', JSON.stringify(await dump()), JSON.stringify(await page.evaluate(() => window.veylEngine.shieldPositions().map((p) => [p.id, p.windowLo]))));
+        // the numbers behind a disabled Claim: the note, the on-chain fee growth, what the engine computes
         const n = await page.evaluate((lo) => { const E = window.veylEngine; const p = E.shieldPositions().find((x) => x.windowLo === lo); return p && { shares: p.note.shares.map(String), debt: p.note.debt.map(String) }; }, zp.lo);
         const g = await V.growthOf(POOL, zp.lo); const cl = n && Z.claimable(n.shares, n.debt, g);
         console.log('    claim disabled after the second add:', JSON.stringify({ shares: n && n.shares.filter((x) => x !== '0').length, claimable: cl && cl.map((c) => String(c.q)), growthNonZero: g.map((a) => a.filter((x) => x !== 0n).length) })); }
@@ -208,7 +213,6 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
         await pg.click('#tabs [data-tab="swap"]'); await pg.waitForFunction(() => !document.querySelector('#swMode').hidden, null, { timeout: 30000 }); await sleep(400); };
       const users = []; const userErrs = [];
       try {
-        await setParams({ ...base, epochSlots: 1500n, settleTimeout: 1500n }); const st = await waitRoom(1200); const seq = st.batch.seq;
         for (let i = 0; i < 6; i++) { const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } }); await ctx.addInitScript(DEVNET); const pg = await ctx.newPage(); pg.on('pageerror', (e) => userErrs.push(e.message));
           await pg.goto(WEB + '/app.html', { waitUntil: 'domcontentloaded', timeout: 90000 }); await pg.waitForFunction(() => window.veylEngine && window.veylEngine.zw, null, { timeout: 60000 }); users.push({ ctx, pg, dir: i < 3 ? 0 : 1, addr: await pg.evaluate(() => window.veylEngine.veylAddress()) }); }
         // fund them privately: one deposit from Node (admitted by the relayer's publisher), then a hidden note to each user
@@ -221,6 +225,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
         for (const u of users) { await scan(fw); const t2 = fw.spend({ mint: u.dir === 0 ? SOL : USDC, send: u.dir === 0 ? units(3, 9) : units(600, 6), to: u.addr, hideToken: true }); const pr = await proveTransact(t2.input);
           await R2.send([V.postProofIx(relayer.publicKey, 1, pr.proof, pr.pubs)], [], 1_400_000); await R2.sendV0([await V.shieldTransactIx(relayer.publicKey, t2.ext, pr.pubs)], [], 600_000); }
         // six users seal into one batch from the pool page (3 sell SOL, 3 sell USDC), proofs in each page's Web Worker
+        await setParams({ ...base, epochSlots: 1500n, settleTimeout: 1500n }); const st = await waitRoom(1200); const seq = st.batch.seq; // after funding: room for six
         const sizes = [['0.8', '1.25', '0.4'], ['95', '210.5', '60']]; const SW = [];
         for (const [k, u] of users.entries()) { const pg = u.pg; await pg.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }); await pg.waitForFunction(() => window.veylEngine && window.veylEngine.zw, null, { timeout: 60000 }); await openSeal(pg);
           const mode = await pg.evaluate(() => [...document.querySelectorAll('#swMode [data-m]')].map((b) => b.dataset.m + ':' + b.getAttribute('aria-pressed')).join('|'));
@@ -287,7 +292,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
         await pay(ap, 0.03 * LAMPORTS_PER_SOL); await fund(conn, deployer, USDC, ap, units(80, 6));
         await lp.waitForFunction(() => /80/.test(document.getElementById('fBal').textContent), null, { timeout: 60000 }).catch(() => {});
         check('no wallet: a deposit address made in this browser; funding from outside shows up (80 USDC)', /80/.test(await lp.textContent('#fBal')), addr);
-        await lp.click('#fGo'); await lp.click('#dA [data-a="USDC"]'); await lp.fill('#dAmt', '50'); await lp.click('#dGo'); await lp.waitForSelector('#doneBtn, #errClose', DLG); const dt = await lp.textContent('#dlgBody');
+        await lp.click('#fGo'); await ackBackup(lp); await lp.click('#dA [data-a="USDC"]'); await lp.fill('#dAmt', '50'); await lp.click('#dGo'); await lp.waitForSelector('#doneBtn, #errClose', DLG); const dt = await lp.textContent('#dlgBody');
         check('no wallet: a private deposit straight from the deposit address on devnet', /Deposited 50(\.0+)? USDC/.test(dt), dt.replace(/\s+/g, ' ').slice(0, 160)); await lp.click('#doneBtn, #errClose');
         const dest = Keypair.generate().publicKey; await lp.click('#acctBtn'); await lp.click('#acctPop [data-sweep]'); await lp.fill('#swpTo', dest.toBase58()); await lp.click('#swpGo'); await lp.waitForSelector('#doneBtn, #errClose', { timeout: 120000 });
         const swept = await lp.textContent('#dlgBody'); const dU = (await conn.getTokenAccountBalance(spl.getAssociatedTokenAddressSync(USDC, dest))).value.amount;

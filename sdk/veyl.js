@@ -373,13 +373,15 @@ class Veyl {
     return this._confirm(await this.conn.sendRawTransaction(tx.serialize(), { skipPreflight: false }));
   }
   /// v0 transaction with an address lookup table (big instructions like private_swap / private_add need one).
-  async sendV0(ixs, signers = [], cu = 1_400_000, lookupTable = this.lookupTable) {
+  async sendV0(ixs, signers = [], cu = 1_400_000, lookupTable = this.lookupTable) { return this.sendSigned(await this.buildV0(ixs, signers, cu, lookupTable)); }
+  /// The signed v0 transaction sendV0 sends (to simulate it first: see sendV0Checked in shield.js).
+  async buildV0(ixs, signers = [], cu = 1_400_000, lookupTable = this.lookupTable) {
     const fee = this.payer || signers[0]; const tables = [];
     for (const k of [lookupTable, ...(lookupTable === this.lookupTable ? this.lookupExtra || [] : [])].filter(Boolean)) { const t = await this.lutAccount(k); if (t) tables.push(t); }
     const msg = new TransactionMessage({ payerKey: fee.publicKey, recentBlockhash: (await this.conn.getLatestBlockhash()).blockhash, instructions: [ComputeBudgetProgram.setComputeUnitLimit({ units: cu }), ...ixs] }).compileToV0Message(tables);
-    const tx = new VersionedTransaction(msg); tx.sign([fee, ...signers.filter((s) => !s.publicKey.equals(fee.publicKey))]);
-    return this._confirm(await this.conn.sendRawTransaction(tx.serialize(), { skipPreflight: false }));
+    const tx = new VersionedTransaction(msg); tx.sign([fee, ...signers.filter((s) => !s.publicKey.equals(fee.publicKey))]); return tx;
   }
+  async sendSigned(tx) { return this._confirm(await this.conn.sendRawTransaction(tx.serialize(), { skipPreflight: false })); }
   async _confirm(sig) { const r = await this.conn.confirmTransaction(sig, 'confirmed'); if (r.value.err) throw new Error('tx failed: ' + JSON.stringify(r.value.err)); return sig; }
   async events(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); return parseEvents(t && t.meta && t.meta.logMessages); }
   async returnData(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const r = t && t.meta && t.meta.returnData; return r ? Buffer.from(r.data[0], 'base64') : null; }

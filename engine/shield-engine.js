@@ -34,21 +34,84 @@ export function installShield(Engine, PrivacyError) {
   };
   /// This account's Veyl address: the spending public key and the X25519 viewing key. Share it to be paid privately.
   P.veylAddress = function () { return (this.zw || this.shieldInit()).address; };
-  /// Rebuild every shielded note from the chain's events (through the relayer, checked against the on-chain root; read
-  /// directly from the chain when the two disagree).
+  /// Rebuild every shielded note from the chain's events. The tree state is cached in this browser (memory + localStorage)
+  /// and read incrementally: only signatures newer than the cached one. Every source is checked against the on-chain root
+  /// history, in order: the cache + new signatures, the relayer's copy, a full read from the chain.
   P.shieldSync = async function () {
-    const zw = this.zw || this.shieldInit(); let st = null;
-    try { st = await fetch(this.cfg.relayer + '/shield').then((x) => x.json()); if (st.error) throw new Error(st.error); } catch { st = null; }
-    const onchain = await this.V.shield(); if (!onchain) throw new Error('The shielded pool is not deployed on this network.');
-    if (st) { st.tree = new Z.Tree(st.leaves.map(BigInt)); if (!onchain.isKnownRoot(st.tree.root()) && !(st.leaves.length === 0 && onchain.nextIndex === 0n)) st = null; }
-    if (!st) { const r = await this.V.readShield(); st = { leaves: r.leaves, ciphertexts: r.ciphertexts, receipts: [...r.receipts.values()], nullified: r.nullified, pending: r.pending }; st.tree = new Z.Tree(r.leaves); }
-    zw.scan(st); this.shieldState = st; this.store.data.shield.ot = zw.ot; if (zw.notes.length) this.store.data.shield.used = true;
+    const zw = this.zw || this.shieldInit(); let got = null;
+    // Right after this browser submitted an action, the history (RPC signature index, the relayer's copy) can lag the chain by a
+    // few seconds, and an older root is still a known one: wait briefly for the tree whose root is the current one, so the
+    // action's own notes (a new position, a change note) are in it. Otherwise any known root will do.
+    const fresh = this._syncFresh; this._syncFresh = false;
+    for (let attempt = 0; ; attempt++) {
+      const onchain = await this.V.shield(); if (!onchain) throw new Error('The shielded pool is not deployed on this network.');
+      got = await this._readShieldState(onchain);
+      if (!fresh || got.rootOk === false || BigInt(got.tree.root()) === BigInt(onchain.currentRoot) || attempt >= 8) break;
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+    this.shieldTreeOk = got.rootOk !== false; if (this.shieldTreeOk) this._shieldCacheSave(got); else { this._shMem = null; this.log('The shielded history read from the chain does not match its root' + ((got.r.truncated || []).length ? ' (cut logs in ' + got.r.truncated.join(', ') + ')' : '')); }
+    const r = got.r; const st = { tree: got.tree, leaves: got.tree.leaves, ciphertexts: r.ciphertexts, receipts: r.receipts instanceof Map ? [...r.receipts.values()] : r.receipts, nullified: r.nullified, pending: r.pending, deposits: r.deposits || {}, newest: r.newest || null };
+    const sh = this.store.data.shield; zw.scan(st, sh.outbox || []); this.shieldState = st; sh.ot = zw.ot; if (zw.notes.length) sh.used = true; this._outboxPrune(st);
     // deposits still waiting for the approved-set publisher (the chain lists them by depositor)
     const pend = (st.pending || []).map((p) => ({ pending: String(p.pending), depositor: String(p.depositor), mint: String(p.mint), amount: String(p.amount), commitments: (p.commitments || []).map(String) }));
-    this.store.data.shield.pending = (this.store.data.shield.pending || []).filter((p) => pend.some((q) => q.commitments.includes(String(p.commitment))));
+    sh.pending = (sh.pending || []).filter((p) => pend.some((q) => q.commitments.includes(String(p.commitment))));
     this.shieldPendingNow = pend.filter((p) => this.account && p.depositor === this.account);
     this.store.save(); return zw.notes;
   };
+  const CACHE_V = 1; const cacheKey = (e) => 'veyl:shieldcache:' + e.cfg.programs.entry + ':' + (e.cfg.programs.pool || '');
+  /// { r: readShield-shaped state, tree, via: 'cache' | 'relayer' | 'chain' } whose root the chain knows.
+  P._readShieldState = async function (onchain) {
+    const known = (tree, n) => onchain.isKnownRoot(tree.root()) || (n === 0 && onchain.nextIndex === 0n);
+    const mem = this._shieldCacheLoad();
+    if (mem) { try { const r = await this.V.readShield({ prev: mem.r }); const tree = Z.Tree.grow(mem.tree, r.leaves); if (known(tree, r.leaves.length)) return { r, tree, via: 'cache' }; } catch { /* inconsistent: read again below */ }
+      this._shMem = null; }
+    try { const r = await fetch(this.cfg.relayer + '/shield').then((x) => x.json()); if (r.error) throw new Error(r.error); const tree = new Z.Tree(r.leaves.map(BigInt)); if (known(tree, r.leaves.length)) return { r, tree, via: 'relayer' }; } catch { /* the relayer is down or disagrees with the chain */ }
+    // the last resort is used even when its root is unknown (the balance still shows), but not cached: a transaction whose
+    // logs Solana cut can hide a tree leaf from every reader (r.truncated lists them); proofs against this tree will fail
+    const r = await this.V.readShield(); const tree = new Z.Tree(r.leaves); return { r, tree, via: 'chain', rootOk: known(tree, r.leaves.length) };
+  };
+  P._shieldCacheLoad = function () { if (this._shMem) return this._shMem;
+    try { const c = JSON.parse(localStorage.getItem(cacheKey(this)) || 'null'); if (c && c.v === CACHE_V && c.r && Array.isArray(c.r.leaves)) return (this._shMem = { r: c.r, tree: null, newest: c.r.newest }); } catch { /* storage blocked or corrupt */ }
+    return null; };
+  /// Keep the state for the next sync; written to localStorage only when it moved (a full or blocked storage keeps it in memory).
+  P._shieldCacheSave = function (got) { const prevNewest = this._shMem && this._shMem.newest; this._shMem = { r: got.r, tree: got.tree, newest: got.r.newest || null };
+    if (!got.r.newest || (got.via === 'cache' && prevNewest === got.r.newest)) return;
+    try { localStorage.setItem(cacheKey(this), JSON.stringify({ v: CACHE_V, r: Z.serializeShield(got.r) })); } catch { /* memory only */ } };
+  /// Forget the cached tree (the next sync reads it in full).
+  P.shieldCacheClear = function () { this._shMem = null; try { localStorage.removeItem(cacheKey(this)); } catch { /* nothing stored */ } };
+
+  // ---------------------------------------------------------------------------------------------- outbox
+  // Every note an action creates for this account reaches it as an encrypted event in the transaction's logs, and Solana
+  // drops logs past ~10 KB without a trace. So before anything is sent, the notes the request creates for this account
+  // (whatever its ciphertexts open to with this viewing key: change notes, a position note and its fee notes, sealed swap
+  // and claim notes) go into store.data.shield.outbox (it travels in the encrypted backup). A sync adopts an entry whose
+  // commitment is in the tree when no ciphertext delivered it, and drops entries found through a ciphertext or that can
+  // no longer land.
+  const OUTBOX_FAILED = 30 * 60_000, OUTBOX_TTL = 14 * 86_400_000; // an action the relayer refused; anything not seen for two weeks
+  P._outboxAdd = function (req) { if (!this.zw || !req || !req.kind) return []; const cts = [], nf = [];
+    const ext = (e) => { if (e) for (const k of ['encOut', 'encChange', 'encSwap']) { const v = e[k]; if (v !== undefined && v !== null) (Array.isArray(v) ? v : [v]).forEach((x) => cts.push(x)); } };
+    const pubs = (p, ids) => { if (p && p.pubs) for (const i of ids) if (p.pubs[i] !== undefined) nf.push(String(p.pubs[i])); };
+    ext(req.ext); if (req.leg) ext(req.leg.ext); for (const l of req.legs || []) ext(l.ext); if (req.core && req.core.ciphertext) cts.push(req.core.ciphertext);
+    if (req.kind === 'sealedSwap') pubs(req.p, [1, 2]); else if (req.kind === 'sealedClaim') pubs(req.p, [1]);
+    else { pubs(req.p, [4, 5]); if (req.leg) pubs(req.leg.p, [4, 5]); for (const l of req.legs || []) pubs(l.p, [4, 5]); pubs(req.position, [1]); }
+    let add = []; try { add = this.zw.outboxOf(cts, nf); } catch { /* not a request with notes */ } if (!add.length) return [];
+    for (const o of add) o.kind = req.kind; const sh = this.store.data.shield; sh.outbox = [...(sh.outbox || []).filter((o) => !add.some((x) => x.c === o.c)), ...add]; this.store.save(); return add; };
+  P._outboxPrune = function (st) { const sh = this.store.data.shield; const ob = sh.outbox; if (!ob || !ob.length) return; const zw = this.zw; const now = Date.now();
+    const spent = st.nullified instanceof Set ? st.nullified : new Set((st.nullified || []).map(String));
+    sh.outbox = ob.filter((o) => {
+      if (zw.found.has(o.c)) return false; // its ciphertext is in the history: every scan finds it without help
+      if (zw.leafIndex.has(o.c)) return zw.notes.some((n) => n.outbox === o.c && !n.spent && Z.worth(n)); // adopted: the only record of these notes, kept while one is unspent
+      if ((o.nf || []).some((x) => spent.has(String(x)))) return false; // its inputs were spent by another action: this one can never land
+      return now - o.at < (o.err ? OUTBOX_FAILED : OUTBOX_TTL); });
+    if (sh.outbox.length !== ob.length) this.store.save(); };
+  /// Planned notes not seen on chain yet, and the ones only the outbox knows about (adopted): for a status line or support.
+  P.outboxState = function () { const zw = this.zw || this.shieldInit(); return (this.store.data.shield.outbox || []).map((o) => ({ commitment: o.c, kind: o.kind || null, at: o.at, tx: o.tx || null, failed: !!o.err, adopted: !!(zw.leafIndex && zw.leafIndex.has(o.c)) })); };
+  // every relayed action goes through submit(): its notes are in the outbox before the request leaves this page
+  const submit0 = P.submit;
+  P.submit = async function (req) { const ob = this._outboxAdd(req); let r;
+    try { r = await submit0.call(this, req); } catch (e) { const t = Date.now(); for (const o of ob) o.err = t; if (ob.length) this.store.save(); throw e; }
+    for (const o of ob) o.tx = r.txHash; if (ob.length) this.store.save(); return r; };
+
   P.shieldBalance = function (sym) { return (this.zw || this.shieldInit()).balance(this.tok(sym).mint); };
   P.shieldNotes = function () { return (this.zw || this.shieldInit()).notes.filter((n) => !n.spent && BigInt(n.amount || 0) > 0n && n.kind === Z.NOTE.TOKEN); };
 
@@ -96,7 +159,9 @@ export function installShield(Engine, PrivacyError) {
     const v = this.unit(sym, amount); const mint = new PublicKey(this.tok(sym).mint); const wrap = await this.wrapIxs(mint, v); const d = zw.deposit(mint, v);
     const p = await this.proveIn('transact', d.input); const pubs = p.pubs.map(BigInt);
     const ixPost = this.V.postProofIx(this.pk, Z.KIND.TRANSACT, Buffer.from(p.proof, 'base64'), pubs); const ixDep = await this.V.shieldDepositIx(this.pk, d.ext, pubs);
-    const tx = await this._sendAll(wrap.length ? [wrap, [ixPost], [ixDep]] : [[ixPost], [ixDep]], 1_400_000);
+    const ob = this._outboxAdd({ kind: 'deposit', ext: d.ext, p }); let tx; // the deposit's note, kept before the wallet signs (see outbox)
+    try { tx = await this._sendAll(wrap.length ? [wrap, [ixPost], [ixDep]] : [[ixPost], [ixDep]], 1_400_000); } catch (e) { for (const o of ob) o.err = Date.now(); this.store.save(); throw e; }
+    for (const o of ob) o.tx = tx;
     this.store.data.shield.pending.push({ commitment: String(d.commitments[0]), sym, amount: String(v), tx, at: Date.now() }); this.store.save();
     return { tx, value: v };
   };

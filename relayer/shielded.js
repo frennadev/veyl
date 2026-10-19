@@ -26,6 +26,8 @@ module.exports = (Base) => class Shielded extends Base {
       if (!(await this.conn.getAccountInfo(V.sharesPda(pool, V.shieldOwner(), V.signerPda(), ch)))) ixs.push(V.initSharesIx(me, pool, V.shieldOwner(), V.signerPda(), ch));
       if (withLpAcc && !(await this.conn.getAccountInfo(V.lpAccPda(pool, ch)))) ixs.push(V.initLpAccIx(me, pool, ch)); }
     for (let i = 0; i < ixs.length; i += 3) txs.push(await V.send(ixs.slice(i, i + 3), [], 400_000)); }
+  /// Every action's last transaction goes out through V.sendV0Checked: simulated first, refused (nothing sent, proofs
+  /// cancelled) when Solana's 10 KB log cut would hide a tree leaf or a receipt it adds.
   async submitShield(req) {
     const V = this.V; const me = this.wallet.publicKey; const EP = V.signerPda(); const txs = []; const posts = []; const kind = req.kind; const T = Z.KIND.TRANSACT;
     const cover = async () => { const lam = await this.shieldCost(kind, req); this._coverOrRefuse(lam, this._shieldFees(kind, req).length ? this._shieldFees(kind, req) : [{ sym: 'SOL', atoms: 0n }]); };
@@ -39,7 +41,7 @@ module.exports = (Base) => class Shielded extends Base {
           if (BigInt(Z.extHash(ext)) !== x.pubs[2]) throw new Error('proof does not match the external data');
           const pre = []; if (BigInt(ext.extAmount) < 0n) { const mint = new PublicKey(ext.mint); if (!req.recipientOwner) throw new Error('recipientOwner?'); if (!V.ata(mint, req.recipientOwner, await V.tokenProgram(mint)).equals(new PublicKey(ext.recipient))) throw new Error('recipient is not that wallet\'s token account');
             pre.push(spl.createAssociatedTokenAccountIdempotentInstruction(me, new PublicKey(ext.recipient), new PublicKey(req.recipientOwner), mint, await V.tokenProgram(mint))); }
-          txs.push(await V.sendV0([...pre, await V.shieldTransactIx(me, ext, x.pubs, x.poster)], [], 600_000)); break; }
+          txs.push(await V.sendV0Checked([...pre, await V.shieldTransactIx(me, ext, x.pubs, x.poster)], [], 600_000)); break; }
         case 'shieldLp': { const c = req.core; if (!new PublicKey(c.relayer).equals(me)) throw new Error('fees must go to this relayer'); this._checkDeadline(c.deadline);
           const bp = await V.binPool(c.binPool); req.mintX = bp.mintX; req.mintY = bp.mintY;
           for (const l of req.legs || []) this._checkLeg(l.ext, EP); await cover();
@@ -47,24 +49,24 @@ module.exports = (Base) => class Shielded extends Base {
           const pos = await this._post(Z.KIND.POSITION, req.position, txs); posts.push({ kind: Z.KIND.POSITION, ...pos });
           const ids = []; for (let b = 0; b < Z.K; b++) ids.push(Number(c.lo) + b); await this._ensureLp(c.binPool, [...ids, bp.activeId], txs);
           const lpReq = { core: c, legs: (req.legs || []).map((l) => l.ext) }; bufId = await V.uploadBuffer(this.wallet, Z.encodeLpRequest(lpReq));
-          txs.push(await V.sendV0([HEAP(), await V.shieldLpIx(me, bufId, lpReq, pos.pubs, pos.poster, legs)], [], 1_400_000)); bufId = null; break; }
+          txs.push(await V.sendV0Checked([HEAP(), await V.shieldLpIx(me, bufId, lpReq, pos.pubs, pos.poster, legs)], [], 1_400_000)); bufId = null; break; }
         case 'shieldSwap': { const c = req.core; this._checkDeadline(c.deadline); this._checkLeg(req.leg.ext, EP); await cover();
           const x = await this._post(T, req.leg.p, txs); posts.push({ kind: T, ...x }); await V.prepareRoutes(c.routes);
           const r = { core: c, leg: req.leg.ext, legPubs: x.pubs }; bufId = await V.uploadBuffer(this.wallet, Buffer.concat([Z.encodeSwapCore(c), Z.encodeExt(req.leg.ext)]));
-          txs.push(await V.sendV0([HEAP(), await V.shieldSwapIx(me, bufId, r, x.poster)], [], 1_400_000)); bufId = null; break; }
+          txs.push(await V.sendV0Checked([HEAP(), await V.shieldSwapIx(me, bufId, r, x.poster)], [], 1_400_000)); bufId = null; break; }
         case 'shieldOrder': case 'shieldOrderWithdraw': { const c = req.core; this._checkDeadline(c.deadline); if (kind === 'shieldOrder') this._checkLeg(req.leg.ext, EP);
           else { if (!new PublicKey(c.relayer).equals(me)) throw new Error('fees must go to this relayer'); const bp = await V.binPool(c.binPool); req.mintX = bp.mintX; req.mintY = bp.mintY; req.legs = []; }
           await cover(); const x = await this._post(T, req.leg.p, txs); posts.push({ kind: T, ...x }); await this._ensureLp(c.binPool, [Number(c.id)], txs, false);
           const enc = kind === 'shieldOrder' ? Z.encodeOrderCore(c) : Z.encodeOrderWithdrawCore(c); const r = { core: c, leg: req.leg.ext, legPubs: x.pubs };
           bufId = await V.uploadBuffer(this.wallet, Buffer.concat([enc, Z.encodeExt(req.leg.ext)]));
-          txs.push(await V.sendV0([HEAP(), kind === 'shieldOrder' ? await V.shieldOrderIx(me, bufId, r, x.poster) : await V.shieldOrderWithdrawIx(me, bufId, r, x.poster)], [], 1_400_000)); bufId = null; break; }
+          txs.push(await V.sendV0Checked([HEAP(), kind === 'shieldOrder' ? await V.shieldOrderIx(me, bufId, r, x.poster) : await V.shieldOrderWithdrawIx(me, bufId, r, x.poster)], [], 1_400_000)); bufId = null; break; }
         case 'migrate': { const d = req.d; this._checkCommon(d); const mint = new PublicKey(req.mint); const pool = V.poolPda(mint); this.poolFor(pool);
           const { proof, pubs } = this._checkProof(req.p); if (pubs[5] !== contextOf(EP, Buffer.concat([Buffer.from([Z.MIGRATE]), Z.encodeMigrate(d)]), pool)) throw new Error('proof context does not match the request');
           this._coverOrRefuse(WORST.migrate, [{ sym: this._symOfMint(mint), atoms: (pubs[2] * BigInt(d.feeBps)) / 10_000n }]);
           const st = await V.prevPosterOf(pool, pubs[1]); if (st.spent) throw new Error('this note is already spent');
           const post = V.postWithdrawalIx(me, pool, proof, pubs, EP, S.DEFAULT_TTL_SLOTS, st.prevPoster || me);
           txs.push(await V.send([post], [], 1_400_000));
-          try { txs.push(await V.sendV0([await V.shieldMigrateIx(me, mint, pubs[1], d)], [], 1_400_000)); } catch (e) { await this._cancel(mint, pubs[1]); throw e; } break; }
+          try { txs.push(await V.sendV0Checked([await V.shieldMigrateIx(me, mint, pubs[1], d)], [], 1_400_000)); } catch (e) { await this._cancel(mint, pubs[1]); throw e; } break; }
         case 'sealedSwap': case 'sealedClaim': { const swap = kind === 'sealedSwap'; const pool = new PublicKey(req.binPool); const s = await V.sealed(pool); if (!s) throw new Error('no sealed swaps for this pool');
           const dir = Number(req.direction); if (dir !== 0 && dir !== 1) throw new Error('direction?');
           // the token the fee is paid in: the one sold (swap) or received (claim); it must reach this relayer's account
@@ -76,7 +78,7 @@ module.exports = (Base) => class Shielded extends Base {
           if ((swap ? SE.swapExtHash(ext) : SE.claimExtHash(ext)) !== x.pubs[swap ? 7 : 5]) throw new Error('proof does not match the external data');
           const ix = swap ? await V.submitSwapIx(me, { binPool: pool, seq: s.seq, direction: dir, mintIn: req.mint, c1: Z.bytes(req.c1), c2: Z.bytes(req.c2), ext, pubs: x.pubs, poster: x.poster })
             : await V.claimSwapIx(me, { binPool: pool, seq: BigInt(req.seq), direction: dir, mintOut: req.mint, ext, pubs: x.pubs, poster: x.poster });
-          txs.push(await V.sendV0([ix], [], 600_000)); break; }
+          txs.push(await V.sendV0Checked([ix], [], 600_000)); break; }
         default: throw new Error('unknown kind');
       }
     } catch (e) {
@@ -86,10 +88,13 @@ module.exports = (Base) => class Shielded extends Base {
     this.shieldCache = null;
     return { txs, txHash: txs[txs.length - 1] };
   }
-  /// The shielded tree and its events (cached 3 s). Clients check the leaves against the on-chain root before proving.
+  /// The shielded tree and its events (cached 3 s), as serializeShield JSON. Read incrementally (only signatures newer than
+  /// the last one read) and checked against the on-chain root history; a full read when that check fails. Clients check the
+  /// leaves against the on-chain root again before proving.
   async shieldState() { if (this.shieldCache && Date.now() - this.shieldCache.at < 3000) return this.shieldCache.v;
-    const r = await this.V.readShield(); const v = { leaves: r.leaves.map(String), ciphertexts: [...r.ciphertexts].map(([c, x]) => ({ commitment: c, data: Buffer.from(x.data).toString('base64'), position: x.position })),
-      receipts: [...r.receipts.values()].map((x) => ({ index: Number(x.index), commitment: String(x.commitment), asset: String(x.asset), amount: String(x.amount), owner: String(x.owner), blinding: String(x.blinding) })),
-      pending: r.pending.map((x) => ({ pending: x.pending.toBase58(), depositor: x.depositor.toBase58(), mint: x.mint.toBase58(), amount: String(x.amount), commitments: x.commitments.map(String) })), nullified: [...r.nullified] };
+    const mem = this.shieldMem; let r = null, tree = null;
+    if (mem) { try { r = await this.V.readShield({ prev: mem.r }); tree = Z.Tree.grow(mem.tree, r.leaves); const on = await this.V.shield(); if (!on || !(on.isKnownRoot(tree.root()) || (r.leaves.length === 0 && on.nextIndex === 0n))) r = null; } catch { r = null; } }
+    if (!r) { r = await this.V.readShield(); tree = new Z.Tree(r.leaves); }
+    this.shieldMem = { r, tree }; const v = Z.serializeShield(r);
     this.shieldCache = { at: Date.now(), v }; return v; }
 };

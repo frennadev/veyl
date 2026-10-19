@@ -165,12 +165,13 @@ pub fn use_nullifier<'info>(acc: &AccountInfo<'info>, payer: &AccountInfo<'info>
     emit!(Nullified { nullifier: *nullifier });
     Ok(())
 }
+/// The new notes' encrypted copies, logged first thing in every instruction that creates notes (before its nullifier, token
+/// and bin CPIs): Solana keeps about 10 KB of logs per transaction and silently drops the rest, and an owner whose ciphertext
+/// was dropped never finds the note. A failed transaction's logs are ignored by scanners, so emitting before the checks is safe.
 fn emit_ciphertexts(commitments: &[[u8; 32]], enc: &[Vec<u8>]) { for (c, d) in commitments.iter().zip(enc.iter()) { if !d.is_empty() { emit!(NoteCiphertext { commitment: *c, data: d.clone() }); } } }
-fn insert_outputs<'info>(shield: &AccountLoader<'info, Shield>, pubs: &[[u8; 32]; 8], ext: &TransactExt) -> Result<()> {
+fn insert_outputs<'info>(shield: &AccountLoader<'info, Shield>, pubs: &[[u8; 32]; 8]) -> Result<()> {
     let mut s = shield.load_mut()?;
     for c in [pubs[6], pubs[7]] { let (i, _) = s.insert(&c)?; emit!(NoteInserted { index: i, commitment: c }); }
-    drop(s);
-    emit_ciphertexts(&[pubs[6], pubs[7]], &ext.enc_out);
     Ok(())
 }
 fn shield_out<'info>(tp: &Interface<'info, TokenInterface>, vault: &InterfaceAccount<'info, TokenAccount>, mint: &InterfaceAccount<'info, Mint>, to: &InterfaceAccount<'info, TokenAccount>, shield: &AccountInfo<'info>, signer: &[&[u8]], amount: u64) -> Result<()> {
@@ -430,6 +431,7 @@ pub mod veyl_pool {
         require!(ext.processor == Pubkey::default() || ext.processor == ctx.accounts.depositor.key(), VeylError::NotProcessor);
         require_keys_eq!(ext.mint, ctx.accounts.mint.key(), VeylError::WrongMint);
         let pubs = { let s = ctx.accounts.shield.load()?; check_transact(&s, &ctx.accounts.posted, &ext, &asset_of(&ctx.accounts.mint.key()))? };
+        emit_ciphertexts(&[pubs[6], pubs[7]], &ext.enc_out);
         let amount = ext.ext_amount as u64;
         let before = ctx.accounts.vault.amount;
         token_interface::transfer_checked(CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked {
@@ -443,7 +445,6 @@ pub mod veyl_pool {
         let d = &mut ctx.accounts.pending;
         d.depositor = ctx.accounts.depositor.key(); d.mint = ext.mint; d.amount = amount; d.commitments = [pubs[6], pubs[7]]; d.slot = Clock::get()?.slot; d.bump = ctx.bumps.pending;
         { let mut s = ctx.accounts.shield.load_mut()?; s.pending_deposits += 1; }
-        emit_ciphertexts(&[pubs[6], pubs[7]], &ext.enc_out);
         emit!(DepositPending { pending: ctx.accounts.pending.key(), depositor: ctx.accounts.depositor.key(), mint: ext.mint, amount, commitments: [pubs[6], pubs[7]], nullifiers: [pubs[4], pubs[5]] });
         Ok(())
     }
@@ -478,6 +479,7 @@ pub mod veyl_pool {
         let moves = ext.ext_amount < 0 || ext.fee > 0;
         let asset = if moves { let m = ctx.accounts.mint.as_ref().ok_or(VeylError::WrongMint)?; require_keys_eq!(ext.mint, m.key(), VeylError::WrongMint); asset_of(&m.key()) } else { [0u8; 32] };
         let pubs = { let s = ctx.accounts.shield.load()?; check_transact(&s, &ctx.accounts.posted, &ext, &asset)? };
+        emit_ciphertexts(&[pubs[6], pubs[7]], &ext.enc_out);
         use_nullifier(&ctx.accounts.nullifier0, &ctx.accounts.submitter.to_account_info(), &ctx.accounts.system_program, &pubs[4])?;
         use_nullifier(&ctx.accounts.nullifier1, &ctx.accounts.submitter.to_account_info(), &ctx.accounts.system_program, &pubs[5])?;
         if moves {
@@ -493,7 +495,7 @@ pub mod veyl_pool {
                 shield_out(tp, vault, mint, to, &ctx.accounts.shield.to_account_info(), signer, ext.fee)?;
             }
         }
-        insert_outputs(&ctx.accounts.shield, &pubs, &ext)?;
+        insert_outputs(&ctx.accounts.shield, &pubs)?;
         emit!(Transacted { nullifiers: [pubs[4], pubs[5]], mint: if moves { ext.mint } else { Pubkey::default() }, ext_amount: ext.ext_amount, fee: ext.fee });
         Ok(())
     }
@@ -510,6 +512,7 @@ pub mod veyl_pool {
             None => { let m = ctx.accounts.mint.as_ref().ok_or(VeylError::WrongMint)?; require_keys_eq!(ext.mint, m.key(), VeylError::WrongMint); asset_of(&m.key()) }
         };
         let pubs = { let s = ctx.accounts.shield.load()?; check_transact(&s, &ctx.accounts.posted, &ext, &asset)? };
+        emit_ciphertexts(&[pubs[6], pubs[7]], &ext.enc_out);
         use_nullifier(&ctx.accounts.nullifier0, &ctx.accounts.payer.to_account_info(), &ctx.accounts.system_program, &pubs[4])?;
         use_nullifier(&ctx.accounts.nullifier1, &ctx.accounts.payer.to_account_info(), &ctx.accounts.system_program, &pubs[5])?;
         let amount = ext.ext_amount.unsigned_abs();
@@ -520,8 +523,9 @@ pub mod veyl_pool {
             if amount > 0 { let to = ctx.accounts.processor_token.as_ref().ok_or(VeylError::WrongRecipient)?; require_keys_eq!(to.key(), ext.recipient, VeylError::WrongRecipient); shield_out(tp, vault, mint, to, &ctx.accounts.shield.to_account_info(), signer, amount)?; }
             if ext.fee > 0 { let to = ctx.accounts.relayer_token.as_ref().ok_or(VeylError::WrongRecipient)?; require_keys_eq!(to.key(), ext.relayer, VeylError::WrongRecipient); shield_out(tp, vault, mint, to, &ctx.accounts.shield.to_account_info(), signer, ext.fee)?; }
         }
-        insert_outputs(&ctx.accounts.shield, &pubs, &ext)?;
-        emit!(Transacted { nullifiers: [pubs[4], pubs[5]], mint: ext.mint, ext_amount: ext.ext_amount, fee: ext.fee });
+        insert_outputs(&ctx.accounts.shield, &pubs)?;
+        // (no Transacted here: the entry program's action event describes the action, and every leg's copy cost ~174 of
+        //  the ~10 KB a transaction may log; the nullifiers are in Nullified, the amounts in the instruction data)
         Ok(amount)
     }
 
@@ -537,7 +541,6 @@ pub mod veyl_pool {
         use_nullifier(&ctx.accounts.nullifier, &ctx.accounts.payer.to_account_info(), &ctx.accounts.system_program, &pubs[1])?;
         let mut s = ctx.accounts.shield.load_mut()?;
         for c in [pubs[2], pubs[5], pubs[6]] { if c != [0u8; 32] { require!(in_field(&c), VeylError::BadField); let (i, _) = s.insert(&c)?; emit!(NoteInserted { index: i, commitment: c }); } }
-        emit!(Nullified { nullifier: pubs[1] });
         Ok(())
     }
 
@@ -545,15 +548,14 @@ pub mod veyl_pool {
     /// (or, for a virtual asset, nothing: the entry holds what backs it), for a one-time owner key and blinding that are
     /// public too. Swap outputs, removal proceeds and order shares come back this way; only the owner's spending key is
     /// secret, so the note can later be spent (and merged out of sight) like any other.
-    pub fn deposit_receipt(ctx: Context<DepositReceipt>, virtual_asset: Option<[u8; 32]>, amount: u64, owner: [u8; 32], blinding: [u8; 32]) -> Result<u64> {
+    pub fn deposit_receipt(ctx: Context<DepositReceipt>, virtual_asset: Option<[u8; 32]>, amount: u64, owner: [u8; 32], blinding: [u8; 32]) -> Result<()> {
         require_keys_eq!(ctx.accounts.processor.key(), entry_signer(), VeylError::NotProcessor);
         require!(amount > 0 && in_field(&owner) && blinding < SNARK_SCALAR_FIELD, VeylError::BadAmount);
         let asset = match virtual_asset {
             Some(a) => a,
             None => {
-                let (mint, vault, tp, from) = (ctx.accounts.mint.as_ref().ok_or(VeylError::WrongMint)?, ctx.accounts.vault.as_ref().ok_or(VeylError::WrongMint)?, ctx.accounts.token_program.as_ref().ok_or(VeylError::WrongTokenProgram)?, ctx.accounts.processor_token.as_ref().ok_or(VeylError::WrongRecipient)?);
+                let (mint, vault, tp) = (ctx.accounts.mint.as_ref().ok_or(VeylError::WrongMint)?, ctx.accounts.vault.as_ref().ok_or(VeylError::WrongMint)?, ctx.accounts.token_program.as_ref().ok_or(VeylError::WrongTokenProgram)?);
                 require_keys_eq!(vault.key(), anchor_spl::associated_token::get_associated_token_address_with_program_id(&ctx.accounts.shield.key(), &mint.key(), &tp.key()), VeylError::WrongMint);
-                token_interface::transfer_checked(CpiContext::new(tp.to_account_info(), TransferChecked { from: from.to_account_info(), mint: mint.to_account_info(), to: vault.to_account_info(), authority: ctx.accounts.processor.to_account_info() }), amount, mint.decimals)?;
                 asset_of(&mint.key())
             }
         };
@@ -561,7 +563,13 @@ pub mod veyl_pool {
         let (index, _) = ctx.accounts.shield.load_mut()?.insert(&commitment)?;
         emit!(NoteInserted { index, commitment });
         emit!(ReceiptNote { index, commitment, asset, amount, owner, blinding });
-        Ok(index)
+        // the note is logged before the transfer's CPI (log truncation); the transaction fails as a whole if the transfer does
+        if virtual_asset.is_none() {
+            let (mint, vault, tp, from) = (ctx.accounts.mint.as_ref().unwrap(), ctx.accounts.vault.as_ref().unwrap(), ctx.accounts.token_program.as_ref().unwrap(), ctx.accounts.processor_token.as_ref().ok_or(VeylError::WrongRecipient)?);
+            token_interface::transfer_checked(CpiContext::new(tp.to_account_info(), TransferChecked { from: from.to_account_info(), mint: mint.to_account_info(), to: vault.to_account_info(), authority: ctx.accounts.processor.to_account_info() }), amount, mint.decimals)?;
+        }
+        // (no return value: the index is in the events, and the runtime logs any return data as one more line)
+        Ok(())
     }
 
     /// Pay `amount` of a token out of the vault to the entry program (the shielded liquidity fee pot: relayer fees taken
@@ -586,13 +594,12 @@ pub mod veyl_pool {
         { let s = ctx.accounts.shield.load()?; require!(s.is_known_root(&pubs[0]), VeylError::UnknownStateRoot); }
         require!(in_field(&pubs[1]) && in_field(&pubs[2]) && in_field(&pubs[3]) && in_field(&pubs[4]), VeylError::BadField);
         require!(enc.len() == 2 && enc.iter().all(|c| c.len() <= MAX_CIPHERTEXT), VeylError::BadParams);
+        emit_ciphertexts(&[pubs[3], pubs[4]], &enc);
         use_nullifier(&ctx.accounts.nullifier0, &ctx.accounts.payer.to_account_info(), &ctx.accounts.system_program, &pubs[1])?;
         use_nullifier(ctx.accounts.nullifier1.as_ref().ok_or(VeylError::BadParams)?, &ctx.accounts.payer.to_account_info(), &ctx.accounts.system_program, &pubs[2])?;
         sealed_fee(&ctx, fee)?;
         let mut s = ctx.accounts.shield.load_mut()?;
         for c in [pubs[3], pubs[4]] { let (i, _) = s.insert(&c)?; emit!(NoteInserted { index: i, commitment: c }); }
-        drop(s);
-        emit_ciphertexts(&[pubs[3], pubs[4]], &enc);
         Ok(())
     }
     /// Execute a posted claim proof for the entry program (which has checked the batch's settlement or refund in the bundle):
@@ -607,10 +614,10 @@ pub mod veyl_pool {
         require!(in_field(&pubs[1]) && in_field(&pubs[2]), VeylError::BadField);
         require!(enc.len() == 1 && enc[0].len() <= MAX_CIPHERTEXT, VeylError::BadParams);
         require!(ctx.accounts.nullifier1.is_none(), VeylError::BadParams);
+        emit_ciphertexts(&[pubs[2]], &enc);
         use_nullifier(&ctx.accounts.nullifier0, &ctx.accounts.payer.to_account_info(), &ctx.accounts.system_program, &pubs[1])?;
         sealed_fee(&ctx, fee)?;
         let (i, _) = ctx.accounts.shield.load_mut()?.insert(&pubs[2])?; emit!(NoteInserted { index: i, commitment: pubs[2] });
-        emit_ciphertexts(&[pubs[2]], &enc);
         Ok(())
     }
 }

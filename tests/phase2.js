@@ -13,6 +13,7 @@ const S = require('../sdk/veyl.js');
 const Z = require('../sdk/shield.js');
 const { prove, proveTransact, provePosition, verifyCircuit, TIMES, CIRCUITS } = require('../sdk/prover.js');
 const { Relayer } = require('../relayer/relayer.js');
+const { logsOf, LOG_LIMIT } = require('./harness.js');
 
 module.exports = async function phase2(C) {
   const { conn, payer, V, as, alice, bob, carol, mallory, relayer, postman, dep, T, check, refused, cuOf, CU, fund, units, sleep, lap } = C;
@@ -93,12 +94,12 @@ module.exports = async function phase2(C) {
   // A -> B: 250 USDC inside the pool; the relayer is paid a flat fee (the only amount the transfer reveals)
   let fee = await feeFor('transact', USDC);
   let s1 = A.spend({ mint: USDC, send: units(250, 6), to: B.address, fee, relayer: V.ata(USDC, me) }); pr = await proveT(s1.input);
-  let r = await svc.submit(J({ kind: 'transact', ext: s1.ext, p: pt(pr) })); led(USDC, -fee);
+  let r = await svc.submit(J({ kind: 'transact', ext: s1.ext, p: pt(pr) })); led(USDC, -fee); const sendSig = r.txHash; // (G2: a payload recovered from instruction data)
   for (const x of r.txs) await cuOf(conn, x, 'relayed transfer');
-  ev = await evOf(r.txHash, 'Transacted'); st = await sync(A, B, M);
+  ev = await evOf(r.txHash, 'Transacted'); st = await sync(A, B, M); const early = st; // (G2: an incremental read from here)
   check('P2 private send A -> B through the relayer: B finds 250 USDC; A keeps the change; the chain shows two nullifiers, two new notes and the relayer\'s flat fee, no amount', B.balance(USDC) === units(250, 6) && A.balance(USDC) === units(750, 6) - fee && ev && ev.extAmount === 0n && ev.fee === fee && (await ledgerOk(USDC)), 'fee ' + fee + ' atoms');
   CU['shield_transact (transfer)'] = CU['relayed transfer'];
-  { const t = await conn.getTransaction(r.txHash, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }); SIZE.shield_transact = t.transaction.message.serialize().length + 65; }
+  { const t = await conn.getTransaction(r.txHash, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }); SIZE.shield_transact = t.transaction.message.serialize().length + 65; await logsOf(conn, r.txHash, 'shield_transact (transfer, fee)'); }
   // a transfer with no fee reveals no token at all (submitted here by a throwaway key)
   { const thrw = Keypair.generate(); await conn.confirmTransaction(await conn.requestAirdrop(thrw.publicKey, LAMPORTS_PER_SOL), 'confirmed');
     const t = B.spend({ mint: USDC, send: units(50, 6), to: A.address, hideToken: true }); const p2 = await proveT(t.input);
@@ -111,7 +112,7 @@ module.exports = async function phase2(C) {
   s1 = B.spend({ mint: USDC, pay: units(120, 6), fee, recipient: V.ata(USDC, fresh.publicKey), relayer: V.ata(USDC, me) }); pr = await proveT(s1.input);
   const wReq = J({ kind: 'transact', ext: s1.ext, p: pt(pr), recipientOwner: fresh.publicKey });
   check('P2 the relayer refuses a withdrawal whose recipient token account is not the named wallet\'s', await refused(svc.submit({ ...wReq, recipientOwner: mallory.publicKey.toBase58() }), /recipient is not/));
-  r = await svc.submit(wReq); led(USDC, -(units(120, 6) + fee)); st = await sync(A, B, M);
+  r = await svc.submit(wReq); led(USDC, -(units(120, 6) + fee)); st = await sync(A, B, M); await logsOf(conn, r.txHash, 'shield_transact (withdraw, fee)');
   check('P2 withdraw B -> a fresh wallet: it receives exactly 120 USDC (public: amount and recipient), B keeps 80 - fee hidden', (await V.tokenBalance(USDC, fresh.publicKey)) === units(120, 6) && B.balance(USDC) === units(80, 6) - fee && (await ledgerOk(USDC)));
   // refusals against the spent notes
   await R.send([V.postProofIx(me, 1, pr.proof, pr.pubs)], [], 1_400_000);
@@ -168,7 +169,7 @@ module.exports = async function phase2(C) {
     md.feeBps = Math.max(svc.minFeeBps, Number((await svc.feeQuote(J({ kind: 'relay', mint: USDC, value: units(200, 6), d: { recipient: me } }))).feeBps));
     const ctx = S.contextOf(EP, Buffer.concat([Buffer.from([Z.MIGRATE]), Z.encodeMigrate(md)]), POOL);
     const w = S.withdrawInput({ note: n, withdrawnValue: units(200, 6), context: ctx, leaves: tree.leaves, labels }); const p2 = await prove(w.input);
-    r = await svc.submit(J({ kind: 'migrate', mint: USDC, d: md, p: { proof: p2.proof.toString('base64'), pubs: p2.pubs.map(String) } })); await cuOf(conn, r.txHash, 'shield_migrate');
+    r = await svc.submit(J({ kind: 'migrate', mint: USDC, d: md, p: { proof: p2.proof.toString('base64'), pubs: p2.pubs.map(String) } })); await cuOf(conn, r.txHash, 'shield_migrate'); await logsOf(conn, r.txHash, 'shield_migrate');
     const feeM = (units(200, 6) * BigInt(md.feeBps)) / 10_000n; led(USDC, units(200, 6) - feeM); ev = await evOf(r.txHash, 'ReceiptNote'); st = await sync(A, B, M);
     check('P2 migration: a legacy note (withdraw circuit, approved set) becomes one receipt note in the shielded pool for a one-time key only its owner recognises', ev && ev.amount === units(200, 6) - feeM && A.notes.some((x) => x.receipt && x.amount === units(200, 6) - feeM && !x.spent) && (await ledgerOk(USDC)));
     // the receipt is spent together with another note: its public amount no longer shows
@@ -186,7 +187,7 @@ module.exports = async function phase2(C) {
     const core = { tokenOut: SOL, routes: await V.prepareRoutes([{ amountIn, hops: [{ pool: POOLX, xForY: false }] }]), minOut: q.out - q.out / 100n, receiptOwner: ot.pk, receiptBlinding: ot.blinding, deadline: dl() };
     const t = A.spend({ mint: USDC, pay: amountIn, fee: f2, recipient: V.ata(USDC, EP), relayer: V.ata(USDC, me), processor: EP, action: Z.swapAction(core) }); const p2 = await proveT(t.input);
     check('P2 a swap leg is bound to its swap: the same leg with a lower minimum output is refused (BadContext)', await refused(svc.submit(J({ kind: 'shieldSwap', core: { ...core, minOut: 1n }, leg: { ext: t.ext, p: pt(p2) } })), /BadContext/));
-    const v0 = await vault(SOL); r = await svc.submit(J({ kind: 'shieldSwap', core, leg: { ext: t.ext, p: pt(p2) } })); await cuOf(conn, r.txHash, 'shield_swap (1 hop)'); ev = await evOf(r.txHash, 'ShieldSwapped');
+    const v0 = await vault(SOL); r = await svc.submit(J({ kind: 'shieldSwap', core, leg: { ext: t.ext, p: pt(p2) } })); await cuOf(conn, r.txHash, 'shield_swap (1 hop)'); await logsOf(conn, r.txHash, 'shield_swap (1 hop)'); ev = await evOf(r.txHash, 'ShieldSwapped');
     led(USDC, -(amountIn + f2)); led(SOL, ev.amountOut); await sync(A);
     check('P2 shielded swap: 300 USDC from hidden notes -> SOL through the bin pool -> a SOL receipt note (amounts public at the pool, owner a one-time key)', ev && ev.amountOut >= core.minOut && (await vault(SOL)) === v0 + ev.amountOut && A.balance(SOL) === ev.amountOut && (await ledgerOk(USDC)) && (await ledgerOk(SOL)));
     const tx = await conn.getTransaction(r.txHash, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }); SIZE.shield_swap = tx.transaction.message.serialize().length + 65;
@@ -222,7 +223,7 @@ module.exports = async function phase2(C) {
   const needX = plan.needX + plan.needX / 50n + 10n, needY = plan.needY + plan.needY / 50n + 10n;
   let res = await lpAction(A, { deltas: plan.shares, legs: [{ mint: SOL, amount: needX, fee: fx1 }, { mint: USDC, amount: needY, fee: fy1 }] });
   for (const x of res.r.txs) await cuOf(conn, x, 'shield_lp (add, 2 legs)'); CU['shield_lp (add, 2 legs)'] = (await (async () => { const t = await conn.getTransaction(res.r.txHash, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }); SIZE['shield_lp (2 legs)'] = t.transaction.message.serialize().length + 65; return Number((t.meta.logMessages.find((l) => l.includes(V.programs.entry.toBase58() + ' consumed')) || '').match(/consumed (\d+)/)[1]); })());
-  led(SOL, -(needX + fx1)); led(USDC, -(needY + fy1)); ev = await ledLp(res.r.txHash);
+  led(SOL, -(needX + fx1)); led(USDC, -(needY + fy1)); ev = await ledLp(res.r.txHash); await logsOf(conn, res.r.txHash, 'shield_lp (new position, 2 legs)');
   let agg = await V.aggregateOf(POOLX, lo); await sync(A);
   check('P2 shielded add: two hidden-amount legs fund exact share mints held by the aggregate; the position note (window of 16 bins) records them; leftovers came back as receipts', agg.every((s, i) => s === plan.shares[i]) && A.position(POOLX, lo) && A.position(POOLX, lo).shares.every((s, i) => s === plan.shares[i]) && (ev.receipts[0] > 0n || ev.receipts[1] > 0n) && (await ledgerOk(SOL)) && (await ledgerOk(USDC)), 'CU ' + CU['shield_lp (add, 2 legs)'] + ', proving ' + TIMES.position.slice(-1)[0] + ' ms');
   { const sa = await V.shareAccount(POOLX, V.shieldOwner(), EP, S.chunkOf(lo));
@@ -236,7 +237,7 @@ module.exports = async function phase2(C) {
   const bIdx = win.map((id, i) => i).filter((i) => win[i] < pB.activeId).slice(-3); const bY = win.map((id, i) => (bIdx.includes(i) ? units(30, 6) : 0n));
   const planB = Z.planExact(pB, bins, win, win.map(() => 0n), bY); const gBefore = await V.growthOf(POOLX, lo);
   const fyB = await feeFor('shieldLp', USDC, { core: { binPool: POOLX, lo }, legs: 1 });
-  res = await lpAction(B, { deltas: planB.shares, legs: [{ mint: USDC, amount: planB.needY + units(1, 6), fee: fyB }] }); led(USDC, -(planB.needY + units(1, 6) + fyB)); ev = await ledLp(res.r.txHash);
+  res = await lpAction(B, { deltas: planB.shares, legs: [{ mint: USDC, amount: planB.needY + units(1, 6), fee: fyB }] }); led(USDC, -(planB.needY + units(1, 6) + fyB)); ev = await ledLp(res.r.txHash); await logsOf(conn, res.r.txHash, 'shield_lp (add, 1 leg, harvest)');
   const gAfter = await V.growthOf(POOLX, lo);
   check('P2 harvest: the action collected the aggregate\'s fees into the shielded pool and raised H (fee per shielded share) by at most what was collected', gAfter[0].some((h, i) => h > gBefore[0][i]) || gAfter[1].some((h, i) => h > gBefore[1][i]));
   { const dX = planB.shares.some((d, i) => d > 0n && gAfter[0][i] > gBefore[0][i]), dY = planB.shares.some((d, i) => d > 0n && gAfter[1][i] > gBefore[1][i]);
@@ -247,14 +248,14 @@ module.exports = async function phase2(C) {
     const fees = [await feeFor('shieldLp', SOL, { core: { binPool: POOLX, lo }, legs: 0 }), await feeFor('shieldLp', USDC, { core: { binPool: POOLX, lo }, legs: 0 })];
     const ti = cl[1].q > fees[1] ? 1 : 0; const cf = [0n, 0n]; cf[ti] = fees[ti]; const before = [A.balance(SOL), A.balance(USDC)];
     if (cl[ti].q <= fees[ti]) console.log('    (claimable fees', cl[0].q, cl[1].q, 'below the claim fee', fees.join('/'), ')');
-    res = await lpAction(A, { deltas: Array(Z.K).fill(0n), claimFee: cf }); ev = await ledLp(res.r.txHash); await cuOf(conn, res.r.txHash, 'shield_lp (claim)');
+    res = await lpAction(A, { deltas: Array(Z.K).fill(0n), claimFee: cf }); ev = await ledLp(res.r.txHash); await cuOf(conn, res.r.txHash, 'shield_lp (claim)'); await logsOf(conn, res.r.txHash, 'shield_lp (claim)');
     const gNow = (await V.growthOf(POOLX, lo)); await sync(A);
     const got = [A.balance(SOL) - before[0], A.balance(USDC) - before[1]];
     check('P2 claim: A\'s fee notes equal floor(sum(shares x (H - debt)) / 2^64) at the H the proof used, minus the relayer\'s claim fee; the chain shows no amount', got[0] === cl[0].q - cf[0] && got[1] === cl[1].q - cf[1] && (cl[0].q + cl[1].q) > 0n, `claimed ${got.join(' / ')} atoms`);
     void gNow; }
   // A removes half of every bin: proceeds come back as receipts; it is paid what its shares earned this harvest
   { await sync(A); const note = A.position(POOLX, lo); const deltas = note.shares.map((s) => -(s / 2n));
-    res = await lpAction(A, { deltas, leftoverFee: [0n, units(1, 6)] }); ev = await ledLp(res.r.txHash); await cuOf(conn, res.r.txHash, 'shield_lp (remove)'); await sync(A);
+    res = await lpAction(A, { deltas, leftoverFee: [0n, units(1, 6)] }); ev = await ledLp(res.r.txHash); await cuOf(conn, res.r.txHash, 'shield_lp (remove)'); await logsOf(conn, res.r.txHash, 'shield_lp (remove)'); await sync(A);
     agg = await V.aggregateOf(POOLX, lo);
     check('P2 shielded remove (half): shares burned from the aggregate, proceeds as receipt notes for one-time keys, the note keeps the other half', A.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] - note.shares[i] / 2n) && ev.receipts[0] + ev.receipts[1] > 0n && agg.every((s, i) => s === A.position(POOLX, lo).shares[i] + (B.position(POOLX, lo) ? B.position(POOLX, lo).shares[i] : 0n))); }
   check('P2 overburn: a position proof that burns more than the note holds cannot be built (shares range-checked to 112 bits)', await (async () => { const note = A.position(POOLX, lo); try { Z.nextPosition({ sk: A.k.sk, binPool: POOLX, lo, note, delta: note.shares.map((s) => -(s + 1n)), growth: await V.growthOf(POOLX, lo), assets: assetsX }); return false; } catch { return true; } })());
@@ -265,7 +266,7 @@ module.exports = async function phase2(C) {
   { await sync(B); const note = B.position(POOLX, lo); const k = note.shares.findIndex((s) => s > 0n); const deltas = Array(Z.K).fill(0n); deltas[k] = -note.shares[k];
     const p2 = await V.binPool(POOLX); const bins2 = await V.bins(POOLX, [...new Set([...win.map(S.chunkOf), S.chunkOf(p2.activeId)])]); const tgt = k - 1;
     const val = Z.valueOfShares(bins2.get(win[k]), note.shares[k]); const pl = Z.planExact(p2, bins2, [win[tgt]], [0n], [val.y - val.y / 20n]); deltas[tgt] = pl.shares[0];
-    res = await lpAction(B, { deltas, leftoverFee: [0n, units(1, 6)], hint: { hintX: deltas.map((_, i) => (i === tgt ? pl.hintX[0] : 0n)), hintY: deltas.map((_, i) => (i === tgt ? pl.hintY[0] : 0n)) } }); ev = await ledLp(res.r.txHash); await sync(B);
+    res = await lpAction(B, { deltas, leftoverFee: [0n, units(1, 6)], hint: { hintX: deltas.map((_, i) => (i === tgt ? pl.hintX[0] : 0n)), hintY: deltas.map((_, i) => (i === tgt ? pl.hintY[0] : 0n)) } }); ev = await ledLp(res.r.txHash); await logsOf(conn, res.r.txHash, 'shield_lp (rebalance)'); await sync(B);
     check('P2 in-window rebalance: one proof burns one bin and mints another from the proceeds; the rest returns as receipts', B.position(POOLX, lo).shares[k] === 0n && B.position(POOLX, lo).shares[tgt] === note.shares[tgt] + pl.shares[0]); }
   // zap: one token in (USDC), part swapped inside the action, exact shares minted
   { await sync(A); const note = A.position(POOLX, lo); const p2 = await V.binPool(POOLX); const zIn = units(100, 6); const swapAmt = units(30, 6); const sim = await V.quoteLocal(POOLX, false, swapAmt);
@@ -274,20 +275,74 @@ module.exports = async function phase2(C) {
     const ax2 = win.map((_, i) => (i === xi ? sim.out - sim.out / 10n : 0n)), ay2 = win.map((_, i) => (i === yi ? (zIn - swapAmt) - (zIn - swapAmt) / 10n : 0n)); const pl = Z.planExact(p3, bins2, win, ax2, ay2);
     const f2 = await feeFor('shieldLp', USDC, { core: { binPool: POOLX, lo }, legs: 1 });
     res = await lpAction(A, { deltas: pl.shares, legs: [{ mint: USDC, amount: zIn, fee: f2 }], zap: { xIn: false, amount: swapAmt, minOut: sim.out - sim.out / 20n } }); led(USDC, -(zIn + f2)); ev = await ledLp(res.r.txHash); await cuOf(conn, res.r.txHash, 'shield_lp (zap, 1 leg)'); await sync(A);
-    check('P2 shielded zap: one USDC leg, part swapped through the pool inside the action, exact shares minted on both sides', A.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] + pl.shares[i]) && pl.shares.filter((x) => x > 0n).length === 2); }
+    check('P2 shielded zap: one USDC leg, part swapped through the pool inside the action, exact shares minted on both sides', A.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] + pl.shares[i]) && pl.shares.filter((x) => x > 0n).length === 2);
+    const lg = await logsOf(conn, res.r.txHash, 'shield_lp (zap, 1 leg)'); const pc = S.parseEvents(lg.logs).find((e) => e.name === 'PositionCiphertext');
+    check('P2 note delivery: the zap\'s logs are complete (no "Log truncated") and carry its PositionCiphertext for the new position note', !lg.truncated && !!pc && String(pc.commitment) === String(res.plan.commitment), `${lg.bytes} of ${LOG_LIMIT} log bytes, ${lg.lines} lines`); }
+  const zapRes = res; // (G2: a shield_lp whose payloads are hidden and recovered)
+  // the largest realistic shielded action (devnet lost its PositionCiphertext to log truncation): an add that merges into an
+  // existing position, two funding legs with relayer fees, a harvest (fees traded since the last action) and fee notes claimed
+  { await trade(2); await sync(A); const note = A.position(POOLX, lo); const pM = await V.binPool(POOLX); const g = await V.growthOf(POOLX, lo); const cl = Z.claimable(note.shares, note.debt, g);
+    const binsM = await V.bins(POOLX, [...new Set([...win.map(S.chunkOf), S.chunkOf(pM.activeId)])]);
+    const axM = win.map((id) => (id > pM.activeId ? A.balance(SOL) / 40n : 0n)), ayM = win.map((id) => (id < pM.activeId ? A.balance(USDC) / 40n : 0n)); const pl = Z.planExact(pM, binsM, win, axM, ayM);
+    const fx = await feeFor('shieldLp', SOL, { core: { binPool: POOLX, lo }, legs: 2 }), fy = await feeFor('transact', USDC);
+    const nX = pl.needX + pl.needX / 50n + 10n, nY = pl.needY + pl.needY / 50n + 10n;
+    const sims = []; const sim0 = svc.V.conn.simulateTransaction.bind(svc.V.conn); svc.V.conn.simulateTransaction = async (...a) => { const r = await sim0(...a); sims.push(r.value); return r; }; /* what the relayer's guard saw */
+    try { res = await lpAction(A, { deltas: pl.shares, legs: [{ mint: SOL, amount: nX, fee: fx }, { mint: USDC, amount: nY, fee: fy }] }); } finally { svc.V.conn.simulateTransaction = sim0; }
+    led(SOL, -(nX + fx)); led(USDC, -(nY + fy)); await cuOf(conn, res.r.txHash, 'shield_lp (merge add, 2 legs)');
+    const lg = await logsOf(conn, res.r.txHash, 'shield_lp (merge add, 2 legs, harvest, fee notes)'); const evs = S.parseEvents(lg.logs); const pc = evs.find((e) => e.name === 'PositionCiphertext');
+    // (a truncated log has no ShieldLpExecuted: the vault ledger is then re-read, so that only the checks below fail)
+    if (!lg.truncated) ev = await ledLp(res.r.txHash); else for (const m of [SOL, USDC]) led(m, (await vault(m)) - (ledger[new PublicKey(m).toBase58()] || 0n)); await sync(A);
+    const at = (name, c) => lg.logs.findIndex((l) => { const e = l.startsWith('Program data: ') && S.parseEvents([l])[0]; return e && e.name === name && (c === undefined || String(e.commitment) === String(c)); });
+    const firstBin = lg.logs.findIndex((l) => l.includes(V.programs.bin.toBase58() + ' invoke'));
+    check('P2 merging add (2 legs + relayer fees + harvest + claimed fee notes): every note reaches its owner: PositionCiphertext and the position\'s tree leaf logged before the first bin CPI, both receipt notes logged, the new note found by a rescan',
+      !!pc && String(pc.commitment) === String(res.plan.commitment) && at('PositionCiphertext') >= 0 && at('NoteInserted', res.plan.commitment) >= 0 && at('PositionCiphertext') < firstBin && at('NoteInserted', res.plan.commitment) < firstBin && evs.filter((e) => e.name === 'ReceiptNote').length === 2 && evs.some((e) => e.name === 'FeesClaimed') && A.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] + pl.shares[i]) && (cl[0].q + cl[1].q) > 0n,
+      `claimed ${cl[0].q}/${cl[1].q}, events ${evs.map((e) => e.name).join(',')}`);
+    // Solana may still cut this action's tail (the UI event ShieldLpExecuted: ~10.8 KB in all): the relayer only sends when the
+    // simulated logs keep every tree leaf and receipt (sendV0Checked), and that is what holds on chain too
+    const cutWhy = Z.logCut(lg.logs, (await V.shield()).nextIndex); if (lg.truncated) console.log(`    (merging add: logs cut at ${lg.bytes} of ${LOG_LIMIT} bytes, after every note event: ${evs.some((e) => e.name === 'ShieldLpExecuted') ? '' : 'ShieldLpExecuted '}lost)`);
+    const simCut = sims.length > 0 && (sims[sims.length - 1].logs || []).includes('Log truncated');
+    check('P2 merging add: the relayer sent it (its simulation passed the log-cut guard, and showed the same cut as the chain): every tree leaf and receipt is in the logs (only a UI event past them may be cut), and the vaults match the ledger', cutWhy === null && simCut === lg.truncated && (await ledgerOk(SOL)) && (await ledgerOk(USDC)), `${lg.bytes} of ${LOG_LIMIT} log bytes, ${lg.lines} lines${lg.truncated ? ', cut' : ''}${cutWhy ? ': ' + cutWhy : ''}`); }
+
+  // ======================================================================================== G2. note delivery when logs are cut
+  // Solana drops logs past ~10 KB. A connection that hides chosen events (as a cut log would) shows what a device that never
+  // saw them still finds: payloads recovered from instruction data (a shield_lp request buffer, a transact's ext), and the
+  // notes it planned itself (the outbox). A fresh wallet from the same seed plays the restored backup on a new device.
+  { const lpSig = zapRes.r.txHash; const lpReq = zapRes.req; const posC = String(zapRes.plan.commitment); const cut = new Map([[lpSig, ['PositionCiphertext']], [sendSig, ['NoteCiphertext']]]);
+    const hide = (t, sg) => { const names = cut.get(sg); if (!t || !names) return t; const logs = t.meta.logMessages.filter((l) => { if (!l.startsWith('Program data: ')) return true; const e = S.parseEvents([l])[0]; return !(e && names.includes(e.name)); });
+      return { ...t, meta: { ...t.meta, logMessages: [...logs, 'Log truncated'] } }; };
+    const conn2 = new Proxy(conn, { get: (o, k) => (k === 'getTransaction' ? async (sg, opt) => hide(await o.getTransaction(sg, opt), sg) : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
+    const V2 = new S.Veyl({ connection: conn2, programs: V.programs }); const now = await sync(A, B);
+    const st2 = await V2.readShield(); st2.tree = new Z.Tree(st2.leaves); const fresh = (w0) => { const w = new Z.ShieldWallet(w0.seed, { mints, pools }); w.ot = w0.ot; return w; };
+    const hidden = !(await V2.events(lpSig)).some((e) => e.name === 'PositionCiphertext') && (await V.events(lpSig)).some((e) => e.name === 'PositionCiphertext');
+    const sameNotes = (w) => w.notes.length === A.notes.length && A.notes.every((n) => w.notes.some((m) => String(m.commitment) === String(n.commitment) && m.index === n.index && m.spent === n.spent));
+    const A2 = fresh(A); A2.scan(st2); const B2 = fresh(B); B2.scan(st2);
+    check('P2 log cut, position: with a shield_lp\'s PositionCiphertext gone from the logs, its payload comes back from the request buffer (write_buffer txs): a restored wallet finds every note (that position, its fee notes, all later ones)',
+      hidden && !!(st2.ciphertexts.get(posC) || {}).recovered && sameNotes(A2) && A2.balance(USDC) === A.balance(USDC) && A2.balance(SOL) === A.balance(SOL), `${[...st2.ciphertexts.values()].filter((x) => x.recovered).length} payloads recovered, ${A.notes.length} notes`);
+    check('P2 log cut, transfer: with its NoteCiphertext events gone, the payloads come back from shield_transact\'s ext: the recipient still finds its notes', B2.balance(USDC) === B.balance(USDC) && B2.notes.length === B.notes.length);
+    // nothing in the logs or the instruction data (a buffer no longer readable, say): the device's own outbox entry adopts it
+    const st3 = { ...st2, ciphertexts: new Map([...st2.ciphertexts].filter(([, x]) => !(x.recovered && x.sig === lpSig))) }; const A3 = fresh(A); A3.scan(st3);
+    const nf = [...lpReq.legs.flatMap((l) => [l.p.pubs[4], l.p.pubs[5]]), lpReq.position.pubs[1]];
+    const ob = A.outboxOf([lpReq.core.ciphertext, ...lpReq.legs.flatMap((l) => l.ext.encOut)], nf); const A4 = fresh(A); A4.scan(st3, ob); const adopted = A4.notes.find((n) => String(n.commitment) === posC);
+    check('P2 outbox: the planned position note (and the leg\'s change note) recorded before submitting; with no payload at all a rescan misses the position, with the outbox it is adopted (same commitment, index, spent state) and every note is back',
+      ob.some((o) => o.c === posC) && !A3.notes.some((n) => String(n.commitment) === posC) && !!adopted && !!adopted.outbox && !A4.found.has(posC) && sameNotes(A4), `${ob.length} entries`);
+    const A5 = fresh(A); A5.scan(st2, ob); check('P2 outbox: a note whose payload was found is marked found (the engine drops its entry) and not duplicated', A5.found.has(posC) && sameNotes(A5) && !A5.notes.find((n) => String(n.commitment) === posC).outbox);
+    // incremental reads: from an earlier snapshot (native and as JSON), only the newer signatures; the result equals a full read
+    const inc = await V.readShield({ prev: early }), inj = await V.readShield({ prev: Z.serializeShield(early) }); const eq = (x) => x.leaves.length === now.leaves.length && x.leaves.every((l, i) => String(l) === String(now.leaves[i])) && x.ciphertexts.size === now.ciphertexts.size && x.receipts.size === now.receipts.size && x.nullified.size === now.nullified.size && x.newest === now.newest;
+    check('P2 incremental read: readShield({ prev }) from an earlier snapshot (native or serialized) reads only newer signatures and equals a full read (leaves, payloads, receipts, nullifiers, newest signature)', eq(inc) && eq(inj) && early.newest && early.newest !== now.newest, `${early.leaves.length} -> ${now.leaves.length} leaves`);
+    const inc2 = await V.readShield({ prev: now }); check('P2 incremental read with nothing new: same state, same newest signature', eq(inc2)); }
 
   // ======================================================================================== H. shielded limit orders
   { await sync(A); const p2 = await V.binPool(POOLX); const id = p2.activeId + 3; const amount = A.balance(SOL) / 4n; const f2 = await feeFor('shieldOrder', SOL, { core: { binPool: POOLX, id } }); const ot = A.nextOneTime();
     const core = { binPool: POOLX, id, isAsk: true, receiptOwner: ot.pk, receiptBlinding: ot.blinding, deadline: dl() };
     const t = A.spend({ mint: SOL, pay: amount, fee: f2, recipient: V.ata(SOL, EP), relayer: V.ata(SOL, me), processor: EP, action: Z.orderAction(core) }); const p3 = await proveT(t.input);
-    r = await svc.submit(J({ kind: 'shieldOrder', core, leg: { ext: t.ext, p: pt(p3) } })); ev = await evOf(r.txHash, 'ShieldOrderPlaced'); await cuOf(conn, r.txHash, 'shield_order'); led(SOL, -(amount + f2));
+    r = await svc.submit(J({ kind: 'shieldOrder', core, leg: { ext: t.ext, p: pt(p3) } })); ev = await evOf(r.txHash, 'ShieldOrderPlaced'); await cuOf(conn, r.txHash, 'shield_order'); await logsOf(conn, r.txHash, 'shield_order'); led(SOL, -(amount + f2));
     A.orderBook = [{ pool: POOLX, id, isAsk: true }]; await sync(A); const on = A.orderNotes(POOLX, id, true);
     check('P2 shielded limit order: hidden SOL notes -> an ask held by the aggregate; the order\'s shares come back as an order note (virtual asset)', ev && on.length === 1 && BigInt(on[0].amount) === ev.shares && ev.amount === amount);
     // fill it
     const q = await V.quote(POOLX, false, units(1500, 6)); await as(bob).send([await V.swapIx(bob.publicKey, POOLX, false, units(1500, 6), q.out)], [], 1_400_000);
     const core2 = { binPool: POOLX, id, isAsk: true, leftoverFee: [0n, units(1, 6)], receiptOwner: [A.nextOneTime().pk, A.nextOneTime().pk], receiptBlinding: [1n, 2n], relayer: me, deadline: dl() };
     const lg = A.orderSpend({ binPool: POOLX, id, isAsk: true, notes: on, processor: EP, action: Z.orderWithdrawAction(core2) }); const p4 = await proveT(lg.input);
-    r = await svc.submit(J({ kind: 'shieldOrderWithdraw', core: core2, leg: { ext: lg.ext, p: pt(p4) } })); ev = await evOf(r.txHash, 'ShieldOrderWithdrawn'); await cuOf(conn, r.txHash, 'shield_order_withdraw'); led(SOL, ev.amountX); led(USDC, ev.amountY); await sync(A);
+    r = await svc.submit(J({ kind: 'shieldOrderWithdraw', core: core2, leg: { ext: lg.ext, p: pt(p4) } })); ev = await evOf(r.txHash, 'ShieldOrderWithdrawn'); await cuOf(conn, r.txHash, 'shield_order_withdraw'); await logsOf(conn, r.txHash, 'shield_order_withdraw'); led(SOL, ev.amountX); led(USDC, ev.amountY); await sync(A);
     check('P2 ...filled, then withdrawn by spending the order note (a transact proof on the virtual asset): the USDC it bought comes back as a receipt note', ev && ev.amountY > 0n && A.orderNotes(POOLX, id, true).length === 0); }
 
   // ======================================================================================== I. conservation and close-out

@@ -1,6 +1,6 @@
 {
-  "_comment": "sha256 of target/deploy/*.so from a clean build (rm -rf target build outputs; npm run build) with solana-cargo-build-sbf 3.1.9 / platform-tools v1.52 (veyl_entry: 3.1.10 / v1.52, after the fixed share-check budget) and the committed Cargo.lock. Preflight warns when a build differs. Update after any intended program change.",
+  "_comment": "sha256 of target/deploy/*.so from a clean build (rm -rf target build outputs; npm run build) with solana-cargo-build-sbf 3.1.9 / platform-tools v1.52 (veyl_entry and veyl_pool: 3.1.10 / v1.52, after the log-truncation fix: note events first, position consumed before the bin CPIs, veyl_pool no-log-ix-name, no Transacted in transact_cpi, no deposit_receipt return) and the committed Cargo.lock. Preflight warns when a build differs. Update after any intended program change.",
   "veyl_bin": "5b7c14a572cd93f890aa88e7cd3c69662a12a4b5f8e7078e8b3d98229b897395",
-  "veyl_entry": "4a3f4b74c290b97dcf14b898efc9b6d2b740189881be8c2803877df50204b211",
-  "veyl_pool": "a2bccf1efb46a065d8ffb5e6032699ae92911b4e7113c9c8f04bf328a56af9e8"
+  "veyl_entry": "7db3553cdf021eece9d5b099c10ee2560506c57c4c489468115c624117decef3",
+  "veyl_pool": "77a271f9a7a5d48a98d51709c1e79e1018b5cbd60763380e466f98f823f19153"
 }

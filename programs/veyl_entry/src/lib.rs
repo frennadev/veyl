@@ -527,13 +527,18 @@ pub mod veyl_entry {
     ///     removal is paid floor(sum(|delta| * dH) / 2^64) out of it, exactly what its shares earned up to now;
     ///  6. burns (negative deltas) and exact mints (positive deltas) on the aggregate;
     ///  7. relayer fees, then whatever is left in the vaults goes back into the shielded pool as receipt notes;
-    ///  8. the position note is replaced (nullifier, new note, fee notes).
+    ///  8. the position note is replaced (nullifier, new note, fee notes): done right after the proof check (2b), and its
+    ///     ciphertext logged first of all, because Solana drops a transaction's logs past ~10 KB.
     /// Remaining accounts: `n_lp_acc` LpAcc accounts of the window, then 4 per leg [posted proof, its poster, nullifier 0,
     /// nullifier 1], then the bin arrays (window, active bin, swap path) and the aggregate's share accounts.
     pub fn shield_lp<'info>(ctx: Context<'_, '_, 'info, 'info, ShieldLp<'info>>, n_lp_acc: u8) -> Result<()> {
         // (split into steps that each run in their own stack frame: SBF frames are 4 KB)
         let req = Box::new(LpRequest::try_from_slice(&ctx.accounts.buffer.data).map_err(|_| error!(EntryError::BadRequest))?);
         lp_checks(&ctx.accounts, &req)?;
+        // 0. the new position note's ciphertext, logged before anything else: Solana keeps about 10 KB of logs per transaction
+        //    and drops the rest, and a merging add with two legs and a harvest can pass that. The commitment is the posted
+        //    proof's (step 2 checks the proof belongs to this request; a failed transaction's logs are ignored by scanners).
+        emit!(PositionCiphertext { commitment: ctx.accounts.posted.pubs[2], data: req.core.ciphertext.clone() });
         let bump = ctx.accounts.entry.signer_bump;
         let action = lp_action(&req.core)?; let ext_hash = lp_ext_hash(&req.core)?;
         let rem = ctx.remaining_accounts; let nl = n_lp_acc as usize; let nlegs = req.legs.len();
@@ -544,6 +549,9 @@ pub mod veyl_entry {
         lp_legs(&ctx.accounts, &req, leg_infos, &action, bump)?;
         // 2. the position proof: window, request, bundle of the current H
         let pubs = lp_check_proof(&ctx.accounts, &req.core, lp_infos, &ext_hash)?;
+        // 2b. the position note: nullifier, new note, fee notes (consumed here, before the bin CPIs, so that its tree leaves
+        //     are logged early too: a scanner missing a leaf cannot rebuild the tree; any later failure reverts it all)
+        lp_consume(&ctx.accounts, &ext_hash, bump)?;
         // 3. zap: part of the funding swapped through this pool (its fees reach the bins before the harvest)
         if req.core.zap.is_some() { lp_zap(&ctx.accounts, &req.core, bin_infos, bump)?; }
         // 4. harvest: collect the aggregate's fees in the window into the shielded pool, raise H by floor(c * 2^64 / S)
@@ -559,9 +567,6 @@ pub mod veyl_entry {
         // 7. the pot (charge an add, pay a removal), relayer fees, then leftovers back as receipt notes
         lp_pot(&ctx.accounts, &req.core, charge, pay, bump)?;
         let left = receipts(&mut *ctx.accounts, start.0, start.1, req.core.receipt_owner, req.core.receipt_blinding, bump)?;
-        // 8. the position note: nullifier, new note, fee notes
-        lp_consume(&ctx.accounts, &ext_hash, bump)?;
-        emit!(PositionCiphertext { commitment: pubs[2], data: req.core.ciphertext.clone() });
         emit!(ShieldLpExecuted { bin_pool: req.core.bin_pool, lo: req.core.lo, deltas: req.core.deltas.clone(), legs: nlegs as u8, charge, pay, claim_fee: req.core.claim_fee, leftover_fee: req.core.leftover_fee, receipts: left, nullifier: pubs[1], diluted });
         Ok(())
     }

@@ -6,7 +6,8 @@ const { isAllowed } = require('./screening.js');
 module.exports = (Base) => class Postman extends Base {
   /// The postman's other job: admit pending shielded deposits whose depositor passes screening.
   async approveDeposits() { if (!this.postman || this.admitting) return 0; this.admitting = true; let n = 0; // one pass at a time
-    try { const pv = new Veyl({ connection: this.conn, programs: this.dep.programs, payer: this.postman }); const st = await pv.readShield();
+    try { const pv = new Veyl({ connection: this.conn, programs: this.dep.programs, payer: this.postman }); // incremental (newer signatures only), a full read every 10 minutes
+      const full = !this.postMem || Date.now() - this.postMem.at > 600_000; const st = await pv.readShield({ prev: full ? null : this.postMem.st }); this.postMem = { st, at: full ? Date.now() : this.postMem.at };
       for (const d of st.pending) { if (!isAllowed({ payer: d.depositor.toBase58(), beneficiary: d.depositor.toBase58() })) continue;
         try { await pv.send([pv.approveDepositIx(this.postman.publicKey, d.pending, d.depositor)], [], 200_000); n++; } catch (e) { console.error('approve', e.message); } }
     } finally { this.admitting = false; }
