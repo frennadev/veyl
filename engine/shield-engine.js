@@ -66,8 +66,9 @@ export function installShield(Engine, PrivacyError) {
     if (mem) { try { const r = await this.V.readShield({ prev: mem.r }); const tree = Z.Tree.grow(mem.tree, r.leaves); if (known(tree, r.leaves.length)) return { r, tree, via: 'cache' }; } catch { /* inconsistent: read again below */ }
       this._shMem = null; }
     try { const r = await fetch(this.cfg.relayer + '/shield').then((x) => x.json()); if (r.error) throw new Error(r.error); const tree = new Z.Tree(r.leaves.map(BigInt)); if (known(tree, r.leaves.length)) return { r, tree, via: 'relayer' }; } catch { /* the relayer is down or disagrees with the chain */ }
-    // the last resort is used even when its root is unknown (the balance still shows), but not cached: a transaction whose
-    // logs Solana cut can hide a tree leaf from every reader (r.truncated lists them); proofs against this tree will fail
+    // the last resort is used even when its root is unknown (the balance still shows), but not cached: an old-program
+    // transaction whose logs Solana cut can hide a tree leaf (r.truncated lists them; veyl_pool's event CPI cannot be cut);
+    // proofs against this tree will fail
     const r = await this.V.readShield(); const tree = new Z.Tree(r.leaves); return { r, tree, via: 'chain', rootOk: known(tree, r.leaves.length) };
   };
   P._shieldCacheLoad = function () { if (this._shMem) return this._shMem;

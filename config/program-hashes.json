@@ -1,6 +1,6 @@
 {
-  "_comment": "sha256 of target/deploy/*.so from a clean build (rm -rf target build outputs; npm run build) with solana-cargo-build-sbf 3.1.9 / platform-tools v1.52 (veyl_entry and veyl_pool: 3.1.10 / v1.52, after the log-truncation fix: note events first, position consumed before the bin CPIs, veyl_pool no-log-ix-name, no Transacted in transact_cpi, no deposit_receipt return) and the committed Cargo.lock. Preflight warns when a build differs. Update after any intended program change.",
+  "_comment": "sha256 of target/deploy/*.so from a clean build (rm -rf target build outputs; npm run build) with solana-cargo-build-sbf 3.1.9 / platform-tools v1.52 (veyl_entry and veyl_pool: 3.1.10 / v1.52, after the log-truncation fix: note events first, position consumed before the bin CPIs, veyl_pool no-log-ix-name, no Transacted in transact_cpi, no deposit_receipt return; then the event CPI: veyl_pool's tree events in one self-CPI per instruction, PositionCiphertext moved into consume_position, pool_events account in veyl_entry's shielded actions) and the committed Cargo.lock. Preflight warns when a build differs. Update after any intended program change.",
   "veyl_bin": "5b7c14a572cd93f890aa88e7cd3c69662a12a4b5f8e7078e8b3d98229b897395",
-  "veyl_entry": "7db3553cdf021eece9d5b099c10ee2560506c57c4c489468115c624117decef3",
-  "veyl_pool": "77a271f9a7a5d48a98d51709c1e79e1018b5cbd60763380e466f98f823f19153"
+  "veyl_entry": "338bdef49319b60945a158732811cc9a66706df82f2b7bab3931a60b5715fba1",
+  "veyl_pool": "d7dbc282e7c0f0ad22bab36d58cf0329babad33d9e651a43cb646467291f53fc"
 }

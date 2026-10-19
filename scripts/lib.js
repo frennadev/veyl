@@ -2,7 +2,7 @@
 // private pools, the bin pools, the entry and its vaults, and an address lookup table for the relayer.
 'use strict';
 const { spawn, execFileSync } = require('child_process'); const fs = require('fs'); const path = require('path');
-const { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
+const { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL, SystemProgram, Transaction, sendAndConfirmTransaction } = require('@solana/web3.js');
 const spl = require('@solana/spl-token');
 const { Veyl, Q, be32 } = require('../sdk/veyl.js'); require('../sdk/shield.js'); // adds the Phase 2 instructions to Veyl
 const ROOT = path.join(__dirname, '..'); const BIN = process.env.SOLANA_BIN || '/opt/solana/bin';
@@ -67,9 +67,15 @@ async function startValidator(dir, payer, port = RPC_PORT) {
 }
 /// A mock SPL mint with the payer as mint authority. Tests and devnet only; mainnet uses the real mints.
 async function createMint(conn, payer, decimals = 6, tokenProgram = spl.TOKEN_PROGRAM_ID) { return spl.createMint(conn, payer, payer.publicKey, null, decimals, undefined, { commitment: 'confirmed' }, tokenProgram); }
+/// Puts `amount` of `mint` in `owner`'s token account: minted for a mock mint (the payer is its authority); for native SOL
+/// (a devnet deployment on real SOL), the payer's SOL is wrapped into it instead.
 async function fund(conn, payer, mint, owner, amount, tokenProgram = spl.TOKEN_PROGRAM_ID) {
   const ata = await spl.getOrCreateAssociatedTokenAccount(conn, payer, mint, owner, false, 'confirmed', { commitment: 'confirmed' }, tokenProgram);
-  if (amount > 0n) await spl.mintTo(conn, payer, mint, ata.address, payer, amount, [], { commitment: 'confirmed' }, tokenProgram); return ata.address;
+  if (amount > 0n && new PublicKey(mint).equals(spl.NATIVE_MINT)) {
+    const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: ata.address, lamports: amount }), spl.createSyncNativeInstruction(ata.address));
+    await sendAndConfirmTransaction(conn, tx, [payer], { commitment: 'confirmed' });
+  } else if (amount > 0n) await spl.mintTo(conn, payer, mint, ata.address, payer, amount, [], { commitment: 'confirmed' }, tokenProgram);
+  return ata.address;
 }
 async function deployPrograms(rpc, payerFile) {
   for (const p of PROGRAMS) execFileSync(tool('solana'), ['program', 'deploy', '-u', rpc, '-k', payerFile, '--program-id', path.join(ROOT, 'target/deploy/' + p + '-keypair.json'), path.join(ROOT, 'target/deploy/' + p + '.so')], { stdio: ['ignore', 'ignore', 'inherit'] });
@@ -121,7 +127,7 @@ async function deployAll({ rpc, payerFile, mints = {}, postman, relayer, network
   const statics = [V.programs.pool, V.programs.bin, V.programs.entry, V.entryPda(), V.signerPda(), spl.TOKEN_PROGRAM_ID, spl.ASSOCIATED_TOKEN_PROGRAM_ID, PublicKey.default, relayer];
   for (const t of Object.values(T)) { const p = await V.pool(t.pool); statics.push(t.mint, t.pool, p.vault, await V.entryVault(t.mint), V.ata(t.mint, relayer)); }
   for (const b of BP) { const p = await V.binPool(b.address); statics.push(b.address, p.vaultX, p.vaultY); for (const c of [-1, 0]) statics.push(V.binArrayPda(b.address, c), V.lpAccPda(b.address, c), V.sharesPda(b.address, V.shieldOwner(), V.signerPda(), c)); }
-  statics.push(V.shieldPda(), V.shieldOwner(), spl.TOKEN_2022_PROGRAM_ID, require('@solana/web3.js').SystemProgram.programId); for (const t of Object.values(T)) statics.push(V.shieldVault(t.mint, await V.tokenProgram(t.mint)));
+  statics.push(V.shieldPda(), V.shieldOwner(), V.poolEventAuthority(), spl.TOKEN_2022_PROGRAM_ID, require('@solana/web3.js').SystemProgram.programId); for (const t of Object.values(T)) statics.push(V.shieldVault(t.mint, await V.tokenProgram(t.mint)));
   // a table holds 256 addresses: the first takes the core accounts, more tables follow as the pools need them
   const priorLuts = existing ? [existing.lookupTable, ...(existing.lookupTables || [])].filter(Boolean) : [];
   const tables = await V.fillLookupTables(payer, statics, priorLuts); const table = tables[0]; V.lookupTable = table; V.lookupExtra = tables.slice(1);

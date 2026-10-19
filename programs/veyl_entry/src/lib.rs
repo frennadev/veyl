@@ -527,18 +527,14 @@ pub mod veyl_entry {
     ///     removal is paid floor(sum(|delta| * dH) / 2^64) out of it, exactly what its shares earned up to now;
     ///  6. burns (negative deltas) and exact mints (positive deltas) on the aggregate;
     ///  7. relayer fees, then whatever is left in the vaults goes back into the shielded pool as receipt notes;
-    ///  8. the position note is replaced (nullifier, new note, fee notes): done right after the proof check (2b), and its
-    ///     ciphertext logged first of all, because Solana drops a transaction's logs past ~10 KB.
+    ///  8. the position note is replaced (nullifier, new note, fee notes, and its ciphertext as PositionCiphertext): done by
+    ///     veyl_pool right after the proof check (2b), whose event CPI carries every tree event (logs past ~10 KB are dropped).
     /// Remaining accounts: `n_lp_acc` LpAcc accounts of the window, then 4 per leg [posted proof, its poster, nullifier 0,
     /// nullifier 1], then the bin arrays (window, active bin, swap path) and the aggregate's share accounts.
     pub fn shield_lp<'info>(ctx: Context<'_, '_, 'info, 'info, ShieldLp<'info>>, n_lp_acc: u8) -> Result<()> {
         // (split into steps that each run in their own stack frame: SBF frames are 4 KB)
         let req = Box::new(LpRequest::try_from_slice(&ctx.accounts.buffer.data).map_err(|_| error!(EntryError::BadRequest))?);
         lp_checks(&ctx.accounts, &req)?;
-        // 0. the new position note's ciphertext, logged before anything else: Solana keeps about 10 KB of logs per transaction
-        //    and drops the rest, and a merging add with two legs and a harvest can pass that. The commitment is the posted
-        //    proof's (step 2 checks the proof belongs to this request; a failed transaction's logs are ignored by scanners).
-        emit!(PositionCiphertext { commitment: ctx.accounts.posted.pubs[2], data: req.core.ciphertext.clone() });
         let bump = ctx.accounts.entry.signer_bump;
         let action = lp_action(&req.core)?; let ext_hash = lp_ext_hash(&req.core)?;
         let rem = ctx.remaining_accounts; let nl = n_lp_acc as usize; let nlegs = req.legs.len();
@@ -549,9 +545,9 @@ pub mod veyl_entry {
         lp_legs(&ctx.accounts, &req, leg_infos, &action, bump)?;
         // 2. the position proof: window, request, bundle of the current H
         let pubs = lp_check_proof(&ctx.accounts, &req.core, lp_infos, &ext_hash)?;
-        // 2b. the position note: nullifier, new note, fee notes (consumed here, before the bin CPIs, so that its tree leaves
-        //     are logged early too: a scanner missing a leaf cannot rebuild the tree; any later failure reverts it all)
-        lp_consume(&ctx.accounts, &ext_hash, bump)?;
+        // 2b. the position note: nullifier, new note, fee notes, its payload (consumed before the bin CPIs, so that the log
+        //     copies of its events come early too: readers of the logs need every leaf; any later failure reverts it all)
+        lp_consume(&ctx.accounts, &ext_hash, &req.core.ciphertext, bump)?;
         // 3. zap: part of the funding swapped through this pool (its fees reach the bins before the harvest)
         if req.core.zap.is_some() { lp_zap(&ctx.accounts, &req.core, bin_infos, bump)?; }
         // 4. harvest: collect the aggregate's fees in the window into the shielded pool, raise H by floor(c * 2^64 / S)
@@ -583,13 +579,13 @@ pub mod veyl_entry {
         let bump = ctx.accounts.entry.signer_bump;
         let a = &ctx.accounts;
         let legs = [a.posted.to_account_info(), a.poster.to_account_info(), a.nullifier0.to_account_info(), a.nullifier1.to_account_info()];
-        let v = leg_cpi(&a.veyl_pool, &a.signer, &a.relayer, &a.shield, &legs, Some((a.mint_in.to_account_info(), a.shield_vault_in.to_account_info(), a.entry_vault_in.to_account_info(), a.fee_token.to_account_info(), a.token_program_in.to_account_info())), &a.system_program, bump, req.leg.clone(), None)?;
+        let v = leg_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.relayer, &a.shield, &legs, Some((a.mint_in.to_account_info(), a.shield_vault_in.to_account_info(), a.entry_vault_in.to_account_info(), a.fee_token.to_account_info(), a.token_program_in.to_account_info())), &a.system_program, bump, req.leg.clone(), None)?;
         let mut total = 0u64; for r in &c.routes { total = total.checked_add(r.amount_in).ok_or(EntryError::AmountMismatch)?; }
         require!(!c.routes.is_empty() && total == v, EntryError::AmountMismatch);
         let seeds = signer_seeds(bump); let s: Vec<&[u8]> = vec![b"signer", &seeds[0]];
         let out = run_routes(&a.veyl_bin, a.signer.to_account_info(), Some(&s), &a.mint_in.key(), &c.token_out, &c.routes, &a.entry_vault_in, &a.entry_vault_out, ctx.remaining_accounts)?;
         require!(out >= c.min_out, EntryError::Slippage);
-        receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, Some((a.mint_out.to_account_info(), a.shield_vault_out.to_account_info(), a.entry_vault_out.to_account_info(), a.token_program_out.to_account_info())), bump, None, out, c.receipt_owner, c.receipt_blinding)?;
+        receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, Some((a.mint_out.to_account_info(), a.shield_vault_out.to_account_info(), a.entry_vault_out.to_account_info(), a.token_program_out.to_account_info())), bump, None, out, c.receipt_owner, c.receipt_blinding)?;
         emit!(ShieldSwapped { token_in: a.mint_in.key(), token_out: c.token_out, amount_in: v, amount_out: out, fee: req.leg.fee });
         Ok(())
     }
@@ -608,12 +604,12 @@ pub mod veyl_entry {
         let (mint, ev, tp) = if c.is_ask { (&a.mint_x, &a.entry_vault_x, &a.token_program_x) } else { (&a.mint_y, &a.entry_vault_y, &a.token_program_y) };
         require_keys_eq!(req.leg.mint, mint.key(), EntryError::BadLegs);
         let legs = [a.posted.to_account_info(), a.poster.to_account_info(), a.nullifier0.to_account_info(), a.nullifier1.to_account_info()];
-        let amount = leg_cpi(&a.veyl_pool, &a.signer, &a.relayer, &a.shield, &legs, Some((mint.to_account_info(), a.shield_vault.to_account_info(), ev.to_account_info(), a.fee_token.to_account_info(), tp.to_account_info())), &a.system_program, bump, req.leg.clone(), None)?;
+        let amount = leg_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.relayer, &a.shield, &legs, Some((mint.to_account_info(), a.shield_vault.to_account_info(), ev.to_account_info(), a.fee_token.to_account_info(), tp.to_account_info())), &a.system_program, bump, req.leg.clone(), None)?;
         let seeds = signer_seeds(bump); let s: Vec<&[u8]> = vec![b"signer", &seeds[0]]; let sg = [s.as_slice()];
         let accs = veyl_bin::cpi::accounts::MintLiquidity { from: a.signer.to_account_info(), pool: a.bin_pool.to_account_info(), mint_x: a.mint_x.to_account_info(), mint_y: a.mint_y.to_account_info(), vault_x: a.bin_vault_x.to_account_info(), vault_y: a.bin_vault_y.to_account_info(), from_x: a.entry_vault_x.to_account_info(), from_y: a.entry_vault_y.to_account_info(), token_program_x: a.token_program_x.to_account_info(), token_program_y: a.token_program_y.to_account_info() };
         let shares = veyl_bin::cpi::place_limit_order(CpiContext::new_with_signer(a.veyl_bin.to_account_info(), accs, &sg).with_remaining_accounts(ctx.remaining_accounts.to_vec()), shield_owner(), a.signer.key(), c.id, c.is_ask, amount, c.deadline)?.get();
         require!(shares <= i64::MAX as u128, EntryError::AmountMismatch); // a note amount is 64 bits; ext_amount is an i64
-        receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, None, bump, Some(veyl_pool::order_asset_of(&c.bin_pool, c.id, c.is_ask)), shares as u64, c.receipt_owner, c.receipt_blinding)?;
+        receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, None, bump, Some(veyl_pool::order_asset_of(&c.bin_pool, c.id, c.is_ask)), shares as u64, c.receipt_owner, c.receipt_blinding)?;
         emit!(ShieldOrderPlaced { bin_pool: c.bin_pool, id: c.id, is_ask: c.is_ask, amount, shares });
         Ok(())
     }
@@ -632,7 +628,7 @@ pub mod veyl_entry {
         {
             let a = &ctx.accounts;
             let legs = [a.posted.to_account_info(), a.poster.to_account_info(), a.nullifier0.to_account_info(), a.nullifier1.to_account_info()];
-            let shares = leg_cpi(&a.veyl_pool, &a.signer, &a.relayer, &a.shield, &legs, None, &a.system_program, bump, req.leg.clone(), Some(veyl_pool::order_asset_of(&c.bin_pool, c.id, c.is_ask)))?;
+            let shares = leg_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.relayer, &a.shield, &legs, None, &a.system_program, bump, req.leg.clone(), Some(veyl_pool::order_asset_of(&c.bin_pool, c.id, c.is_ask)))?;
             require!(shares > 0, EntryError::AmountMismatch);
             let seeds = signer_seeds(bump); let s: Vec<&[u8]> = vec![b"signer", &seeds[0]]; let sg = [s.as_slice()];
             let cpi = CpiContext::new_with_signer(a.veyl_bin.to_account_info(), bin_out_accs_w(a.signer.to_account_info(), a.bin_pool.to_account_info(), &a.mint_x, &a.mint_y, &a.bin_vault_x, &a.bin_vault_y, a.entry_vault_x.to_account_info(), a.entry_vault_y.to_account_info(), &a.token_program_x, &a.token_program_y), &sg).with_remaining_accounts(ctx.remaining_accounts.to_vec());
@@ -642,8 +638,8 @@ pub mod veyl_entry {
         let a = &mut *ctx.accounts;
         a.entry_vault_x.reload()?; a.entry_vault_y.reload()?;
         let (lx, ly) = (a.entry_vault_x.amount.saturating_sub(start_x), a.entry_vault_y.amount.saturating_sub(start_y));
-        if lx > 0 { receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, Some((a.mint_x.to_account_info(), a.shield_vault_x.to_account_info(), a.entry_vault_x.to_account_info(), a.token_program_x.to_account_info())), bump, None, lx, c.receipt_owner[0], c.receipt_blinding[0])?; }
-        if ly > 0 { receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, Some((a.mint_y.to_account_info(), a.shield_vault_y.to_account_info(), a.entry_vault_y.to_account_info(), a.token_program_y.to_account_info())), bump, None, ly, c.receipt_owner[1], c.receipt_blinding[1])?; }
+        if lx > 0 { receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, Some((a.mint_x.to_account_info(), a.shield_vault_x.to_account_info(), a.entry_vault_x.to_account_info(), a.token_program_x.to_account_info())), bump, None, lx, c.receipt_owner[0], c.receipt_blinding[0])?; }
+        if ly > 0 { receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, Some((a.mint_y.to_account_info(), a.shield_vault_y.to_account_info(), a.entry_vault_y.to_account_info(), a.token_program_y.to_account_info())), bump, None, ly, c.receipt_owner[1], c.receipt_blinding[1])?; }
         emit!(ShieldOrderWithdrawn { bin_pool: c.bin_pool, id: c.id, is_ask: c.is_ask, amount_x: lx, amount_y: ly });
         Ok(())
     }
@@ -658,7 +654,7 @@ pub mod veyl_entry {
         let v = withdraw_cpi(&a.veyl_pool, &a.signer, &a.pool, &a.mint, &a.vault, &a.spend, &a.entry_vault, &a.token_program, bump, encode(MIGRATE, &d)?)?;
         let fee = fee_of(v, d.fee_bps)?;
         if fee > 0 { pay(&a.token_program, &a.entry_vault, &a.mint, &a.fee_token, &a.signer, bump, fee)?; }
-        receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, Some((a.mint.to_account_info(), a.shield_vault.to_account_info(), a.entry_vault.to_account_info(), a.token_program.to_account_info())), bump, None, v - fee, d.owner, d.blinding)?;
+        receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, Some((a.mint.to_account_info(), a.shield_vault.to_account_info(), a.entry_vault.to_account_info(), a.token_program.to_account_info())), bump, None, v - fee, d.owner, d.blinding)?;
         emit!(Migrated { mint: a.mint.key(), amount: v - fee, fee });
         Ok(())
     }
@@ -831,21 +827,21 @@ pub fn shield_pda() -> Pubkey { Pubkey::find_program_address(&[veyl_pool::SHIELD
 /// Execute one funding leg: a posted transact proof (`leg` = [posted, poster, nullifier 0, nullifier 1]) whose public amount
 /// is paid to this program's vault (`tok` = mint, shield vault, entry vault, relayer fee token account, token program),
 /// or burned as a virtual asset. Returns the amount.
-fn leg_cpi<'info>(prog: &Program<'info, VeylPool>, signer: &UncheckedAccount<'info>, payer: &Signer<'info>, shield: &UncheckedAccount<'info>, leg: &[AccountInfo<'info>], tok: Option<TokAccs<'info>>, system: &Program<'info, System>, bump: u8, ext: veyl_pool::TransactExt, virt: Option<[u8; 32]>) -> Result<u64> {
+fn leg_cpi<'info>(prog: &Program<'info, VeylPool>, events: &UncheckedAccount<'info>, signer: &UncheckedAccount<'info>, payer: &Signer<'info>, shield: &UncheckedAccount<'info>, leg: &[AccountInfo<'info>], tok: Option<TokAccs<'info>>, system: &Program<'info, System>, bump: u8, ext: veyl_pool::TransactExt, virt: Option<[u8; 32]>) -> Result<u64> {
     require!(leg.len() == 4, EntryError::BadLegs);
     let seeds = signer_seeds(bump); let s: Vec<&[u8]> = vec![b"signer", &seeds[0]]; let sg = [s.as_slice()];
     let (mint, vault, ptok, rtok, tp) = match tok { Some((m, v, p, r, t)) => (Some(m), Some(v), Some(p), Some(r), Some(t)), None => (None, None, None, None, None) };
     let cpi = CpiContext::new_with_signer(prog.to_account_info(), veyl_pool::cpi::accounts::TransactCpi { processor: signer.to_account_info(), payer: payer.to_account_info(), shield: shield.to_account_info(),
-        posted: leg[0].clone(), poster: leg[1].clone(), nullifier0: leg[2].clone(), nullifier1: leg[3].clone(), mint, vault, processor_token: ptok, relayer_token: rtok, token_program: tp, system_program: system.to_account_info() }, &sg);
+        posted: leg[0].clone(), poster: leg[1].clone(), nullifier0: leg[2].clone(), nullifier1: leg[3].clone(), mint, vault, processor_token: ptok, relayer_token: rtok, token_program: tp, system_program: system.to_account_info(), event_authority: events.to_account_info(), program: prog.to_account_info() }, &sg);
     Ok(veyl_pool::cpi::transact_cpi(cpi, ext, virt)?.get())
 }
 /// A receipt note: `amount` of a token from this program's vault (`tok` = mint, shield vault, entry vault, token program)
 /// or of a virtual asset, for a one-time owner.
-fn receipt_cpi<'info>(prog: &Program<'info, VeylPool>, signer: &UncheckedAccount<'info>, shield: &UncheckedAccount<'info>, tok: Option<(AccountInfo<'info>, AccountInfo<'info>, AccountInfo<'info>, AccountInfo<'info>)>, bump: u8, virt: Option<[u8; 32]>, amount: u64, owner: [u8; 32], blinding: [u8; 32]) -> Result<()> {
+fn receipt_cpi<'info>(prog: &Program<'info, VeylPool>, events: &UncheckedAccount<'info>, signer: &UncheckedAccount<'info>, shield: &UncheckedAccount<'info>, tok: Option<(AccountInfo<'info>, AccountInfo<'info>, AccountInfo<'info>, AccountInfo<'info>)>, bump: u8, virt: Option<[u8; 32]>, amount: u64, owner: [u8; 32], blinding: [u8; 32]) -> Result<()> {
     if amount == 0 { return Ok(()); }
     let seeds = signer_seeds(bump); let s: Vec<&[u8]> = vec![b"signer", &seeds[0]]; let sg = [s.as_slice()];
     let (mint, vault, from, tp) = match tok { Some((m, v, f, t)) => (Some(m), Some(v), Some(f), Some(t)), None => (None, None, None, None) };
-    let cpi = CpiContext::new_with_signer(prog.to_account_info(), veyl_pool::cpi::accounts::DepositReceipt { processor: signer.to_account_info(), shield: shield.to_account_info(), mint, vault, processor_token: from, token_program: tp }, &sg);
+    let cpi = CpiContext::new_with_signer(prog.to_account_info(), veyl_pool::cpi::accounts::DepositReceipt { processor: signer.to_account_info(), shield: shield.to_account_info(), mint, vault, processor_token: from, token_program: tp, event_authority: events.to_account_info(), program: prog.to_account_info() }, &sg);
     veyl_pool::cpi::deposit_receipt(cpi, virt, amount, owner, blinding)?; Ok(())
 }
 fn shield_pay_cpi<'info>(prog: &Program<'info, VeylPool>, signer: &UncheckedAccount<'info>, shield: &UncheckedAccount<'info>, mint: &InterfaceAccount<'info, Mint>, vault: &InterfaceAccount<'info, TokenAccount>, to: &InterfaceAccount<'info, TokenAccount>, tp: &Interface<'info, TokenInterface>, bump: u8, amount: u64) -> Result<()> {
@@ -879,7 +875,7 @@ fn lp_legs<'info>(a: &ShieldLp<'info>, req: &LpRequest, leg_infos: &'info [Accou
         require!(ext.action == *action, EntryError::BadContext);
         let is_x = ext.mint == a.mint_x.key(); require!(is_x || ext.mint == a.mint_y.key(), EntryError::BadLegs);
         let (mint, sv, ev, ft, tp) = if is_x { (&a.mint_x, &a.shield_vault_x, &a.entry_vault_x, &a.fee_token_x, &a.token_program_x) } else { (&a.mint_y, &a.shield_vault_y, &a.entry_vault_y, &a.fee_token_y, &a.token_program_y) };
-        leg_cpi(&a.veyl_pool, &a.signer, &a.relayer, &a.shield, &leg_infos[4 * i..4 * i + 4], Some((mint.to_account_info(), sv.to_account_info(), ev.to_account_info(), ft.to_account_info(), tp.to_account_info())), &a.system_program, bump, ext.clone(), None)?;
+        leg_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.relayer, &a.shield, &leg_infos[4 * i..4 * i + 4], Some((mint.to_account_info(), sv.to_account_info(), ev.to_account_info(), ft.to_account_info(), tp.to_account_info())), &a.system_program, bump, ext.clone(), None)?;
     }
     Ok(())
 }
@@ -1008,10 +1004,10 @@ fn lp_pot<'info>(a: &ShieldLp<'info>, c: &LpCore, charge: [u64; 2], pay: [u64; 2
     Ok(())
 }
 #[inline(never)]
-fn lp_consume<'info>(a: &ShieldLp<'info>, ext_hash: &[u8; 32], bump: u8) -> Result<()> {
+fn lp_consume<'info>(a: &ShieldLp<'info>, ext_hash: &[u8; 32], ciphertext: &[u8], bump: u8) -> Result<()> {
     let seeds = signer_seeds(bump); let s: Vec<&[u8]> = vec![b"signer", &seeds[0]]; let sg = [s.as_slice()];
-    let cpi = CpiContext::new_with_signer(a.veyl_pool.to_account_info(), veyl_pool::cpi::accounts::ConsumePosition { processor: a.signer.to_account_info(), payer: a.relayer.to_account_info(), shield: a.shield.to_account_info(), posted: a.posted.to_account_info(), poster: a.poster.to_account_info(), nullifier: a.nullifier.to_account_info(), system_program: a.system_program.to_account_info() }, &sg);
-    veyl_pool::cpi::consume_position(cpi, *ext_hash)
+    let cpi = CpiContext::new_with_signer(a.veyl_pool.to_account_info(), veyl_pool::cpi::accounts::ConsumePosition { processor: a.signer.to_account_info(), payer: a.relayer.to_account_info(), shield: a.shield.to_account_info(), posted: a.posted.to_account_info(), poster: a.poster.to_account_info(), nullifier: a.nullifier.to_account_info(), system_program: a.system_program.to_account_info(), event_authority: a.pool_events.to_account_info(), program: a.veyl_pool.to_account_info() }, &sg);
+    veyl_pool::cpi::consume_position(cpi, *ext_hash, ciphertext.to_vec())
 }
 
 /// The shielded aggregate's shares in bin `id` (0 when its share account for that chunk is not among `infos`).
@@ -1027,8 +1023,8 @@ fn agg_shares<'info>(infos: &'info [AccountInfo<'info>], pool: &Pubkey, owner: &
 fn receipts<'info>(a: &mut ShieldLp<'info>, start_x: u64, start_y: u64, owners: [[u8; 32]; 2], blindings: [[u8; 32]; 2], bump: u8) -> Result<[u64; 2]> {
     a.entry_vault_x.reload()?; a.entry_vault_y.reload()?;
     let (lx, ly) = (a.entry_vault_x.amount.saturating_sub(start_x), a.entry_vault_y.amount.saturating_sub(start_y));
-    receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, Some((a.mint_x.to_account_info(), a.shield_vault_x.to_account_info(), a.entry_vault_x.to_account_info(), a.token_program_x.to_account_info())), bump, None, lx, owners[0], blindings[0])?;
-    receipt_cpi(&a.veyl_pool, &a.signer, &a.shield, Some((a.mint_y.to_account_info(), a.shield_vault_y.to_account_info(), a.entry_vault_y.to_account_info(), a.token_program_y.to_account_info())), bump, None, ly, owners[1], blindings[1])?;
+    receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, Some((a.mint_x.to_account_info(), a.shield_vault_x.to_account_info(), a.entry_vault_x.to_account_info(), a.token_program_x.to_account_info())), bump, None, lx, owners[0], blindings[0])?;
+    receipt_cpi(&a.veyl_pool, &a.pool_events, &a.signer, &a.shield, Some((a.mint_y.to_account_info(), a.shield_vault_y.to_account_info(), a.entry_vault_y.to_account_info(), a.token_program_y.to_account_info())), bump, None, ly, owners[1], blindings[1])?;
     Ok([lx, ly])
 }
 
@@ -1257,6 +1253,9 @@ pub struct ShieldLp<'info> {
     pub veyl_pool: Program<'info, VeylPool>,
     pub veyl_bin: Program<'info, VeylBin>,
     pub system_program: Program<'info, System>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct ShieldSwap<'info> {
@@ -1287,6 +1286,9 @@ pub struct ShieldSwap<'info> {
     pub veyl_pool: Program<'info, VeylPool>,
     pub veyl_bin: Program<'info, VeylBin>,
     pub system_program: Program<'info, System>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct ShieldOrder<'info> {
@@ -1319,6 +1321,9 @@ pub struct ShieldOrder<'info> {
     pub veyl_pool: Program<'info, VeylPool>,
     pub veyl_bin: Program<'info, VeylBin>,
     pub system_program: Program<'info, System>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct ShieldOrderWithdraw<'info> {
@@ -1353,6 +1358,9 @@ pub struct ShieldOrderWithdraw<'info> {
     pub veyl_pool: Program<'info, VeylPool>,
     pub veyl_bin: Program<'info, VeylBin>,
     pub system_program: Program<'info, System>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct ShieldMigrate<'info> {
@@ -1371,6 +1379,9 @@ pub struct ShieldMigrate<'info> {
     #[account(mut)] pub shield_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub veyl_pool: Program<'info, VeylPool>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct ShieldReturnRewards<'info> {
@@ -1398,7 +1409,6 @@ pub struct ShieldReturnRewards<'info> {
 #[event] pub struct PrivateOrderWithdrawn { pub owner: Pubkey, pub bin_pool: Pubkey, pub id: i32, pub is_ask: bool, pub amount_x: u64, pub amount_y: u64 }
 #[event] pub struct PrivateRebalanced { pub owner: Pubkey, pub bin_pool: Pubkey, pub burned_x: u64, pub burned_y: u64, pub readded_x: u64, pub readded_y: u64, pub fee_x: u64, pub fee_y: u64 }
 #[event] pub struct PrivateZapped { pub owner: Pubkey, pub bin_pool: Pubkey, pub x_in: bool, pub amount_in: u64, pub swap_amount: u64, pub ids: Vec<i32>, pub shares: Vec<u128> }
-#[event] pub struct PositionCiphertext { pub commitment: [u8; 32], pub data: Vec<u8> }
 #[event] pub struct ShieldLpExecuted { pub bin_pool: Pubkey, pub lo: i32, pub deltas: Vec<i128>, pub legs: u8, pub charge: [u64; 2], pub pay: [u64; 2], pub claim_fee: [u64; 2], pub leftover_fee: [u64; 2], pub receipts: [u64; 2], pub nullifier: [u8; 32], pub diluted: [bool; 2] }
 #[event] pub struct ShieldSwapped { pub token_in: Pubkey, pub token_out: Pubkey, pub amount_in: u64, pub amount_out: u64, pub fee: u64 }
 #[event] pub struct ShieldOrderPlaced { pub bin_pool: Pubkey, pub id: i32, pub is_ask: bool, pub amount: u64, pub shares: u128 }

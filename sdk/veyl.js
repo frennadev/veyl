@@ -217,6 +217,23 @@ function parseEvents(logs) {
     const name = EVENT_BY_DISC[b.subarray(0, 8).toString('hex')]; if (!name) continue; try { out.push({ name, ...EVENTS[name](new Reader(b.subarray(8))) }); } catch { /* not ours */ } }
   return out;
 }
+/// parseEvents, each event with the program whose frame logged it (`program`, base58; null when the logs have no invoke
+/// lines). Any program can log a "Program data:" line that looks like one of ours, but only the runtime writes the
+/// "Program <id> invoke [n]" / "Program <id> success|failed" lines that frame it.
+function logEvents(logs) { const out = []; const stack = [];
+  for (const l of logs || []) { let m;
+    if ((m = /^Program (\w+) invoke \[\d+\]$/.exec(l))) stack.push(m[1]);
+    else if (/^Program \w+ (success|failed)/.test(l)) stack.pop();
+    else if (l.startsWith('Program data: ')) { const e = parseEvents([l])[0]; if (e) out.push({ ...e, program: stack.length ? stack[stack.length - 1] : null }); } }
+  return out; }
+/// Anchor's event-cpi instruction tag (EVENT_IX_TAG = 0x1d9acb512ea545e4, little-endian): a program's self-CPI whose data
+/// starts with it carries events, signed by its event authority PDA ["__event_authority"] (veyl_pool: Evs).
+const EVENT_IX_TAG = Buffer.from('e445a52e51cb9a1d', 'hex');
+/// The events of one event-cpi instruction's data after the tag: Anchor's encoding (8-byte discriminator sha256("event:<Name>")
+/// + borsh) once per event, back to back (Anchor's emit_cpi! sends one; veyl_pool sends all of an instruction's at once).
+function parseEventData(data) { const b = Buffer.from(data); const out = []; const r = new Reader(b);
+  while (r.o + 8 <= b.length) { const name = EVENT_BY_DISC[b.subarray(r.o, r.o + 8).toString('hex')]; if (!name) break; r.o += 8; try { out.push({ name, ...EVENTS[name](r) }); } catch { break; } }
+  return out; }
 
 // ------------------------------------------------------------------------------------------------ bin maths (exact twin of programs/veyl_bin)
 const mulDiv = (a, b, c) => (a * b) / c;
@@ -669,6 +686,6 @@ class Veyl {
 }
 module.exports = { W, R, encRoute, packProofN, strings, Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
   CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, DEFAULT_PROTOCOL_SHARE, MAX_PROTOCOL_SHARE, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
-  disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents,
+  disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents, logEvents, EVENT_IX_TAG, parseEventData,
   mulDiv, mulDivCeil, stepQ, priceOf, feeOf, accOf, refsOf, simulateSwap, sharesForMint, chunkOf, slotOf, chunksForSwap, chunkBit, nextChunk, nextBin, liveChunks, owedOf, pendingRewardGrowth, distribute, sideWeights, shapeWeights, EMPTY_BIN,
   decodeBinPool, decodeBinArray, decodeShareAccount };

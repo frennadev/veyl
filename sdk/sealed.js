@@ -113,7 +113,7 @@ function install(Veyl) {
   /// submit_swap: { binPool, seq, direction, mintIn, c1, c2, ext: { relayer, fee, encChange, encSwap }, pubs, poster }
   P_.submitSwapIx = async function (relayer, r) { const tp = await this.tokenProgram(r.mintIn); const none = R(this.programs.entry);
     return this.entryIx('submit_swap', Buffer.concat([u8(r.direction), pt64(r.c1), pt64(r.c2), encodeSwapExt(r.ext)]), [W(relayer, true), R(this.entryPda()), R(this.signerPda()), R(this.sealedPda(r.binPool)), W(this.batchPda(r.binPool, r.seq)), R(this.committeePda()),
-      W(this.shieldPda()), W(this.proofPda(KIND.SWAP, r.pubs)), W(r.poster), W(this.nullifierPda(r.pubs[1])), W(this.nullifierPda(r.pubs[2])), R(r.mintIn), W(this.shieldVault(r.mintIn, tp)), BigInt(r.ext.fee || 0n) > 0n ? W(r.ext.relayer) : none, R(tp), R(this.programs.pool), R(SYS)]); };
+      W(this.shieldPda()), W(this.proofPda(KIND.SWAP, r.pubs)), W(r.poster), W(this.nullifierPda(r.pubs[1])), W(this.nullifierPda(r.pubs[2])), R(r.mintIn), W(this.shieldVault(r.mintIn, tp)), BigInt(r.ext.fee || 0n) > 0n ? W(r.ext.relayer) : none, R(tp), R(this.programs.pool), R(SYS), R(this.poolEventAuthority())]); };
   P_.closeBatchIx = function (payer, binPool, seq) { return this.entryIx('close_batch', Buffer.alloc(0), [W(payer, true), W(this.sealedPda(binPool)), W(this.batchPda(binPool, seq)), W(this.batchPda(binPool, BigInt(seq) + 1n)), R(binPool), R(this.committeePda()), R(SYS)]); };
   /// post_share: share = { index, Da, Db, A, Ba, Bb, s } (sdk/bjj.js partialDecrypt)
   P_.postShareIx = function (node, batch, share) { return this.entryIx('post_share', Buffer.concat([u8(share.index), ...[share.Da, share.Db, share.A, share.Ba, share.Bb].map(pt64), be32(share.s)]), [W(node, true), R(this.committeePda()), W(batch), W(this.shareJobPda(batch, share.index)), R(SYS)]); };
@@ -130,7 +130,7 @@ function install(Veyl) {
   /// claim_swap: { binPool, seq, direction, mintOut, ext: { relayer, fee, encOut }, pubs, poster }
   P_.claimSwapIx = async function (relayer, r) { const tp = await this.tokenProgram(r.mintOut); const none = R(this.programs.entry);
     return this.entryIx('claim_swap', Buffer.concat([u8(r.direction), encodeClaimExt(r.ext)]), [W(relayer, true), R(this.entryPda()), R(this.signerPda()), R(this.sealedPda(r.binPool)), W(this.batchPda(r.binPool, r.seq)), W(this.shieldPda()),
-      W(this.proofPda(KIND.CLAIM, r.pubs)), W(r.poster), W(this.nullifierPda(r.pubs[1])), R(r.mintOut), W(this.shieldVault(r.mintOut, tp)), BigInt(r.ext.fee || 0n) > 0n ? W(r.ext.relayer) : none, R(tp), R(this.programs.pool), R(SYS)]); };
+      W(this.proofPda(KIND.CLAIM, r.pubs)), W(r.poster), W(this.nullifierPda(r.pubs[1])), R(r.mintOut), W(this.shieldVault(r.mintOut, tp)), BigInt(r.ext.fee || 0n) > 0n ? W(r.ext.relayer) : none, R(tp), R(this.programs.pool), R(SYS), R(this.poolEventAuthority())]); };
   /// What a claim in this batch gets right now: { refund, mintOut, num, den } (null while the batch is open or awaiting
   /// settlement within its window).
   P_.claimTerms = async function (binPool, seq, direction) { const s = await this.sealed(binPool); const b = await this.batch(binPool, seq); if (!s || !b) return null;

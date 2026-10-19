@@ -198,6 +198,8 @@ const orderAction = (c) => sha(Buffer.from('veyl-order-action'), encodeOrderCore
 const orderWithdrawAction = (c) => sha(Buffer.from('veyl-order-withdraw-action'), encodeOrderWithdrawCore(c));
 const proofId = (kind, pubs) => sha(Buffer.from([kind]), ...pubs.map((p) => be32(p)));
 const MIGRATE = 6;
+/// The events readers rebuild the shielded tree and its notes from (veyl_pool's event CPI carries all of them).
+const TREE = new Set(['NoteInserted', 'NoteCiphertext', 'PositionCiphertext', 'ReceiptNote', 'Nullified', 'DepositPending', 'DepositApproved', 'DepositCancelled']);
 
 function install(Veyl) {
   const P_ = Veyl.prototype;
@@ -207,6 +209,9 @@ function install(Veyl) {
   P_.proofPda = function (kind, pubs) { return this.pda([Buffer.from('proof'), proofId(kind, pubs)], this.programs.pool); };
   P_.nullifierPda = function (n) { return this.pda([Buffer.from('nf'), be32(n)], this.programs.pool); };
   P_.pendingPda = function (c0) { return this.pda([Buffer.from('pend'), be32(c0)], this.programs.pool); };
+  /// veyl_pool's event authority (Anchor event-cpi): every instruction that changes the shielded tree takes it and the
+  /// pool program as its last two accounts (veyl_entry's shielded actions: `pool_events`, after their named accounts).
+  P_.poolEventAuthority = function () { return this.pda([Buffer.from('__event_authority')], this.programs.pool); };
   P_.shieldOwner = function () { return this.pda([Buffer.from('shielded')], this.programs.entry); };
   P_.lpAccPda = function (pool, chunk) { return this.pda([Buffer.from('lpacc'), pk(pool), i32(chunk)], this.programs.entry); };
   P_.bufferPda = function (owner, id) { return this.pda([Buffer.from('buf'), pk(owner), u64(id)], this.programs.entry); };
@@ -224,6 +229,8 @@ function install(Veyl) {
   P_.aggregateOf = async function (pool, lo) { const out = []; const accs = {}; for (let b = 0; b < K; b++) { const id = lo + b; const c = V_.chunkOf(id); if (!(c in accs)) accs[c] = await this.shareAccount(pool, this.shieldOwner(), this.signerPda(), c); const a = accs[c]; out.push(a ? a.slots[V_.slotOf(id)].shares : 0n); } return out; };
 
   // ---- veyl_pool: the shielded pool
+  /// The two accounts #[event_cpi] appends to an instruction of veyl_pool: its event authority and the program itself.
+  P_.poolEvents = function () { return [R(this.poolEventAuthority()), R(this.programs.pool)]; };
   P_.initShieldIx = function (authority, postman) { return new TransactionInstruction({ programId: this.programs.pool, data: Buffer.concat([V_.disc('init_shield'), pk(postman)]), keys: [W(authority, true), R(this.programs.pool), R(this.programDataPda(this.programs.pool)), W(this.shieldPda()), R(SYS)] }); };
   P_.shieldAdminIx = function (name, authority, data = Buffer.alloc(0)) { return new TransactionInstruction({ programId: this.programs.pool, data: Buffer.concat([V_.disc(name), data]), keys: [R(authority, true), W(this.shieldPda())] }); };
   P_.postProofIx = function (poster, kind, proofBytes, pubs, ttl = V_.DEFAULT_TTL_SLOTS) { if (proofBytes.length !== 256 || pubs.length !== 8) throw new Error('bad proof');
@@ -231,14 +238,14 @@ function install(Veyl) {
   P_.cancelProofIx = function (canceller, kind, pubs, poster) { return new TransactionInstruction({ programId: this.programs.pool, data: V_.disc('cancel_proof'), keys: [R(canceller, true), W(poster), W(this.proofPda(kind, pubs))] }); };
   P_.shieldDepositIx = async function (depositor, ext, pubs, poster = depositor) { const mint = new PublicKey(ext.mint); const tp = await this.tokenProgram(mint);
     return new TransactionInstruction({ programId: this.programs.pool, data: Buffer.concat([V_.disc('shield_deposit'), encodeExt(ext)]), keys: [W(depositor, true), W(this.shieldPda()), W(this.proofPda(KIND.TRANSACT, pubs)), W(poster), W(this.nullifierPda(pubs[4])), W(this.nullifierPda(pubs[5])),
-      R(mint), W(this.shieldVault(mint, tp)), W(this.ata(mint, depositor, tp)), W(this.pendingPda(pubs[6])), R(tp), R(SYS)] }); };
-  P_.approveDepositIx = function (postman, pending, depositor) { return new TransactionInstruction({ programId: this.programs.pool, data: V_.disc('approve_deposit'), keys: [R(postman, true), W(this.shieldPda()), W(depositor), W(pending)] }); };
-  P_.cancelDepositIx = async function (depositor, pending, mint) { const tp = await this.tokenProgram(mint); return new TransactionInstruction({ programId: this.programs.pool, data: V_.disc('cancel_deposit'), keys: [W(depositor, true), W(this.shieldPda()), W(pending), R(mint), W(this.shieldVault(mint, tp)), W(this.ata(mint, depositor, tp)), R(tp)] }); };
+      R(mint), W(this.shieldVault(mint, tp)), W(this.ata(mint, depositor, tp)), W(this.pendingPda(pubs[6])), R(tp), R(SYS), ...this.poolEvents()] }); };
+  P_.approveDepositIx = function (postman, pending, depositor) { return new TransactionInstruction({ programId: this.programs.pool, data: V_.disc('approve_deposit'), keys: [R(postman, true), W(this.shieldPda()), W(depositor), W(pending), ...this.poolEvents()] }); };
+  P_.cancelDepositIx = async function (depositor, pending, mint) { const tp = await this.tokenProgram(mint); return new TransactionInstruction({ programId: this.programs.pool, data: V_.disc('cancel_deposit'), keys: [W(depositor, true), W(this.shieldPda()), W(pending), R(mint), W(this.shieldVault(mint, tp)), W(this.ata(mint, depositor, tp)), R(tp), ...this.poolEvents()] }); };
   /// Withdrawal / transfer. ext.recipient and ext.relayer are token accounts (create them first).
   P_.shieldTransactIx = async function (submitter, ext, pubs, poster = submitter) { const none = R(this.programs.pool); const moves = BigInt(ext.extAmount || 0n) < 0n || BigInt(ext.fee || 0n) > 0n;
     let opt = [none, none, none, none, none];
     if (moves) { const mint = new PublicKey(ext.mint); const tp = await this.tokenProgram(mint); opt = [R(mint), W(this.shieldVault(mint, tp)), BigInt(ext.extAmount) < 0n ? W(ext.recipient) : none, BigInt(ext.fee || 0n) > 0n ? W(ext.relayer) : none, R(tp)]; }
-    return new TransactionInstruction({ programId: this.programs.pool, data: Buffer.concat([V_.disc('shield_transact'), encodeExt(ext)]), keys: [W(submitter, true), W(this.shieldPda()), W(this.proofPda(KIND.TRANSACT, pubs)), W(poster), W(this.nullifierPda(pubs[4])), W(this.nullifierPda(pubs[5])), ...opt, R(SYS)] }); };
+    return new TransactionInstruction({ programId: this.programs.pool, data: Buffer.concat([V_.disc('shield_transact'), encodeExt(ext)]), keys: [W(submitter, true), W(this.shieldPda()), W(this.proofPda(KIND.TRANSACT, pubs)), W(poster), W(this.nullifierPda(pubs[4])), W(this.nullifierPda(pubs[5])), ...opt, R(SYS), ...this.poolEvents()] }); };
 
   // ---- veyl_entry: buffers, growth accounts, shielded actions
   P_.initLpAccIx = function (payer, pool, chunk) { return this.entryIx('init_lp_acc', i32(chunk), [W(payer, true), R(pool), W(this.lpAccPda(pool, chunk)), R(SYS)]); };
@@ -260,30 +267,48 @@ function install(Veyl) {
     const lpChunks = [...new Set([V_.chunkOf(c.lo), V_.chunkOf(c.lo + K - 1)])];
     return this.entryIx('shield_lp', u8(lpChunks.length), [W(relayer, true), R(this.entryPda()), R(signer), W(this.bufferPda(relayer, bufferId)), W(shield), W(this.proofPda(KIND.POSITION, posPubs)), W(posPoster), W(this.nullifierPda(posPubs[1])),
       W(pool), R(p.mintX), R(p.mintY), W(p.vaultX), W(p.vaultY), W(this.ata(p.mintX, signer, p.tokenProgramX)), W(this.ata(p.mintY, signer, p.tokenProgramY)), W(this.ata(p.mintX, shield, p.tokenProgramX)), W(this.ata(p.mintY, shield, p.tokenProgramY)),
-      W(this.ata(p.mintX, c.relayer, p.tokenProgramX)), W(this.ata(p.mintY, c.relayer, p.tokenProgramY)), R(p.tokenProgramX), R(p.tokenProgramY), R(this.programs.pool), R(this.programs.bin), R(SYS),
+      W(this.ata(p.mintX, c.relayer, p.tokenProgramX)), W(this.ata(p.mintY, c.relayer, p.tokenProgramY)), R(p.tokenProgramX), R(p.tokenProgramY), R(this.programs.pool), R(this.programs.bin), R(SYS), R(this.poolEventAuthority()),
       ...lpChunks.map((ch) => W(this.lpAccPda(pool, ch))), ...legs.flatMap((l) => this.legKeys(l)), ...this.lpBinKeys(pool, p, c.lo, c.zap ? c.zap.xIn : null)]); };
   P_.shieldSwapIx = async function (relayer, bufferId, req, legPoster) { const c = req.core; const mintIn = new PublicKey(req.leg.mint), mintOut = new PublicKey(c.tokenOut); const tpi = await this.tokenProgram(mintIn), tpo = await this.tokenProgram(mintOut); const signer = this.signerPda(); const shield = this.shieldPda();
     return this.entryIx('shield_swap', Buffer.alloc(0), [W(relayer, true), R(this.entryPda()), R(signer), W(this.bufferPda(relayer, bufferId)), W(shield), ...this.legKeys({ pubs: req.legPubs, poster: legPoster }),
-      R(mintIn), W(this.ata(mintIn, shield, tpi)), W(this.ata(mintIn, signer, tpi)), W(req.leg.relayer), R(mintOut), W(this.ata(mintOut, signer, tpo)), W(this.ata(mintOut, shield, tpo)), R(tpi), R(tpo), R(this.programs.pool), R(this.programs.bin), R(SYS),
+      R(mintIn), W(this.ata(mintIn, shield, tpi)), W(this.ata(mintIn, signer, tpi)), W(req.leg.relayer), R(mintOut), W(this.ata(mintOut, signer, tpo)), W(this.ata(mintOut, shield, tpo)), R(tpi), R(tpo), R(this.programs.pool), R(this.programs.bin), R(SYS), R(this.poolEventAuthority()),
       ...(await this.routeRemaining(c.routes, signer))]); };
   P_.shieldOrderIx = async function (relayer, bufferId, req, legPoster) { const c = req.core; const pool = new PublicKey(c.binPool); const p = await this.binPool(pool); const signer = this.signerPda(); const shield = this.shieldPda();
     const [mint, tp] = c.isAsk ? [p.mintX, p.tokenProgramX] : [p.mintY, p.tokenProgramY];
     return this.entryIx('shield_order', Buffer.alloc(0), [W(relayer, true), R(this.entryPda()), R(signer), W(this.bufferPda(relayer, bufferId)), W(shield), ...this.legKeys({ pubs: req.legPubs, poster: legPoster }),
-      W(pool), R(p.mintX), R(p.mintY), W(p.vaultX), W(p.vaultY), W(this.ata(p.mintX, signer, p.tokenProgramX)), W(this.ata(p.mintY, signer, p.tokenProgramY)), W(this.ata(mint, shield, tp)), W(req.leg.relayer), R(p.tokenProgramX), R(p.tokenProgramY), R(this.programs.pool), R(this.programs.bin), R(SYS),
+      W(pool), R(p.mintX), R(p.mintY), W(p.vaultX), W(p.vaultY), W(this.ata(p.mintX, signer, p.tokenProgramX)), W(this.ata(p.mintY, signer, p.tokenProgramY)), W(this.ata(mint, shield, tp)), W(req.leg.relayer), R(p.tokenProgramX), R(p.tokenProgramY), R(this.programs.pool), R(this.programs.bin), R(SYS), R(this.poolEventAuthority()),
       W(this.binArrayPda(pool, V_.chunkOf(c.id))), W(this.sharesPda(pool, this.shieldOwner(), signer, V_.chunkOf(c.id)))]); };
   P_.shieldOrderWithdrawIx = async function (relayer, bufferId, req, legPoster) { const c = req.core; const pool = new PublicKey(c.binPool); const p = await this.binPool(pool); const signer = this.signerPda(); const shield = this.shieldPda();
     return this.entryIx('shield_order_withdraw', Buffer.alloc(0), [W(relayer, true), R(this.entryPda()), R(signer), W(this.bufferPda(relayer, bufferId)), W(shield), ...this.legKeys({ pubs: req.legPubs, poster: legPoster }),
       W(pool), R(p.mintX), R(p.mintY), W(p.vaultX), W(p.vaultY), W(this.ata(p.mintX, signer, p.tokenProgramX)), W(this.ata(p.mintY, signer, p.tokenProgramY)), W(this.ata(p.mintX, shield, p.tokenProgramX)), W(this.ata(p.mintY, shield, p.tokenProgramY)),
-      W(this.ata(p.mintX, c.relayer, p.tokenProgramX)), W(this.ata(p.mintY, c.relayer, p.tokenProgramY)), R(p.tokenProgramX), R(p.tokenProgramY), R(this.programs.pool), R(this.programs.bin), R(SYS),
+      W(this.ata(p.mintX, c.relayer, p.tokenProgramX)), W(this.ata(p.mintY, c.relayer, p.tokenProgramY)), R(p.tokenProgramX), R(p.tokenProgramY), R(this.programs.pool), R(this.programs.bin), R(SYS), R(this.poolEventAuthority()),
       W(this.binArrayPda(pool, V_.chunkOf(c.id))), W(this.sharesPda(pool, this.shieldOwner(), signer, V_.chunkOf(c.id)))]); };
   P_.shieldMigrateIx = async function (relayer, mint, nullifierHash, d) { const pool = this.poolPda(mint); const p = await this.pool(pool); const signer = this.signerPda(); const shield = this.shieldPda();
-    return this.entryIx('shield_migrate', encodeMigrate(d), [W(relayer, true), R(this.entryPda()), R(signer), W(pool), R(mint), W(p.vault), W(this.spendPda(pool, nullifierHash)), W(this.ata(mint, signer, p.tokenProgram)), W(this.ata(mint, d.feeRecipient, p.tokenProgram)), W(shield), W(this.ata(mint, shield, p.tokenProgram)), R(p.tokenProgram), R(this.programs.pool)]); };
+    return this.entryIx('shield_migrate', encodeMigrate(d), [W(relayer, true), R(this.entryPda()), R(signer), W(pool), R(mint), W(p.vault), W(this.spendPda(pool, nullifierHash)), W(this.ata(mint, signer, p.tokenProgram)), W(this.ata(mint, d.feeRecipient, p.tokenProgram)), W(shield), W(this.ata(mint, shield, p.tokenProgram)), R(p.tokenProgram), R(this.programs.pool), R(this.poolEventAuthority())]); };
   P_.shieldReturnRewardsIx = async function (pool, index, ids) { const p = await this.binPool(pool); const r = p.rewards[index]; const signer = this.signerPda();
     return this.entryIx('shield_return_rewards', Buffer.concat([u8(index), vec(ids, i32)]), [R(this.entryPda()), R(signer), W(pool), R(r.mint), W(r.vault), W(this.ata(r.mint, r.funder, r.tokenProgram)), R(r.tokenProgram), R(this.programs.bin),
       ...this.binRemaining(pool, ids, this.shieldOwner(), signer, [V_.chunkOf(p.activeId)])]); };
+  /// A fetched transaction's account keys (static, then the lookup tables' writable and readonly ones).
+  P_.keysOf = function (t) { const m = t.transaction.message; const la = t.meta && t.meta.loadedAddresses; return [...m.staticAccountKeys, ...(la ? [...la.writable, ...la.readonly] : [])].map((k) => new PublicKey(k)); };
+  /// The events veyl_pool delivered by its event CPI (Evs in programs/veyl_pool: one self-CPI per instruction, data =
+  /// EVENT_IX_TAG + the events in Anchor's encoding), from inner instructions as getTransaction returns them ({ programIdIndex,
+  /// accounts, data: base58 }; `keys` = keysOf) or as a simulation does ({ programId, accounts, data: base58 }). Kept in full
+  /// by the runtime whatever the transaction logs, and only veyl_pool can make one (its event authority PDA signs it; any other
+  /// caller fails the whole transaction).
+  P_.cpiEvents = function (inner, keys = []) { const pool = this.programs.pool.toBase58(); const out = [];
+    for (const g of inner || []) for (const i of g.instructions || []) { const prog = i.programId ? String(i.programId) : keys[i.programIdIndex] ? keys[i.programIdIndex].toBase58() : null; if (prog !== pool || typeof i.data !== 'string') continue;
+      let d; try { d = Buffer.from(bs58.decode(i.data)); } catch { continue; } if (d.length > 8 && d.subarray(0, 8).equals(V_.EVENT_IX_TAG)) out.push(...V_.parseEventData(d.subarray(8))); }
+    return out; };
+  /// The tree events of transaction `sig` from veyl_pool's event CPI ([] for a transaction from before it had one).
+  P_.treeEvents = async function (sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); return t ? this.cpiEvents(t.meta.innerInstructions, this.keysOf(t)) : []; };
+  /// The tree events of a fetched transaction: from the event CPI, or (a transaction from before it, the old programs) from
+  /// the logs, where only events logged by veyl_pool itself count (and PositionCiphertext by veyl_entry, which logged it
+  /// then): any program can log a line that decodes as a NoteInserted. Other events (UI) always come from the logs.
+  P_.txEvents = function (t) { const cpi = this.cpiEvents(t.meta.innerInstructions, this.keysOf(t)); const pool = this.programs.pool.toBase58(), entry = this.programs.entry.toBase58();
+    const logged = V_.logEvents(t.meta.logMessages).filter((e) => !TREE.has(e.name) || e.program === null || e.program === pool || (e.name === 'PositionCiphertext' && e.program === entry));
+    return { evs: cpi.length ? [...cpi, ...logged.filter((e) => !TREE.has(e.name))] : logged, cpi: cpi.length > 0 }; };
   /// Every instruction of a fetched transaction, top-level and inner (CPIs): { program, accounts, data }.
-  P_.ixsOf = function (t) { const m = t.transaction.message; const la = t.meta && t.meta.loadedAddresses;
-    const keys = [...m.staticAccountKeys, ...(la ? [...la.writable, ...la.readonly] : [])].map((k) => new PublicKey(k));
+  P_.ixsOf = function (t) { const m = t.transaction.message; const keys = this.keysOf(t);
     const out = m.compiledInstructions.map((i) => ({ program: keys[i.programIdIndex], accounts: [...i.accountKeyIndexes].map((j) => keys[j]), data: Buffer.from(i.data) }));
     for (const g of (t.meta && t.meta.innerInstructions) || []) for (const i of g.instructions) out.push({ program: keys[i.programIdIndex], accounts: (i.accounts || []).map((j) => keys[j]), data: Buffer.from(bs58.decode(i.data)) });
     return out; };
@@ -296,9 +321,10 @@ function install(Veyl) {
         if (tag === D('write_buffer')) { const r = new Reader(x.data.subarray(16)); const o = r.u32(); writes.push({ o, b: r.bytes(r.u32()) }); } else if (tag === D('open_buffer')) { len = new Reader(x.data.subarray(16)).u32(); break; } }
       if (len !== null) break; } // newest first: the open_buffer closest before `sig` starts this use of the buffer
     if (len === null) return null; const buf = Buffer.alloc(len); for (const w of writes.reverse()) w.b.copy(buf, w.o); return buf; };
-  /// Note payloads a transaction carries in its instruction data that its logs do not show (Solana drops logs past ~10 KB):
-  /// the ext of shield_transact / shield_deposit / transact_cpi, the payloads of consume_swap / consume_claim, and a
-  /// shield_lp's position payload (in its request buffer, fetched only when the PositionCiphertext event is missing).
+  /// Note payloads a transaction carries in its instruction data that its events do not show (an old program's logs cut past
+  /// ~10 KB, or no longer logging payloads): the ext of shield_transact / shield_deposit / transact_cpi, the payloads of
+  /// consume_swap / consume_claim / consume_position, and an old shield_lp's payloads (position and legs, in its request
+  /// buffer, fetched only when the PositionCiphertext event is missing).
   /// Each is bound into the action's proof; a scanner still checks it against the commitment.
   P_.ixCiphertexts = async function (t, sig, evs) { const D = (n) => V_.disc(n).toString('hex'); const out = [];
     const logged = new Set(evs.filter((e) => e.name === 'NoteCiphertext' || e.name === 'PositionCiphertext').map((e) => Buffer.from(e.data).toString('hex')));
@@ -307,21 +333,23 @@ function install(Veyl) {
         if (x.program.equals(this.programs.pool)) {
           if (tag === D('shield_transact') || tag === D('shield_deposit') || tag === D('transact_cpi')) out.push(...decodeExt(r).encOut);
           else if (tag === D('consume_swap') || tag === D('consume_claim')) { r.skip(40); /* ext_hash, fee */ out.push(...r.vec(() => r.bytes(r.u32()))); }
-        } else if (x.program.equals(this.programs.entry) && tag === D('shield_lp') && !evs.some((e) => e.name === 'PositionCiphertext')) { const buf = await this.bufferBytes(x.accounts[3], sig); if (buf) out.push(decodeLpCore(new Reader(buf)).ciphertext); }
+          else if (tag === D('consume_position')) { r.skip(32); /* ext_hash */ out.push(r.bytes(r.u32())); }
+        } else if (x.program.equals(this.programs.entry) && tag === D('shield_lp') && !evs.some((e) => e.name === 'PositionCiphertext')) { const buf = await this.bufferBytes(x.accounts[3], sig); if (buf) { const rb = new Reader(buf); out.push(decodeLpCore(rb).ciphertext); try { for (const l of rb.vec(() => decodeExt(rb))) out.push(...l.encOut); } catch { /* core only */ } } }
       } catch { /* not one of ours, or not decodable */ } }
     return out.filter((b) => b.length >= 48 && !logged.has(b.toString('hex'))); };
-  /// sendV0, after a simulation shows that Solana's log cut (10,000 bytes) would leave every tree leaf and receipt the
-  /// transaction adds in its logs (logCut); otherwise nothing is sent and it throws (code 'LOG_CUT'). A tree leaf missing
-  /// from the logs breaks the tree for every reader, a receipt missing loses its note; payloads past the cut are fine
-  /// (ixCiphertexts recovers them), and so is a cut UI event.
+  /// sendV0, after a simulation shows that readers will see every tree leaf and receipt the transaction adds (logCut): with
+  /// veyl_pool's event CPI in the simulation, from it (Solana's log cut no longer matters); with an old program, in logs that
+  /// Solana cuts past 10,000 bytes. Otherwise nothing is sent and it throws (code 'LOG_CUT'). (Anyone can submit a shield
+  /// instruction without the relayer: only the event CPI protects those.)
   P_.sendV0Checked = async function (ixs, signers = [], cu = 1_400_000) { const tx = await this.buildV0(ixs, signers, cu); let why = null;
-    try { const v = (await this.conn.simulateTransaction(tx, { sigVerify: false, commitment: 'confirmed', accounts: { encoding: 'base64', addresses: [this.shieldPda().toBase58()] } })).value;
-      if (!v.err) { const a = v.accounts && v.accounts[0]; why = logCut(v.logs, a ? Buffer.from(a.data[0], 'base64').readBigUInt64LE(8 + 96) /* Shield.next_index */ : null); } } catch { /* no simulation: the send's own preflight still runs */ }
+    try { const v = (await this.conn.simulateTransaction(tx, { sigVerify: false, commitment: 'confirmed', innerInstructions: true, accounts: { encoding: 'base64', addresses: [this.shieldPda().toBase58()] } })).value;
+      if (!v.err) { const a = v.accounts && v.accounts[0]; why = logCut(v.logs, a ? Buffer.from(a.data[0], 'base64').readBigUInt64LE(8 + 96) /* Shield.next_index */ : null, this.cpiEvents(v.innerInstructions)); } } catch { /* no simulation: the send's own preflight still runs */ }
     if (why) { const e = new Error('This action is too big for one Solana transaction\'s logs (' + why + '): nothing was sent. Split it (fewer funding legs, or claim fees on their own) and try again.'); e.code = 'LOG_CUT'; throw e; }
     return this.sendSigned(tx); };
   /// The shielded tree from the chain: leaves in order, ciphertexts and receipts by commitment, pending deposits, spent
   /// nullifiers, approved deposits per mint (the crowd a token's deposit blends into), `newest` (the last signature read) and
-  /// `truncated` (signatures whose logs Solana cut: events after the cut, a tree leaf among them, are missing).
+  /// `truncated` (old-program signatures whose logs Solana cut: events after the cut, a tree leaf among them, are missing).
+  /// Events come from veyl_pool's event CPI (txEvents), which no log cut touches; logs only for transactions from before it.
   /// With `prev` (an earlier result, or its serializeShield form) only the newer signatures are read ('until'); the caller
   /// keeps checking the root and reads in full when that fails. A leaf with no payload in the logs gets the payloads its
   /// transaction carries in instruction data (`alt` when there are several; scan() keeps the one matching the commitment).
@@ -331,7 +359,7 @@ function install(Veyl) {
     const st = loadShield(until ? prev : null); /* a state without its newest signature cannot be extended */ const { leaves, ciphertexts: cts, receipts, pending, nullified, deposits } = st; if (sigs.length) st.newest = sigs[0].signature;
     sigs.reverse();
     for (const s of sigs) { if (s.err) continue; const t = await this.conn.getTransaction(s.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); if (!t) continue;
-      const evs = V_.parseEvents(t.meta.logMessages); const ins = []; if ((t.meta.logMessages || []).includes('Log truncated')) st.truncated.push(s.signature);
+      const { evs, cpi } = this.txEvents(t); const ins = []; if (!cpi && (t.meta.logMessages || []).includes('Log truncated')) st.truncated.push(s.signature);
       for (const e of evs) {
         if (e.name === 'NoteInserted') { leaves[Number(e.index)] = e.commitment; ins.push(String(e.commitment)); }
         else if (e.name === 'NoteCiphertext' || e.name === 'PositionCiphertext') cts.set(String(e.commitment), { data: e.data, position: e.name === 'PositionCiphertext', sig: s.signature });
@@ -345,12 +373,16 @@ function install(Veyl) {
     return { leaves, ciphertexts: cts, receipts, pending: [...pending.values()], nullified, deposits, newest: st.newest, truncated: st.truncated };
   };
 }
-/// What Solana's log cut would lose of a transaction's notes: null when nothing was cut, or when the logs still hold every
-/// tree leaf it adds (`nextIndex`: the tree's size after it, from a simulation; null = unknown, skips that test) and the
-/// last NoteInserted is not the final line kept (a receipt's ReceiptNote follows its NoteInserted); else the reason.
-function logCut(logs, nextIndex = null) { logs = logs || []; if (!logs.includes('Log truncated')) return null; let last = -1, lastAt = -1;
+/// What readers would miss of a transaction's notes: null when nothing, else the reason. `cpi` = the tree events of veyl_pool's
+/// event CPI (cpiEvents): when there are any, they are what readers use, and they must hold every tree leaf up to `nextIndex`
+/// (the tree's size after the transaction, from a simulation; null = unknown, skips that test). Without (old programs): null
+/// when nothing was logged past the cut, or when the logs still hold every tree leaf it adds and the last NoteInserted is
+/// not the final line kept (a receipt's ReceiptNote follows its NoteInserted).
+function logCut(logs, nextIndex = null, cpi = null) { const known = nextIndex !== null && nextIndex !== undefined;
+  if (cpi && cpi.length) { let last = -1; for (const e of cpi) if (e.name === 'NoteInserted') last = Math.max(last, Number(e.index)); return known && last >= 0 && BigInt(last + 1) < BigInt(nextIndex) ? 'tree leaves from index ' + (last + 1) + ' would be missing' : null; }
+  logs = logs || []; if (!logs.includes('Log truncated')) return null; let last = -1, lastAt = -1;
   logs.forEach((l, i) => { if (!l.startsWith('Program data: ')) return; const e = V_.parseEvents([l])[0]; if (e && e.name === 'NoteInserted') { last = Math.max(last, Number(e.index)); lastAt = i; } });
-  if (nextIndex !== null && nextIndex !== undefined && BigInt(last + 1) < BigInt(nextIndex)) return 'tree leaves from index ' + (last + 1) + ' would be missing';
+  if (known && BigInt(last + 1) < BigInt(nextIndex)) return 'tree leaves from index ' + (last + 1) + ' would be missing';
   if (lastAt >= 0 && logs[lastAt + 1] === 'Log truncated') return 'the last new note\'s event would be cut';
   return null; }
 /// readShield's result as plain JSON (what the relayer serves at /shield and the browser caches), and back (loadShield:
@@ -368,7 +400,7 @@ function loadShield(p) { const st = { leaves: [], ciphertexts: new Map(), receip
   for (const x of p.pending || []) st.pending.set(String(x.pending), x);
   return st; }
 install(V_.Veyl);
-Object.assign(module.exports, { KIND, install, serializeShield, loadShield, logCut, encodeLpRequest, encodeSwapCore, encodeOrderCore, encodeOrderWithdrawCore, encodeMigrate, swapAction, orderAction, orderWithdrawAction, proofId, MIGRATE, encRoute });
+Object.assign(module.exports, { KIND, TREE, install, serializeShield, loadShield, logCut, encodeLpRequest, encodeSwapCore, encodeOrderCore, encodeOrderWithdrawCore, encodeMigrate, swapAction, orderAction, orderWithdrawAction, proofId, MIGRATE, encRoute });
 
 // ================================================================================================ the wallet (device side)
 /// Everything a Veyl account knows, rebuilt from the chain with its keys: notes (token, order and position notes, by

@@ -17,7 +17,9 @@ no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 mainnet = []
 [dependencies]
-anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+# event-cpi: the shielded tree's events also travel in one self-CPI per instruction (Evs in src/lib.rs), inner-instruction
+# data that no log cut drops. (Cargo unifies features: veyl_entry, which depends on this crate, gets it too.)
+anchor-lang = { version = "0.31.1", features = ["init-if-needed", "event-cpi"] }
 anchor-spl = "0.31.1"
 groth16-solana = "0.2.0"
 solana-poseidon = "2"

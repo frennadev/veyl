@@ -95,6 +95,17 @@ const pubsWith = (nf0, nf1) => ['0', '0', '0', '0', String(nf0), String(nf1), '0
     check('log guard: cut after every leaf (tree size 6 = last index 5 + 1) and something after it: passes (a cut payload or UI event is recoverable)', Z.logCut([ins(4), ins(5), other, cut], 6n) === null);
     check('log guard: cut before the last leaves (tree size 8, last logged index 5): refused', /from index 6/.test(Z.logCut([ins(4), ins(5), other, cut], 8n) || ''));
     check('log guard: cut right after a NoteInserted (its ReceiptNote would be lost): refused', /last new note/.test(Z.logCut([ins(4), ins(5), cut], 6n) || ''));
-    check('log guard: cut before any leaf of an action that adds some: refused', !!Z.logCut([other, cut], 3n)); }
+    check('log guard: cut before any leaf of an action that adds some: refused', !!Z.logCut([other, cut], 3n));
+    // veyl_pool's event CPI: one self-CPI per instruction, data = EVENT_IX_TAG + events in Anchor's encoding, back to back
+    const insData = (i) => Buffer.concat([S.disc('NoteInserted', 'event'), u64(i), Buffer.alloc(32, i + 1)]); const nul = Buffer.concat([S.disc('Nullified', 'event'), Buffer.alloc(32, 7)]);
+    const evs = S.parseEventData(Buffer.concat([insData(4), nul, insData(5)]));
+    check('event CPI: several events back to back decode in order (NoteInserted, Nullified, NoteInserted), and garbage after them stops the decoder', evs.map((x) => x.name).join() === 'NoteInserted,Nullified,NoteInserted' && evs[2].index === 5n && S.parseEventData(Buffer.concat([insData(4), Buffer.alloc(12, 1)])).length === 1);
+    const pool = Keypair.generate().publicKey; const V = new S.Veyl({ connection: { }, programs: { pool, bin: pool, entry: pool } }); const b58 = require('bs58');
+    const inner = [{ index: 0, instructions: [{ programId: pool.toBase58(), accounts: [], data: b58.encode(Buffer.concat([S.EVENT_IX_TAG, insData(4), insData(5)])) }, { programId: Keypair.generate().publicKey.toBase58(), accounts: [], data: b58.encode(Buffer.concat([S.EVENT_IX_TAG, insData(9)])) }] }];
+    const cpi = V.cpiEvents(inner);
+    check('event CPI: cpiEvents takes only veyl_pool\'s own self-CPIs (another program\'s look-alike is ignored)', cpi.length === 2 && cpi[1].index === 5n);
+    check('log guard: with the event CPI holding every leaf, a cut log passes; with a leaf missing from it, refused', Z.logCut([other, cut], 6n, cpi) === null && /from index 6/.test(Z.logCut([other, cut], 7n, cpi) || ''));
+    const le = S.logEvents(['Program ' + pool.toBase58() + ' invoke [1]', 'Program X1 invoke [2]', ins(1), 'Program X1 success', ins(2), 'Program ' + pool.toBase58() + ' success', ins(3)]);
+    check('log events: each carries the program whose frame logged it (invoke / success lines), null outside any frame', le.map((x) => x.program).join() === 'X1,' + pool.toBase58() + ','); }
   finish(null, { cu: false });
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -7,13 +7,13 @@
 'use strict';
 const crypto = require('crypto');
 const snarkjs = require('snarkjs');
-const { Keypair, PublicKey, LAMPORTS_PER_SOL, SystemProgram, Transaction } = require('@solana/web3.js');
+const { Keypair, PublicKey, LAMPORTS_PER_SOL, SystemProgram, Transaction, TransactionInstruction } = require('@solana/web3.js');
 const spl = require('@solana/spl-token');
 const S = require('../sdk/veyl.js');
 const Z = require('../sdk/shield.js');
 const { prove, proveTransact, provePosition, verifyCircuit, TIMES, CIRCUITS } = require('../sdk/prover.js');
 const { Relayer } = require('../relayer/relayer.js');
-const { logsOf, LOG_LIMIT } = require('./harness.js');
+const { logsOf, LOG_LIMIT, LOGS } = require('./harness.js');
 
 module.exports = async function phase2(C) {
   const { conn, payer, V, as, alice, bob, carol, mallory, relayer, postman, dep, T, check, refused, cuOf, CU, fund, units, sleep, lap } = C;
@@ -76,8 +76,9 @@ module.exports = async function phase2(C) {
   sig = await as(alice).send([await V.shieldDepositIx(alice.publicKey, d.ext, pr.pubs)], [], 600_000); await cuOf(conn, sig, 'shield_deposit'); led(USDC, units(1000, 6));
   ev = await evOf(sig, 'DepositPending'); let pend = await V.pending(ev.pending);
   check('P2 deposit: 1,000 USDC into the vault, two notes pending outside the tree (tree unchanged), depositor and amount public', ev && pend.amount === units(1000, 6) && pend.depositor.equals(alice.publicKey) && (await V.shield()).currentRoot === rootBefore && (await ledgerOk(USDC)));
-  const cts = await evsOf(sig, 'NoteCiphertext');
+  const tev = await V.treeEvents(sig); const cts = tev.filter((e) => e.name === 'NoteCiphertext');
   check('P2 the deposit emits both notes encrypted (X25519 + XSalsa20-Poly1305): only the recipient\'s viewing key opens them', cts.length === 2 && !!Z.open(A.k.viewSecret, cts[0].data) && !Z.open(B.k.viewSecret, cts[0].data));
+  check('P2 event CPI: the deposit\'s self-CPI (EVENT_IX_TAG, signed by veyl_pool\'s event authority) carries both payloads, both nullifiers and DepositPending; the payloads are no longer logged', tev.map((e) => e.name).join() === 'NoteCiphertext,NoteCiphertext,Nullified,Nullified,DepositPending' && !(await evsOf(sig, 'NoteCiphertext')).length && !!(await evOf(sig, 'DepositPending')), tev.map((e) => e.name).join());
   check('P2 only the postman admits a deposit', await refused(as(mallory).send([V.approveDepositIx(mallory.publicKey, ev.pending, alice.publicKey)]), /OnlyPostman/));
   check('P2 nobody but the depositor can take a pending deposit back', await refused(as(mallory).send([await V.cancelDepositIx(mallory.publicKey, ev.pending, USDC)]), /NotDepositor|ConstraintAddress|2012/));
   sig = await as(postman).send([V.approveDepositIx(postman.publicKey, ev.pending, alice.publicKey)]); await cuOf(conn, sig, 'approve_deposit (2 leaves)');
@@ -276,47 +277,73 @@ module.exports = async function phase2(C) {
     const f2 = await feeFor('shieldLp', USDC, { core: { binPool: POOLX, lo }, legs: 1 });
     res = await lpAction(A, { deltas: pl.shares, legs: [{ mint: USDC, amount: zIn, fee: f2 }], zap: { xIn: false, amount: swapAmt, minOut: sim.out - sim.out / 20n } }); led(USDC, -(zIn + f2)); ev = await ledLp(res.r.txHash); await cuOf(conn, res.r.txHash, 'shield_lp (zap, 1 leg)'); await sync(A);
     check('P2 shielded zap: one USDC leg, part swapped through the pool inside the action, exact shares minted on both sides', A.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] + pl.shares[i]) && pl.shares.filter((x) => x > 0n).length === 2);
-    const lg = await logsOf(conn, res.r.txHash, 'shield_lp (zap, 1 leg)'); const pc = S.parseEvents(lg.logs).find((e) => e.name === 'PositionCiphertext');
-    check('P2 note delivery: the zap\'s logs are complete (no "Log truncated") and carry its PositionCiphertext for the new position note', !lg.truncated && !!pc && String(pc.commitment) === String(res.plan.commitment), `${lg.bytes} of ${LOG_LIMIT} log bytes, ${lg.lines} lines`); }
+    const lg = await logsOf(conn, res.r.txHash, 'shield_lp (zap, 1 leg)'); const pc = (await V.treeEvents(res.r.txHash)).find((e) => e.name === 'PositionCiphertext');
+    check('P2 note delivery: the zap\'s event CPI carries its PositionCiphertext for the new position note (and its logs are not cut)', !lg.truncated && !!pc && String(pc.commitment) === String(res.plan.commitment), `${lg.bytes} of ${LOG_LIMIT} log bytes, ${lg.lines} lines`); }
   const zapRes = res; // (G2: a shield_lp whose payloads are hidden and recovered)
-  // the largest realistic shielded action (devnet lost its PositionCiphertext to log truncation): an add that merges into an
-  // existing position, two funding legs with relayer fees, a harvest (fees traded since the last action) and fee notes claimed
+  // ---- the log-flooding attack: Solana keeps ~10 KB of logs per transaction and drops the rest, and anyone may submit a
+  // shield instruction themselves (no relayer, no simulation guard) with a log-flooding instruction in front. Memo
+  // instructions log ~200 bytes each for ~4 bytes of transaction. Readers must still see every tree leaf and note.
+  const MEMO = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+  const memoIx = (i) => new TransactionInstruction({ programId: MEMO, keys: [], data: Buffer.from(String(i % 10)) });
+  /// Send `ixs` with as many memo instructions in front as still fit (transaction size, the 64-instruction trace limit).
+  /// Returns { sig, memos, alone: what a simulation of `ixs` alone used (unitsConsumed, logs) }.
+  const flood = async (Vx, ixs, signers = [], cu = 1_400_000) => {
+    const sim = async (n) => { try { const tx = await Vx.buildV0([...Array.from({ length: n }, (_, i) => memoIx(i)), ...ixs], signers, cu); tx.serialize(); const v = (await conn.simulateTransaction(tx, { sigVerify: false })).value; return v.err ? null : v; } catch { return null; } };
+    const alone = await sim(0); if (!alone) throw new Error('the action fails on its own'); let lo = 1, hi = 62, n = 0;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (await sim(m)) { n = m; lo = m + 1; } else hi = m - 1; }
+    if (!n) throw new Error('no room for a memo');
+    return { sig: await Vx.sendSigned(await Vx.buildV0([...Array.from({ length: n }, (_, i) => memoIx(i)), ...ixs], signers, cu)), memos: n, alone }; };
+  /// The tree events a reader of the logs alone finds in a transaction (only those veyl_pool logged).
+  const loggedTree = (logs) => S.logEvents(logs).filter((e) => Z.TREE.has(e.name) && e.program === V.programs.pool.toBase58());
+  /// A connection that hides every transaction's inner instructions: the logs-only reader of the old programs.
+  const logsOnly = new Proxy(conn, { get: (o, k) => (k === 'getTransaction' ? async (sg, opt) => { const t = await o.getTransaction(sg, opt); return t && { ...t, meta: { ...t.meta, innerInstructions: [] } }; } : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
+  /// What the logs-only reader gets wrong: a gap (an error), or a tree shorter than the chain's / with a root it does not know.
+  const oldRead = async () => { let st; try { st = await new S.Veyl({ connection: logsOnly, programs: V.programs }).readShield(); } catch (e) { return { why: e.message }; } const on = await V.shield(); const root = new Z.Tree(st.leaves).root();
+    return { why: BigInt(st.leaves.length) < on.nextIndex ? `${st.leaves.length} of ${on.nextIndex} leaves, root ${on.isKnownRoot(root) ? 'known' : 'unknown'} on chain` : null }; };
+  const freshRead = async () => { const st = await new S.Veyl({ connection: conn, programs: V.programs }).readShield(); st.tree = new Z.Tree(st.leaves); return st; };
+  // the largest realistic shielded action: an add that merges into an existing position, two funding legs with relayer fees,
+  // a harvest (fees traded since the last action) and fee notes claimed; executed by the relayer, but sent the way an
+  // attacker would: flooded with memos in front and without the log-cut guard (sendV0Checked replaced)
   { await trade(2); await sync(A); const note = A.position(POOLX, lo); const pM = await V.binPool(POOLX); const g = await V.growthOf(POOLX, lo); const cl = Z.claimable(note.shares, note.debt, g);
     const binsM = await V.bins(POOLX, [...new Set([...win.map(S.chunkOf), S.chunkOf(pM.activeId)])]);
     const axM = win.map((id) => (id > pM.activeId ? A.balance(SOL) / 40n : 0n)), ayM = win.map((id) => (id < pM.activeId ? A.balance(USDC) / 40n : 0n)); const pl = Z.planExact(pM, binsM, win, axM, ayM);
     const fx = await feeFor('shieldLp', SOL, { core: { binPool: POOLX, lo }, legs: 2 }), fy = await feeFor('transact', USDC);
     const nX = pl.needX + pl.needX / 50n + 10n, nY = pl.needY + pl.needY / 50n + 10n;
-    const sims = []; const sim0 = svc.V.conn.simulateTransaction.bind(svc.V.conn); svc.V.conn.simulateTransaction = async (...a) => { const r = await sim0(...a); sims.push(r.value); return r; }; /* what the relayer's guard saw */
-    try { res = await lpAction(A, { deltas: pl.shares, legs: [{ mint: SOL, amount: nX, fee: fx }, { mint: USDC, amount: nY, fee: fy }] }); } finally { svc.V.conn.simulateTransaction = sim0; }
-    led(SOL, -(nX + fx)); led(USDC, -(nY + fy)); await cuOf(conn, res.r.txHash, 'shield_lp (merge add, 2 legs)');
-    const lg = await logsOf(conn, res.r.txHash, 'shield_lp (merge add, 2 legs, harvest, fee notes)'); const evs = S.parseEvents(lg.logs); const pc = evs.find((e) => e.name === 'PositionCiphertext');
-    // (a truncated log has no ShieldLpExecuted: the vault ledger is then re-read, so that only the checks below fail)
-    if (!lg.truncated) ev = await ledLp(res.r.txHash); else for (const m of [SOL, USDC]) led(m, (await vault(m)) - (ledger[new PublicKey(m).toBase58()] || 0n)); await sync(A);
-    const at = (name, c) => lg.logs.findIndex((l) => { const e = l.startsWith('Program data: ') && S.parseEvents([l])[0]; return e && e.name === name && (c === undefined || String(e.commitment) === String(c)); });
-    const firstBin = lg.logs.findIndex((l) => l.includes(V.programs.bin.toBase58() + ' invoke'));
-    check('P2 merging add (2 legs + relayer fees + harvest + claimed fee notes): every note reaches its owner: PositionCiphertext and the position\'s tree leaf logged before the first bin CPI, both receipt notes logged, the new note found by a rescan',
-      !!pc && String(pc.commitment) === String(res.plan.commitment) && at('PositionCiphertext') >= 0 && at('NoteInserted', res.plan.commitment) >= 0 && at('PositionCiphertext') < firstBin && at('NoteInserted', res.plan.commitment) < firstBin && evs.filter((e) => e.name === 'ReceiptNote').length === 2 && evs.some((e) => e.name === 'FeesClaimed') && A.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] + pl.shares[i]) && (cl[0].q + cl[1].q) > 0n,
-      `claimed ${cl[0].q}/${cl[1].q}, events ${evs.map((e) => e.name).join(',')}`);
-    // Solana may still cut this action's tail (the UI event ShieldLpExecuted: ~10.8 KB in all): the relayer only sends when the
-    // simulated logs keep every tree leaf and receipt (sendV0Checked), and that is what holds on chain too
-    const cutWhy = Z.logCut(lg.logs, (await V.shield()).nextIndex); if (lg.truncated) console.log(`    (merging add: logs cut at ${lg.bytes} of ${LOG_LIMIT} bytes, after every note event: ${evs.some((e) => e.name === 'ShieldLpExecuted') ? '' : 'ShieldLpExecuted '}lost)`);
-    const simCut = sims.length > 0 && (sims[sims.length - 1].logs || []).includes('Log truncated');
-    check('P2 merging add: the relayer sent it (its simulation passed the log-cut guard, and showed the same cut as the chain): every tree leaf and receipt is in the logs (only a UI event past them may be cut), and the vaults match the ledger', cutWhy === null && simCut === lg.truncated && (await ledgerOk(SOL)) && (await ledgerOk(USDC)), `${lg.bytes} of ${LOG_LIMIT} log bytes, ${lg.lines} lines${lg.truncated ? ', cut' : ''}${cutWhy ? ': ' + cutWhy : ''}`); }
+    let fl = null; const checked0 = svc.V.sendV0Checked; svc.V.sendV0Checked = async (ixs, signers, cu) => { fl = await flood(svc.V, ixs, signers, cu); return fl.sig; };
+    try { res = await lpAction(A, { deltas: pl.shares, legs: [{ mint: SOL, amount: nX, fee: fx }, { mint: USDC, amount: nY, fee: fy }] }); } finally { svc.V.sendV0Checked = checked0; }
+    led(SOL, -(nX + fx)); led(USDC, -(nY + fy));
+    // measured on the action alone (its simulation without the memos): compute units, log bytes, and whether it still fits
+    CU['shield_lp (merge add, 2 legs)'] = fl.alone.unitsConsumed; LOGS['shield_lp (merge add, 2 legs, harvest, fee notes) alone'] = fl.alone.logs.reduce((a, x) => a + Buffer.byteLength(x), 0);
+    const lg = await logsOf(conn, res.r.txHash); const tev = await V.treeEvents(res.r.txHash); const pc = tev.find((e) => e.name === 'PositionCiphertext');
+    // ShieldLpExecuted (a UI event, logged by veyl_entry) is cut with the rest: the vault ledger is re-read for this action
+    for (const m of [SOL, USDC]) led(m, (await vault(m)) - (ledger[new PublicKey(m).toBase58()] || 0n));
+    const lost = !loggedTree(lg.logs).some((e) => e.name === 'NoteInserted' && String(e.commitment) === String(res.plan.commitment));
+    const st0 = await freshRead(); const A0 = new Z.ShieldWallet(A.seed, { mints, pools }); A0.ot = A.ot; A0.scan(st0); await sync(A);
+    check('P2 log-flooding attack on a merging add (2 legs + relayer fees + harvest + claimed fee notes), sent without the guard: the logs are cut before the position\'s NoteInserted, yet a fresh reader rebuilds the whole tree from the event CPIs (root known on chain) and finds the new position, its fee notes and both receipt notes',
+      lg.truncated && lost && st0.tree.root() === (await V.shield()).currentRoot && !st0.truncated.includes(res.r.txHash) && !!pc && String(pc.commitment) === String(res.plan.commitment) && tev.filter((e) => e.name === 'ReceiptNote').length === 2 && A0.position(POOLX, lo).shares.every((s, i) => s === note.shares[i] + pl.shares[i]) && (cl[0].q + cl[1].q) > 0n && A0.balance(SOL) === A.balance(SOL) && A0.balance(USDC) === A.balance(USDC),
+      `${fl.memos} memos in front, ${lg.bytes} log bytes kept${lg.truncated ? ' (cut)' : ''}; alone: ${LOGS['shield_lp (merge add, 2 legs, harvest, fee notes) alone']} log bytes, ${fl.alone.unitsConsumed} CU; claimed ${cl[0].q}/${cl[1].q}; ${tev.length} tree events by CPI`);
+    const old = await oldRead();
+    check('P2 ...the same chain read from the logs alone (how every reader worked before the event CPI) misses the position\'s leaves: its tree is short and its root unknown on chain (a gap as soon as anything is inserted after): the attack is real', old.why !== null, old.why || 'nothing missing');
+    check('P2 the relayer\'s guard (logCut) passes the merging add on its event CPI even when its logs would be cut, and still refuses an old-program transaction whose cut logs lose a tree leaf', Z.logCut(lg.logs, (await V.shield()).nextIndex, tev) === null && Z.logCut(lg.logs, (await V.shield()).nextIndex) !== null); }
 
   // ======================================================================================== G2. note delivery when logs are cut
   // Solana drops logs past ~10 KB. A connection that hides chosen events (as a cut log would) shows what a device that never
   // saw them still finds: payloads recovered from instruction data (a shield_lp request buffer, a transact's ext), and the
   // notes it planned itself (the outbox). A fresh wallet from the same seed plays the restored backup on a new device.
+  // (the event CPI carries every payload: these transactions are shown without their inner instructions, as an old
+  //  program's would be, so that what is left is the logs and the top-level instruction data)
   { const lpSig = zapRes.r.txHash; const lpReq = zapRes.req; const posC = String(zapRes.plan.commitment); const cut = new Map([[lpSig, ['PositionCiphertext']], [sendSig, ['NoteCiphertext']]]);
     const hide = (t, sg) => { const names = cut.get(sg); if (!t || !names) return t; const logs = t.meta.logMessages.filter((l) => { if (!l.startsWith('Program data: ')) return true; const e = S.parseEvents([l])[0]; return !(e && names.includes(e.name)); });
-      return { ...t, meta: { ...t.meta, logMessages: [...logs, 'Log truncated'] } }; };
+      return { ...t, meta: { ...t.meta, logMessages: [...logs, 'Log truncated'], innerInstructions: [] } }; };
     const conn2 = new Proxy(conn, { get: (o, k) => (k === 'getTransaction' ? async (sg, opt) => hide(await o.getTransaction(sg, opt), sg) : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
     const V2 = new S.Veyl({ connection: conn2, programs: V.programs }); const now = await sync(A, B);
     const st2 = await V2.readShield(); st2.tree = new Z.Tree(st2.leaves); const fresh = (w0) => { const w = new Z.ShieldWallet(w0.seed, { mints, pools }); w.ot = w0.ot; return w; };
-    const hidden = !(await V2.events(lpSig)).some((e) => e.name === 'PositionCiphertext') && (await V.events(lpSig)).some((e) => e.name === 'PositionCiphertext');
+    const hidden = !(await V2.events(lpSig)).some((e) => e.name === 'PositionCiphertext') && !(await V2.treeEvents(lpSig)).length && (await V.treeEvents(lpSig)).some((e) => e.name === 'PositionCiphertext');
     const sameNotes = (w) => w.notes.length === A.notes.length && A.notes.every((n) => w.notes.some((m) => String(m.commitment) === String(n.commitment) && m.index === n.index && m.spent === n.spent));
+    /// (the outbox keeps only notes worth something: the leg's empty output, whose payload went with the others, is not missed)
+    const sameWorth = (w) => { const a = A.notes.filter(Z.worth); return w.notes.filter(Z.worth).length === a.length && a.every((n) => w.notes.some((m) => String(m.commitment) === String(n.commitment) && m.index === n.index && m.spent === n.spent)); };
     const A2 = fresh(A); A2.scan(st2); const B2 = fresh(B); B2.scan(st2);
-    check('P2 log cut, position: with a shield_lp\'s PositionCiphertext gone from the logs, its payload comes back from the request buffer (write_buffer txs): a restored wallet finds every note (that position, its fee notes, all later ones)',
+    check('P2 log cut, position: with a shield_lp\'s PositionCiphertext gone (no event CPI, not in the logs), its payload comes back from the request buffer (write_buffer txs): a restored wallet finds every note (that position, its fee notes, all later ones)',
       hidden && !!(st2.ciphertexts.get(posC) || {}).recovered && sameNotes(A2) && A2.balance(USDC) === A.balance(USDC) && A2.balance(SOL) === A.balance(SOL), `${[...st2.ciphertexts.values()].filter((x) => x.recovered).length} payloads recovered, ${A.notes.length} notes`);
     check('P2 log cut, transfer: with its NoteCiphertext events gone, the payloads come back from shield_transact\'s ext: the recipient still finds its notes', B2.balance(USDC) === B.balance(USDC) && B2.notes.length === B.notes.length);
     // nothing in the logs or the instruction data (a buffer no longer readable, say): the device's own outbox entry adopts it
@@ -324,12 +351,31 @@ module.exports = async function phase2(C) {
     const nf = [...lpReq.legs.flatMap((l) => [l.p.pubs[4], l.p.pubs[5]]), lpReq.position.pubs[1]];
     const ob = A.outboxOf([lpReq.core.ciphertext, ...lpReq.legs.flatMap((l) => l.ext.encOut)], nf); const A4 = fresh(A); A4.scan(st3, ob); const adopted = A4.notes.find((n) => String(n.commitment) === posC);
     check('P2 outbox: the planned position note (and the leg\'s change note) recorded before submitting; with no payload at all a rescan misses the position, with the outbox it is adopted (same commitment, index, spent state) and every note is back',
-      ob.some((o) => o.c === posC) && !A3.notes.some((n) => String(n.commitment) === posC) && !!adopted && !!adopted.outbox && !A4.found.has(posC) && sameNotes(A4), `${ob.length} entries`);
+      ob.some((o) => o.c === posC) && !A3.notes.some((n) => String(n.commitment) === posC) && !!adopted && !!adopted.outbox && !A4.found.has(posC) && sameWorth(A4), `${ob.length} entries`);
     const A5 = fresh(A); A5.scan(st2, ob); check('P2 outbox: a note whose payload was found is marked found (the engine drops its entry) and not duplicated', A5.found.has(posC) && sameNotes(A5) && !A5.notes.find((n) => String(n.commitment) === posC).outbox);
     // incremental reads: from an earlier snapshot (native and as JSON), only the newer signatures; the result equals a full read
     const inc = await V.readShield({ prev: early }), inj = await V.readShield({ prev: Z.serializeShield(early) }); const eq = (x) => x.leaves.length === now.leaves.length && x.leaves.every((l, i) => String(l) === String(now.leaves[i])) && x.ciphertexts.size === now.ciphertexts.size && x.receipts.size === now.receipts.size && x.nullified.size === now.nullified.size && x.newest === now.newest;
     check('P2 incremental read: readShield({ prev }) from an earlier snapshot (native or serialized) reads only newer signatures and equals a full read (leaves, payloads, receipts, nullifiers, newest signature)', eq(inc) && eq(inj) && early.newest && early.newest !== now.newest, `${early.leaves.length} -> ${now.leaves.length} leaves`);
     const inc2 = await V.readShield({ prev: now }); check('P2 incremental read with nothing new: same state, same newest signature', eq(inc2)); }
+
+  // ======================================================================================== G3. the log-flooding attack, direct
+  // A private send submitted by its owner straight to veyl_pool (no relayer, no fee), with memo instructions in front so that
+  // every log line of shield_transact is cut: its two NoteInserted are missing from the logs of a successful transaction.
+  { await sync(A, B); const b0 = B.balance(USDC); const n0 = (await V.shield()).nextIndex; const t = A.spend({ mint: USDC, send: units(10, 6), to: B.address }); const p = await proveT(t.input);
+    await as(alice).send([V.postProofIx(alice.publicKey, 1, p.proof, p.pubs)], [], 1_400_000);
+    const fl = await flood(as(alice), [await V.shieldTransactIx(alice.publicKey, t.ext, p.pubs)]);
+    const lg = await logsOf(conn, fl.sig); const inLogs = loggedTree(lg.logs).filter((e) => e.name === 'NoteInserted').length; const tev = await V.treeEvents(fl.sig);
+    const st = await freshRead(); const B0 = new Z.ShieldWallet(B.seed, { mints, pools }); B0.ot = B.ot; B0.scan(st); await sync(A, B);
+    svc.shieldMem = null; svc.shieldCache = null; const rs = await svc.shieldState();
+    check('P2 log-flooding attack, direct: a shield_transact sent by its owner with memos in front succeeds with its logs cut (no NoteInserted logged), yet a fresh reader, the relayer (/shield) and the recipient\'s rescan see both new leaves from the event CPI: the tree matches the on-chain root, B finds the 10 USDC',
+      lg.truncated && inLogs === 0 && tev.filter((e) => e.name === 'NoteInserted').length === 2 && (await V.shield()).nextIndex === n0 + 2n && st.tree.root() === (await V.shield()).currentRoot && rs.leaves.length === st.leaves.length && rs.leaves.every((l, i) => l === String(st.leaves[i])) && B0.balance(USDC) === b0 + units(10, 6) && B.balance(USDC) === b0 + units(10, 6),
+      `${fl.memos} memos, ${lg.bytes} log bytes kept, ${inLogs} NoteInserted logged, ${tev.length} events by CPI`);
+    const old = await oldRead();
+    check('P2 ...read from the logs alone (the old readers) the same chain is missing those leaves: the attack locked every wallet out before the event CPI', old.why !== null, old.why || 'nothing missing');
+    // a forged event: another program logs (sol_log_data) a line that decodes as NoteInserted, as written here into the memo
+    // program's frame: readers only count tree events veyl_pool emitted
+    const fakeLogs = ['Program ' + MEMO.toBase58() + ' invoke [1]', 'Program data: ' + Buffer.concat([S.disc('NoteInserted', 'event'), S.u64(n0 + 2n), S.be32(123n)]).toString('base64'), 'Program ' + MEMO.toBase58() + ' success']; const fake = S.logEvents(fakeLogs);
+    check('P2 log events carry the program that logged them (from the runtime\'s invoke / success lines): a NoteInserted logged by another program is not a tree event to readers', fake.length === 1 && fake[0].name === 'NoteInserted' && fake[0].program === MEMO.toBase58() && V.txEvents({ transaction: { message: { staticAccountKeys: [] } }, meta: { innerInstructions: [], logMessages: fakeLogs } }).evs.length === 0); }
 
   // ======================================================================================== H. shielded limit orders
   { await sync(A); const p2 = await V.binPool(POOLX); const id = p2.activeId + 3; const amount = A.balance(SOL) / 4n; const f2 = await feeFor('shieldOrder', SOL, { core: { binPool: POOLX, id } }); const ot = A.nextOneTime();

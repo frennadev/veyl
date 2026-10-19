@@ -259,7 +259,7 @@ pub fn submit_swap(ctx: Context<SubmitSwap>, direction: u8, c1: [u8; 64], c2: [u
     let bump = a.entry.signer_bump; let seeds = signer_seeds(bump); let sg: &[&[u8]] = &[b"signer", &seeds[0]]; let sgs = [sg];
     let cpi = CpiContext::new_with_signer(a.veyl_pool.to_account_info(), veyl_pool::cpi::accounts::ConsumeSealed { processor: a.signer.to_account_info(), payer: a.relayer.to_account_info(), shield: a.shield.to_account_info(),
         posted: a.posted.to_account_info(), poster: a.poster.to_account_info(), nullifier0: a.nullifier0.to_account_info(), nullifier1: Some(a.nullifier1.to_account_info()),
-        mint: Some(a.mint_in.to_account_info()), vault: Some(a.shield_vault.to_account_info()), relayer_token: a.relayer_token.as_ref().map(|x| x.to_account_info()), token_program: Some(a.token_program.to_account_info()), system_program: a.system_program.to_account_info() }, &sgs);
+        mint: Some(a.mint_in.to_account_info()), vault: Some(a.shield_vault.to_account_info()), relayer_token: a.relayer_token.as_ref().map(|x| x.to_account_info()), token_program: Some(a.token_program.to_account_info()), system_program: a.system_program.to_account_info(), event_authority: a.pool_events.to_account_info(), program: a.veyl_pool.to_account_info() }, &sgs);
     veyl_pool::cpi::consume_swap(cpi, eh, ext.fee, vec![ext.enc_change.clone(), ext.enc_swap.clone()])?;
     // the ciphertext joins its direction's aggregate (valid curve points: the proof computed them)
     let mut b = ctx.accounts.batch.load_mut()?; let d = direction as usize;
@@ -496,7 +496,7 @@ pub fn claim_swap(ctx: Context<ClaimSwap>, direction: u8, ext: ClaimExt) -> Resu
     let bump = a.entry.signer_bump; let seeds = signer_seeds(bump); let sg: &[&[u8]] = &[b"signer", &seeds[0]]; let sgs = [sg];
     let cpi = CpiContext::new_with_signer(a.veyl_pool.to_account_info(), veyl_pool::cpi::accounts::ConsumeSealed { processor: a.signer.to_account_info(), payer: a.relayer.to_account_info(), shield: a.shield.to_account_info(),
         posted: a.posted.to_account_info(), poster: a.poster.to_account_info(), nullifier0: a.nullifier.to_account_info(), nullifier1: None,
-        mint: Some(a.mint_out.to_account_info()), vault: Some(a.shield_vault.to_account_info()), relayer_token: a.relayer_token.as_ref().map(|x| x.to_account_info()), token_program: Some(a.token_program.to_account_info()), system_program: a.system_program.to_account_info() }, &sgs);
+        mint: Some(a.mint_out.to_account_info()), vault: Some(a.shield_vault.to_account_info()), relayer_token: a.relayer_token.as_ref().map(|x| x.to_account_info()), token_program: Some(a.token_program.to_account_info()), system_program: a.system_program.to_account_info(), event_authority: a.pool_events.to_account_info(), program: a.veyl_pool.to_account_info() }, &sgs);
     veyl_pool::cpi::consume_claim(cpi, eh, ext.fee, vec![ext.enc_out.clone()])?;
     let mut b = ctx.accounts.batch.load_mut()?; b.claims[d] += 1;
     emit!(SealedClaimed { bin_pool: b.bin_pool, seq: b.seq, direction, refund });
@@ -562,6 +562,9 @@ pub struct SubmitSwap<'info> {
     pub token_program: Interface<'info, TokenInterface>,
     pub veyl_pool: Program<'info, VeylPool>,
     pub system_program: Program<'info, System>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct CloseBatch<'info> {
@@ -656,6 +659,9 @@ pub struct ClaimSwap<'info> {
     pub token_program: Interface<'info, TokenInterface>,
     pub veyl_pool: Program<'info, VeylPool>,
     pub system_program: Program<'info, System>,
+    /// CHECK: veyl_pool's event authority PDA ["__event_authority"] (veyl_pool checks its seeds): signs the self-CPI that
+    /// carries the tree's events
+    pub pool_events: UncheckedAccount<'info>,
 }
 
 // ------------------------------------------------------------------------------------------------ events
