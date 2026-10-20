@@ -38,6 +38,7 @@ self-inflicted. **Info** = design notes and things checked and found sound.
 | M-7 | Medium | Pool history trusted look-alike events from any program: a forged `Deposited` could get a denylisted deposit's label approved, or stop a pool's `/state` | Fixed |
 | M-8 | Medium | Fees in a token listed since the deploy were valued at its pool's opening price and whole vault balance: a creator could make a worthless token pay for the relayer's rent | Fixed |
 | L-8 | Low | Pools listed since the deploy had no lookup-table entries: their legacy private add / remove and a 16-bin public add no longer fit a transaction | Fixed |
+| M-9 | Medium | A Phase 1 deposit or withdraw with log-flooding instructions in front lost its event (logs cut at ~10 KB): a gap in the pool's history stopped its `/state` and every spend of its legacy notes by proof | Fixed (reader side) |
 | I-1..I-8 | Info | Trust in the postman, screening, deposit-record collisions, rent, lookup table, ed25519, context coverage, Groth16 and arithmetic | Notes |
 
 ---
@@ -262,6 +263,27 @@ found again after a restart (`POOL_LOOKUP_TABLES` or a chain scan; none made oth
 `poolLookupTables`; the engine compiles against them too (a table's entries never change once added, so it can only shorten a
 transaction, not redirect it). Addresses added in the current slot wait for the next (`usableLut`). A public add halves a
 mint that does not fit. With the table: 1,125 / 1,199 / 1,102 / 869 / 781 bytes.
+
+## M-9: A cut log left a gap in a Phase 1 pool's history
+
+`veyl_pool` `deposit` and `withdraw` (the per-token pools) emit `Deposited` / `Withdrawn` only as `Program data:` log lines
+(the shielded pool delivers its tree events by event CPI since 9823e6f), and Solana keeps ~10 KB of logs per transaction.
+Anyone could send their own direct deposit with ~60 memo instructions in front: its event was cut, `poolHistory` / `readTree`
+found "gap in the tree history" and threw, so the relayer's `/state` for that token stopped and none of its legacy notes
+could be withdrawn or migrated by proof (each depositor's public ragequit still worked). Every token's Phase 1 pool was
+exposed, at the cost of one deposit at the pool's minimum. Funds were never at risk.
+
+**Fix (sdk/veyl.js `poolHistory`, `cutLeaves`, `poolIxs`; reader side, programs unchanged).** For a transaction whose logs
+are cut, the pool's deposit / withdraw instructions it ran are listed in execution order (top-level, then its CPIs); the
+logged events are their prefix and the rest are rebuilt from the accounts they wrote, owned by veyl_pool, of the right type
+and this pool: the `DepositRecord` (commitment, label, value, beneficiary; checked against the instruction's precommitment),
+or once a ragequit closed it, that ragequit's arguments (which the program checked against the record); the `Spend`
+(new_commitment, kept for good once spent). Indices follow the transaction's logged ones, else fill the free ones in order.
+The rebuilt tree must reach a root in the pool's on-chain root history (the whole tree, or a recent slot end), or the
+rebuilt leaves are dropped and the read fails with the gap as before. **Regression test** `npm run test:phase1flood`
+(tests/phase1-flood.js, own validator on 9103): two flooded deposits in one transaction, a flooded withdraw by proof of a
+note deposited after them, a flooded deposit then ragequit; the tree is complete with its root on chain, `/state` works,
+and a look-alike account or a root not on chain still fails closed.
 
 ## L-7: The relayer's HTTP API was unbounded
 

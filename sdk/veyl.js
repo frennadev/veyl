@@ -6,6 +6,7 @@
 const { Buffer } = require('buffer');
 const { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction, ComputeBudgetProgram, SYSVAR_INSTRUCTIONS_PUBKEY, Ed25519Program, AddressLookupTableProgram, AddressLookupTableAccount, TransactionMessage, VersionedTransaction } = require('@solana/web3.js');
 const { sha256 } = require('js-sha256');
+const bs58 = require('bs58');
 const { poseidon1, poseidon2, poseidon3 } = require('poseidon-lite');
 
 const TOKEN_PROGRAM = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
@@ -397,6 +398,15 @@ const tierCategory = (binStep) => (binStep <= 5 ? 'stable' : binStep <= 30 ? 'ma
 function tierLabel(binStep, baseFee) { const d = DEFAULT_FEE_TIERS.find((t) => t.binStep === Number(binStep) && t.baseFee === Number(baseFee)); if (d) return d.label;
   const c = tierCategory(Number(binStep)); return c[0].toUpperCase() + c.slice(1) + ' ' + +(Number(baseFee) / 1e4).toPrecision(3) + '%'; }
 const BIN_POOL_DISC = disc('BinPool', 'account');
+const DEPOSIT_RECORD_DISC = disc('DepositRecord', 'account'), SPEND_DISC = disc('Spend', 'account');
+const POOL_IXS = Object.fromEntries(['deposit', 'withdraw', 'ragequit'].map((n) => [disc(n).toString('hex'), n]));
+/// veyl_pool's deposit / withdraw / ragequit instructions on pool `addr` (base58) in a fetched transaction, in execution order
+/// (each top-level instruction, then its CPIs): { kind, keys (base58), data }. The pool is account 2 of a deposit, 1 of the others.
+function poolIxs(t, prog, addr) { const m = t.transaction.message; const la = t.meta.loadedAddresses;
+  const keys = [...m.staticAccountKeys, ...(la ? [...la.writable, ...la.readonly] : [])].map((k) => new PublicKey(k).toBase58()); const inner = new Map((t.meta.innerInstructions || []).map((g) => [g.index, g.instructions])); const out = [];
+  const take = (pi, accs, data) => { if (keys[pi] !== prog) return; const kind = POOL_IXS[data.subarray(0, 8).toString('hex')]; if (kind && keys[accs[kind === 'deposit' ? 2 : 1]] === addr) out.push({ kind, keys: accs.map((j) => keys[j]), data }); };
+  m.compiledInstructions.forEach((ix, i) => { take(ix.programIdIndex, [...ix.accountKeyIndexes], Buffer.from(ix.data)); for (const c of inner.get(i) || []) take(c.programIdIndex, c.accounts || [], Buffer.from(bs58.decode(c.data))); });
+  return out; }
 function decodeBin(r, id) { return { id, x: r.u64(), y: r.u64(), shares: r.u128(), feeGx: r.u128(), feeGy: r.u128(), rewardG: [r.u128(), r.u128()], askShares: r.u128(), askX: r.u64(), askFilledY: r.u64(), bidShares: r.u128(), bidY: r.u64(), bidFilledX: r.u64() }; }
 function decodeBinArray(data) { const r = new Reader(data.subarray(8)); const pool = r.pk(); const chunk = r.i32(); r.skip(4); const bitmapX = r.u64(), bitmapY = r.u64(); const bins = [];
   for (let i = 0; i < BINS_PER_ARRAY; i++) bins.push(decodeBin(r, chunk * BINS_PER_ARRAY + i)); return { pool, chunk, bitmapX, bitmapY, bins }; }
@@ -759,14 +769,56 @@ class Veyl {
   /// All Deposited / Withdrawn events of a pool, oldest first, by walking its signatures and parsing the logs. Only events
   /// the pool program logged count: any program can log a look-alike "Program data:" line in a transaction that merely
   /// mentions the pool, and a forged Deposited could put a denylisted deposit's label in the approved set or break the tree.
+  /// A transaction whose logs Solana cut (past ~10 KB: anyone can put log-flooding instructions in front of their own direct
+  /// deposit) loses the Deposited / Withdrawn it logged after the cut (Phase 1 events are logged only, no event CPI; REVIEW.md
+  /// M-9). Its leaves are rebuilt from what the runtime keeps in full: the pool's deposit / withdraw instructions it ran, in
+  /// execution order, and the accounts they wrote (cutLeaves). The rebuilt tree must reach a root in the pool's on-chain
+  /// history, or they are dropped and the read fails with the gap, as before.
   async poolHistory(pool) {
     const addr = new PublicKey(pool); const prog = new PublicKey(this.programs.pool).toBase58(); let before; const sigs = [];
     for (;;) { const page = await this.conn.getSignaturesForAddress(addr, { before, limit: 1000 }, 'confirmed'); sigs.push(...page); if (page.length < 1000) break; before = page[page.length - 1].signature; }
-    sigs.reverse(); const out = [];
+    sigs.reverse(); const out = []; const lost = []; const quits = new Map();
     for (const s of sigs) { if (s.err) continue; const t = await this.conn.getTransaction(s.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); if (!t) continue;
-      for (const e of logEvents(t.meta.logMessages)) if ((e.name === 'Deposited' || e.name === 'Withdrawn') && e.program === prog && e.pool.equals(addr)) { delete e.program; out.push({ ...e, sig: s.signature, slot: s.slot }); } }
-    return out;
+      const evs = []; for (const e of logEvents(t.meta.logMessages)) if ((e.name === 'Deposited' || e.name === 'Withdrawn') && e.program === prog && e.pool.equals(addr)) { delete e.program; evs.push({ ...e, sig: s.signature, slot: s.slot }); }
+      out.push(...evs); const cut = !t.meta.logMessages || t.meta.logMessages.includes('Log truncated'); let ixs = []; try { ixs = poolIxs(t, prog, addr.toBase58()); } catch { /* unreadable message: nothing to rebuild from */ }
+      for (const x of ixs) if (x.kind === 'ragequit') quits.set(x.keys[4], x.data);
+      if (!cut) continue; const ins = ixs.filter((x) => x.kind !== 'ragequit');
+      /* the logged events are the instructions' prefix (the cut drops the tail); the rest are lost */
+      if (evs.length > ins.length || evs.some((e, k) => e.name !== (ins[k].kind === 'deposit' ? 'Deposited' : 'Withdrawn'))) continue;
+      for (let k = evs.length; k < ins.length; k++) lost.push({ ...ins[k], sig: s.signature, slot: s.slot, index: evs.length ? Number(evs[evs.length - 1].index) + k - evs.length + 1 : null }); }
+    if (!lost.length) return out;
+    const got = await this.cutLeaves(addr, lost, quits); if (!got) return out;
+    /* unindexed ones (no event of their transaction survived) fill the free indices in order: transactions are oldest first and
+       a transaction's own inserts are consecutive */
+    const taken = new Set([...out, ...got].filter((e) => e.index !== null).map((e) => Number(e.index))); let free = 0;
+    for (const e of got) if (e.index === null) { while (taken.has(free)) free++; e.index = BigInt(free); taken.add(free); } else e.index = BigInt(e.index);
+    const all = [...out, ...got].sort((a, b) => Number(a.index) - Number(b.index)); const ok = this._cutOk || (this._cutOk = new Set()); const key = (e) => e.sig + ':' + e.index + ':' + (e.commitment || e.newCommitment);
+    if (got.every((e) => ok.has(key(e)))) return all;
+    /* the root of every leaf up to the end of a slot is in the pool's root history (one entry per slot, REVIEW.md M-4): try the
+       whole tree, then the last few slot ends that still cover the rebuilt leaves; once one matches, those leaves are final */
+    const need = Math.max(...got.map((e) => Number(e.index))) + 1; let n = 0; while (n < all.length && Number(all[n].index) === n) n++; const p = await this.pool(addr); if (!p || n < need) return out;
+    const ends = [n]; for (let i = n - 1; i >= need && ends.length < 4; i--) if (all[i].slot !== all[i - 1].slot) ends.push(i);
+    const leaves = all.slice(0, n).map((e) => (e.name === 'Deposited' ? e.commitment : e.newCommitment));
+    if (!ends.some((m) => p.isKnownRoot(merklePath(leaves.slice(0, m), 0, STATE_DEPTH).root))) return out;
+    for (const e of got) ok.add(key(e)); return all;
   }
+  /// The leaves of `lost` (poolIxs entries of cut transactions) from the accounts their instructions wrote, owned by veyl_pool,
+  /// of the right type and this pool: a deposit's DepositRecord (commitment, label, value, beneficiary), or once a ragequit
+  /// closed it, that ragequit's arguments (the program checked them against the record: label, value, and nullifier + secret
+  /// opening the commitment); a withdraw's Spend (new_commitment, kept for good once spent). Null when one cannot be rebuilt.
+  async cutLeaves(addr, lost, quits) { const prog = new PublicKey(this.programs.pool); const at = (x) => x.keys[x.kind === 'deposit' ? 6 : 4]; const infos = [];
+    for (let i = 0; i < lost.length; i += 100) infos.push(...await this.conn.getMultipleAccountsInfo(lost.slice(i, i + 100).map((x) => new PublicKey(at(x))), 'confirmed'));
+    const out = [];
+    for (let i = 0; i < lost.length; i++) { const x = lost[i], a = infos[i]; const ours = (d) => a && a.owner.equals(prog) && a.data.subarray(0, 8).equals(d); const base = { pool: addr, sig: x.sig, slot: x.slot, index: x.index, recovered: true };
+      if (x.kind === 'withdraw') { if (!ours(SPEND_DISC)) return null; const r = new Reader(a.data.subarray(8)); const s = { pool: r.pk(), poster: r.pk(), processor: r.pk(), status: r.u8(), nullifierHash: r.be32(), newCommitment: r.be32(), value: r.u64() };
+        if (!s.pool.equals(addr) || s.status !== 2) return null; out.push({ name: 'Withdrawn', ...base, processor: new PublicKey(x.keys[0]), value: s.value, nullifierHash: s.nullifierHash, newCommitment: s.newCommitment }); continue; }
+      const d = new Reader(x.data.subarray(16)); const precommitment = d.be32(), beneficiary = d.pk(); let label, value, commitment;
+      if (ours(DEPOSIT_RECORD_DISC)) { const r = new Reader(a.data.subarray(8)); if (!r.pk().equals(addr)) return null; r.pk(); label = r.be32(); commitment = r.be32(); value = r.u64(); }
+      else if (!a && quits.has(at(x))) { const q = new Reader(quits.get(at(x)).subarray(8)); value = q.u64(); label = q.be32(); if (H(q.be32(), q.be32()) !== precommitment) return null; commitment = H(value, label, precommitment); }
+      else return null;
+      if (H(value, label, precommitment) !== commitment) return null;
+      out.push({ name: 'Deposited', ...base, beneficiary, payer: new PublicKey(x.keys[0]), commitment, label, value, precommitment }); }
+    return out; }
   /// Leaves in tree order (index), plus every deposit (label, payer, beneficiary) for screening.
   async readTree(pool) {
     const hist = await this.poolHistory(pool); const leaves = []; const deposits = [];
@@ -777,6 +829,6 @@ class Veyl {
 }
 module.exports = { W, R, encRoute, packProofN, strings, Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
   CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, PROTOCOL_FEE_BPS, MAX_TIERS, DEFAULT_FEE_TIERS, protocolFeeOf, canonicalPair, usableLut, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
-  disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents, logEvents, EVENT_IX_TAG, parseEventData,
+  disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents, logEvents, EVENT_IX_TAG, parseEventData, poolIxs,
   mulDiv, mulDivCeil, stepQ, priceOf, feeOf, accOf, refsOf, simulateSwap, sharesForMint, chunkOf, slotOf, chunksForSwap, chunkBit, nextChunk, nextBin, liveChunks, owedOf, pendingRewardGrowth, distribute, sideWeights, shapeWeights, EMPTY_BIN,
   decodeBinPool, decodeBinArray, decodeShareAccount, decodeFactory, decodeBond, MINT_EXT, MINT_EXT_OK, parseMint, refusedExtensions, priceQ, tierCategory, tierLabel, BIN_POOL_DISC };
