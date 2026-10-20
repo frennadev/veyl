@@ -9,6 +9,8 @@
 const net = require("net");
 const express = require("express");
 const { j } = require("../sdk/veyl.js");
+const { makeTokens } = require("./tokens.js");
+const { makeActivity } = require("./activity.js");
 const DRIP_EVERY = 6 * 3600_000;
 const num = (k, d) => (process.env[k] ? Number(process.env[k]) : d);
 /// Rate-limit key. Behind a proxy (Render, a CDN) every request comes from the proxy's address, so one client could use up
@@ -162,6 +164,34 @@ function app(relayer, srv = { inflight: 0 }) {
       labels: st.labels,
       deposits: st.deposits,
     });
+  });
+
+  // Token metadata and logos from Jupiter, through the relayer (relayer/tokens.js): Jupiter and logo hosts never see a
+  // client. Metadata is shared between concurrent callers and cached a minute per id list (and a day inside tokens.js);
+  // icons are cached by browsers for a day (overriding no-store) and inside tokens.js, size-capped.
+  const tokens = relayer.tokens || makeTokens({ network: (relayer.dep && relayer.dep.network) || process.env.NETWORK || "devnet" });
+  if (!relayer.tokens && relayer.dep && relayer.dep.tokens && process.env.TOKENS_WARM !== "0")
+    tokens.warm(relayer.dep.tokens).catch(() => {}); // the site's own tokens: cached before the first visitor asks
+  // Every pool's trades, indexed in the background (relayer/activity.js): the app's figures and candles for all pools in
+  // one request. ACTIVITY_INDEX=0 turns the indexer off (the app then reads the chain itself, as before).
+  const activity = relayer.activity || (relayer.conn && relayer.dep && process.env.ACTIVITY_INDEX !== "0" ? makeActivity({ conn: relayer.conn, program: relayer.dep.programs.bin,
+    pools: async () => { try { await relayer.discover(); } catch { /* the deployment's pools still index */ } return [...relayer.dep.binPools, ...(relayer.discovered || [])].map((b) => b.address); },
+    log: (m) => console.error(m) }) : null);
+  if (activity && !relayer.activity) activity.start();
+  // bodies are built once per sweep inside activity.js; gzipped when the client takes it
+  const sendBody = (req, res, b) => { res.status(200).type("application/json").append("vary", "accept-encoding");
+    if (/\bgzip\b/.test(String(req.headers["accept-encoding"] || ""))) res.set("content-encoding", "gzip").send(b.gz); else res.send(b.json); };
+  a.get("/activity", (req, res) => { if (!activity) return send(res, 404, { error: "no activity index here" }); sendBody(req, res, activity.summaryBody()); });
+  a.get("/candles", (req, res) => { if (!activity) return send(res, 404, { error: "no activity index here" }); sendBody(req, res, activity.candlesBody(Number(req.query.res) || 3600)); });
+  const tokenMeta = shared((ids) => tokens.getTokens(ids.split(",")), 60_000);
+  a.get("/tokens", async (req, res) => {
+    if (typeof req.query.ids !== "string") throw new Error("ids?");
+    send(res, 200, { tokens: await tokenMeta(tokens.parseIds(req.query.ids).join(",")) });
+  });
+  a.get("/tokens/icon/:mint", async (req, res) => {
+    let v;
+    try { v = await tokens.getIcon(String(req.params.mint)); } catch { return send(res, 404, { error: "no icon" }); }
+    res.status(200).set("cache-control", "public, max-age=86400, immutable").type(v.type).send(v.bytes);
   });
 
   // POSTs: a JSON object of at most 200 KB (any content type: the app's fetches are not all labelled)

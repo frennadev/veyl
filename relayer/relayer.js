@@ -6,8 +6,12 @@
 //   GET  /info                 relayer wallet, fee range, programs, lookup table
 //   GET  /state?pool=<pubkey>  the pool's leaves (tree order) and approved labels, for building proofs
 //   GET  /pools                bin pools with their current state (quotes are computed on the device)
+//   GET  /activity             every pool's totals over 1 h / 6 h / 24 h and its latest trades (no addresses)
+//   GET  /candles?res=300|900|3600|14400|86400   every pool's OHLC candles (bin ids) at that resolution
 //   POST /fee                  { kind, d, mint | legs, value }  -> { feeBps } that covers this relayer's cost for the request
 //   POST /drip                 { to } devnet/local test tokens from the mock mints (FAUCET_KEY = the deployer, the mints' authority); never on mainnet
+//   GET  /tokens?ids=<mints>       token metadata from Jupiter, through the relayer (sym:<SYMBOL> on devnet / local)
+//   GET  /tokens/icon/<mint>     that token's logo: PNG / JPEG / WebP / GIF only, from public hosts, ≤256 KB
 //   GET  /shield               Phase 2: the shielded tree (leaves in order), encrypted notes, receipts and pending deposits
 //   POST /submit               { kind: relay | swap | add | remove | claim | reward | order | orderWithdraw | rebalance | zap, ... }
 //                              Phase 2 (shielded pool): transact | shieldLp | shieldSwap | shieldOrder | shieldOrderWithdraw |
@@ -71,7 +75,9 @@ class RelayerCore {
   /// valued for the fee floor only through a pool against a priced token whose priced side holds at least
   /// DISCOVERED_MIN_DEPTH_USD (default 1000), at DISCOVERED_HAIRCUT (default 0.5) of that pool's price; otherwise this
   /// relayer refuses fees in it (an unpriced token would let anyone make it pay rent for nothing).
-  async discover(force = false) { if (!force && this._discAt && Date.now() - this._discAt < 60_000) return this.discovered;
+  /// A forced re-scan (a request named a mint this relayer does not know yet) runs at most every DISCOVER_MIN_MS (10 s): any
+  /// request can name a made-up mint, and each scan reads every pool on chain (REVIEW.md L-7).
+  async discover(force = false) { const age = this._discAt ? Date.now() - this._discAt : Infinity; if (age < (force ? Number(process.env.DISCOVER_MIN_MS || 10_000) : 60_000)) return this.discovered;
     if (this._discP) return this._discP; this._discP = (async () => { try {
       const known = new Set(this.dep.binPools.map((b) => b.address)); const chain = await this.V.binPools(); const fresh = chain.filter((p) => !known.has(p.address.toBase58()));
       this.extraTokens = this.extraTokens || {}; const out = [];

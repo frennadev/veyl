@@ -35,6 +35,7 @@ self-inflicted. **Info** = design notes and things checked and found sound.
 | L-5 | Low | A bin with shares but zero value mints new shares 1:1 | Acknowledged (same as EVM; not reachable profitably) |
 | L-6 | Low | A user can make the relayer post, then make execution fail, costing it a few signature fees | Acknowledged (fee floor + rate limit) |
 | L-7 | Low | The relayer's HTTP API was unbounded: unlimited reads (each `/pools` ~2 RPC calls per pool), faucet drainable with fresh addresses, no cap on concurrent submissions | Fixed |
+| M-7 | Medium | Pool history trusted look-alike events from any program: a forged `Deposited` could get a denylisted deposit's label approved, or stop a pool's `/state` | Fixed |
 | I-1..I-8 | Info | Trust in the postman, screening, deposit-record collisions, rent, lookup table, ed25519, context coverage, Groth16 and arithmetic | Notes |
 
 ---
@@ -211,6 +212,21 @@ A user can set a swap's `min_out` just above what execution will give: the relay
 no fee), and the relayer cancels (one fee; the rent comes back). Two signature fees per attempt, rate-limited. Kept.
 
 
+## M-7: Pool history trusted events logged by any program
+
+`poolHistory` (the relayer's `/state`, and the approved-set publisher) parsed every `Program data:` line with a Veyl event's
+discriminator in any transaction that mentions the pool. Such a transaction only has to pass the pool as an account (even
+read-only), and any program can log a look-alike line. One cheap transaction could (a) log a `Deposited` carrying a denylisted
+deposit's label with a clean payer, so screening approved the label and the publisher put it in the approved set; (b) log
+a `Deposited` at a far index, so `readTree` failed with a gap and the pool's `/state` and approved-set updates stopped; or
+(c) overwrite real leaves, so proofs failed. Funds were never at risk: the on-chain root and nullifiers are the program's own.
+
+**Fix (sdk/veyl.js).** `poolHistory` keeps only events whose invoke frame is the pool program (`logEvents`; only the runtime
+writes the `Program <id> invoke` / `success` lines), and `V.events` only events from Veyl's programs. **Regression tests.**
+`forged Deposited events (another program) are ignored`, `V.events: only our programs' events` (tests/http.js). The relayer's
+trade index (relayer/activity.js) and the app's own trade read (engine/sol-entry.js) keep only `Swapped` events from the
+bin program's own frame (display figures; `a Swapped look-alike logged by another program is ignored`, tests/activity.js).
+
 ## L-7: The relayer's HTTP API was unbounded
 
 Only POSTs were rate-limited. Reads were not, and `GET /pools` read every pool from the chain on each request (about 166 RPC
@@ -225,6 +241,8 @@ emptied it.
 `MAX_INFLIGHT` submissions at once (503 beyond); faucet capped per caller and pair and `DRIP_MAX_PER_HOUR` in total, claimed
 before the drip so two at once cannot both pass, records pruned; JSON-object bodies only; URLs redacted from errors; security
 headers and server timeouts. The denylist is re-read only when it changes and a broken file keeps the last good list.
+Since permissionless pools, a request naming a mint the relayer does not know forces a re-scan of every pool on chain; any
+request can name a made-up mint, so forced scans run at most every `DISCOVER_MIN_MS` (10 s).
 **Regression tests.** `tests/http.js` (no chain needed; first in `npm test`).
 
 ---

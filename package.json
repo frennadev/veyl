@@ -7,7 +7,7 @@
     "build": "bash scripts/build.sh",
     "vkey": "node scripts/vkey-to-rust.js --all",
     "bundle": "esbuild engine/sol-entry.js --bundle --minify --format=iife --global-name=Veyl --outfile=site/veyl-sol.js --define:global=window --external:crypto && esbuild engine/committee-worker.src.js --bundle --minify --format=iife --outfile=site/committee-worker.js --define:global=self --external:crypto",
-    "test": "node tests/http.js && node tests/market.js && node tests/markets.js && node tests/wallets.js && node tests/run.js",
+    "test": "node tests/http.js && node tests/tokens.js && node tests/activity.js && node tests/market.js && node tests/markets.js && node tests/wallets.js && node tests/run.js",
     "e2e": "node e2e/run.js",
     "preflight": "node scripts/preflight.js",
     "deploy": "node scripts/deploy.js",
@@ -42,23 +42,29 @@
     "bs58": "^5.0.0",
     "buffer": "^6.0.3",
     "express": "^5.3.0",
+    "ipaddr.js": "^1.9.1",
     "js-sha256": "^1.0.0",
     "poseidon-lite": "^0.3.0",
     "snarkjs": "^0.7.6",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@tanstack/query-sync-storage-persister": "^5.104.5",
+    "@tanstack/react-query": "^5.104.5",
+    "@tanstack/react-query-persist-client": "^5.104.5",
     "@types/node": "^20.19.43",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "circom2": "0.2.23",
     "circomlib": "2.0.5",
     "esbuild": "^0.24.0",
+    "lightweight-charts": "^5.2.1",
     "next": "^16.4.2",
     "playwright": "1.56.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zustand": "^5.0.15"
   },
   "engines": {
     "node": ">=20"

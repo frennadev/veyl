@@ -453,7 +453,9 @@ class Veyl {
   }
   async sendSigned(tx) { return this._confirm(await this.conn.sendRawTransaction(tx.serialize(), { skipPreflight: false })); }
   async _confirm(sig) { const r = await this.conn.confirmTransaction(sig, 'confirmed'); if (r.value.err) throw new Error('tx failed: ' + JSON.stringify(r.value.err)); return sig; }
-  async events(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); return parseEvents(t && t.meta && t.meta.logMessages); }
+  /// A transaction's events, only those our programs logged (a relayer-built transaction could add a program logging look-alikes).
+  async events(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const ours = new Set(Object.values(this.programs).map((p) => new PublicKey(p).toBase58()));
+    return logEvents(t && t.meta && t.meta.logMessages).filter((e) => ours.has(e.program)).map(({ program, ...e }) => e); }
   async returnData(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const r = t && t.meta && t.meta.returnData; return r ? Buffer.from(r.data[0], 'base64') : null; }
   /// A lookup table account, cached for 30 s (tables only grow at deploy time; this client's own extends clear it).
   async lutAccount(k) { const key = new PublicKey(k).toBase58(); const c = this._luts[key]; if (c && Date.now() - c.at < 30_000) return c.v;
@@ -747,13 +749,15 @@ class Veyl {
       R(user, true), W(this.ata(tokenIn, user, tpi)), W(this.ata(tokenOut, user, tpo)), R(this.programs.bin), ...rem] }); }
 
   // ---- the pool's history, from the chain (what the relayer serves and the engine verifies against the current root)
-  /// All Deposited / Withdrawn events of a pool, oldest first, by walking its signatures and parsing the logs.
+  /// All Deposited / Withdrawn events of a pool, oldest first, by walking its signatures and parsing the logs. Only events
+  /// the pool program logged count: any program can log a look-alike "Program data:" line in a transaction that merely
+  /// mentions the pool, and a forged Deposited could put a denylisted deposit's label in the approved set or break the tree.
   async poolHistory(pool) {
-    const addr = new PublicKey(pool); let before; const sigs = [];
+    const addr = new PublicKey(pool); const prog = new PublicKey(this.programs.pool).toBase58(); let before; const sigs = [];
     for (;;) { const page = await this.conn.getSignaturesForAddress(addr, { before, limit: 1000 }, 'confirmed'); sigs.push(...page); if (page.length < 1000) break; before = page[page.length - 1].signature; }
     sigs.reverse(); const out = [];
     for (const s of sigs) { if (s.err) continue; const t = await this.conn.getTransaction(s.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); if (!t) continue;
-      for (const e of parseEvents(t.meta.logMessages)) if ((e.name === 'Deposited' || e.name === 'Withdrawn') && e.pool.equals(addr)) out.push({ ...e, sig: s.signature, slot: s.slot }); }
+      for (const e of logEvents(t.meta.logMessages)) if ((e.name === 'Deposited' || e.name === 'Withdrawn') && e.program === prog && e.pool.equals(addr)) { delete e.program; out.push({ ...e, sig: s.signature, slot: s.slot }); } }
     return out;
   }
   /// Leaves in tree order (index), plus every deposit (label, payer, beneficiary) for screening.
