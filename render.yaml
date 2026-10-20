@@ -125,22 +125,67 @@ services:
         name: Cache-Control
         value: "no-cache"
 
-  # ------------------------------------------------------------------ optional: the sealed-batch committee (2 of 3)
-  # Sealed swaps settle only while t of the n committee nodes run. Each node keeps its key share on a persistent disk, and
-  # members should run on separate infrastructure (committee/README.md "Trust"). Hosting all three here is for devnet
-  # testing only. To add them: uncomment, give each its node key, config and the shared DKG_SESSION, and copy its existing
-  # state (or run a fresh key generation and register the new committee). Disks need a paid plan.
-  # - type: pserv   # a private service: the nodes reach each other over HTTP, nothing public
-  #   name: veyl-sol-committee-1
-  #   runtime: docker
-  #   dockerfilePath: ./committee/Dockerfile
-  #   dockerContext: .
-  #   plan: starter
-  #   disk: { name: committee-1, mountPath: /data, sizeGB: 1 }
-  #   envVars:
-  #     - { key: NETWORK, value: "devnet" }
-  #     - { key: RPC_URL, sync: false }
-  #     - { key: NODE_SECRET_KEY, sync: false }
-  #     - { key: COMMITTEE_JSON, sync: false }   # { index, t, n, peers: [{ index, url, node, boxKey }] }
-  #     - { key: DKG_SESSION, sync: false }
-  # (veyl-sol-committee-2 and -3 the same, with their own key, config and disk)
+  # ------------------------------------------------------------------ the sealed-batch committee (2 of 3), devnet testing
+  # Sealed swaps settle only while t of the n nodes run. Members should run on separate infrastructure (committee/README.md
+  # "Trust"); all three here is for devnet testing only. Each node starts from its existing key share (SHARE_JSON, a
+  # secret) and the public transcript in committee/transcript.devnet.json, so no disk and no new key generation is needed.
+  # Private services: nothing public; after the key generation the nodes only talk to the chain.
+  - type: pserv
+    name: veyl-sol-committee-1
+    runtime: docker
+    dockerfilePath: ./committee/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: NETWORK
+        value: "devnet"
+      - key: STATE_DIR      # no disk: the share comes from SHARE_JSON on every start
+        value: "/tmp/committee"
+      - key: RPC_URL        # a dedicated devnet RPC (may be the relayer's)
+        sync: false
+      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-devnet/node-1.json (it pays its share transactions: keep devnet SOL on it)
+        sync: false
+      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-devnet/config-1.json (index, t, n, peers; public keys only)
+        sync: false
+      - key: SHARE_JSON        # ~/keys/veyl/committee-devnet/state-1/share.json: this member's KEY SHARE (secret)
+        sync: false
+
+  - type: pserv
+    name: veyl-sol-committee-2
+    runtime: docker
+    dockerfilePath: ./committee/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: NETWORK
+        value: "devnet"
+      - key: STATE_DIR      # no disk: the share comes from SHARE_JSON on every start
+        value: "/tmp/committee"
+      - key: RPC_URL        # a dedicated devnet RPC (may be the relayer's)
+        sync: false
+      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-devnet/node-2.json (it pays its share transactions: keep devnet SOL on it)
+        sync: false
+      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-devnet/config-2.json (index, t, n, peers; public keys only)
+        sync: false
+      - key: SHARE_JSON        # ~/keys/veyl/committee-devnet/state-2/share.json: this member's KEY SHARE (secret)
+        sync: false
+
+  - type: pserv
+    name: veyl-sol-committee-3
+    runtime: docker
+    dockerfilePath: ./committee/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: NETWORK
+        value: "devnet"
+      - key: STATE_DIR      # no disk: the share comes from SHARE_JSON on every start
+        value: "/tmp/committee"
+      - key: RPC_URL        # a dedicated devnet RPC (may be the relayer's)
+        sync: false
+      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-devnet/node-3.json (it pays its share transactions: keep devnet SOL on it)
+        sync: false
+      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-devnet/config-3.json (index, t, n, peers; public keys only)
+        sync: false
+      - key: SHARE_JSON        # ~/keys/veyl/committee-devnet/state-3/share.json: this member's KEY SHARE (secret)
+        sync: false

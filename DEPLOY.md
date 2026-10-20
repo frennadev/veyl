@@ -47,13 +47,17 @@ branch first; `deploy.devnet.json` (public addresses only) is committed and goes
 5. A custom domain: add it to the site in Render, then set the relayer's `ALLOWED_ORIGINS` by hand to both origins
    (`https://<site>.onrender.com,https://veyl.example`) instead of the value from the blueprint.
 
-Costs: the relayer's starter plan (the free plan sleeps, and every wake would rebuild the trade index); the static site is
-free. Keep the relayer wallet funded with devnet SOL (`/health` shows `lowBalance` under `LOW_BALANCE_SOL`). The starter
+Costs: four starter-plan services, the relayer and the three committee nodes (the free plan sleeps: the relayer's trade
+index would rebuild on every wake, and a sleeping committee settles nothing); the static site is free. Keep the relayer wallet funded with devnet SOL (`/health` shows `lowBalance` under `LOW_BALANCE_SOL`). The starter
 plan's 512 MB is why `ACTIVITY_MAX_SWAPS` is 100000 there.
 
-Sealed swaps settle only while the batch committee runs (2 of 3 nodes). They are not in the blueprint by default: each
-node keeps its key share on a persistent disk, and members should run on separate infrastructure. `render.yaml` has a
-commented section for running all three on Render for devnet testing (private services with disks, a paid plan).
+Sealed swaps settle only while the batch committee runs (2 of 3 nodes). For devnet testing the blueprint runs all three
+on Render as private services (**veyl-sol-committee-1..3**, nothing public). Devnet only: with all three shares under one
+account, one Render login could decrypt (2 of 3). On mainnet each member runs on its own infrastructure (committee/README.md "Trust"). Each starts from the devnet committee's existing key share, so
+no disk and no new key generation: per node enter `RPC_URL`, `NODE_SECRET_KEY` (`~/keys/veyl/committee-devnet/node-<i>.json`),
+`COMMITTEE_JSON` (`config-<i>.json`) and `SHARE_JSON` (`state-<i>/share.json`, the member's key share: a secret). The public
+transcript comes from `committee/transcript.devnet.json`. Each node pays its share transactions: keep devnet SOL on its
+node key. Stop the local nodes (`devnet-local.sh` with `COMMITTEE=1`) once these run, so the same shares aren't posted twice.
 
 ## Mainnet (only after Before mainnet)
 ```bash
