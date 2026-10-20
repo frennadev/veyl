@@ -143,7 +143,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
       // fees: public round trips through its bins (the deployer, with minted test tokens) until they are worth claiming
       await fund(conn, deployer, USDC, deployer.publicKey, units(100000, 6)); await fund(conn, deployer, SOL, deployer.publicKey, units(sz(1000, 1.5), 9));
       const volume = async (n) => { for (let i = 0; i < n; i++) { const bp = await V.binPool(POOL); const xForY = bp.activeId > a0 + 1 || (bp.activeId >= a0 - 1 && i % 2 === 1); // sell SOL above, buy below
-        await V.send([await V.swapIx(deployer.publicKey, POOL, xForY, xForY ? units(sz(10, 0.04), 9) : units(sz(1000, 4), 6))], [], 1_400_000); await sleep(300); } };
+        await V.send([await V.swapIx(deployer.publicKey, POOL, xForY, xForY ? units(sz(10, 0.25), 9) : units(sz(1000, 25), 6))], [], 1_400_000); await sleep(300); } };
       // fees reach a claimable state at the next shielded action in these bins (a claim is proven against the growth recorded at
       // the last harvest; the program harvests after the proof): volume, then a small second shielded add here, then the claim
       await volume(30);

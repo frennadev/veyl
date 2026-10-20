@@ -72,12 +72,14 @@ class Node {
   /// committee's authority turns on after the deploy is served too), else the deployment's.
   async _pools() { if (this._poolsAt && Date.now() - this._poolsAt < 30_000) return this._poolList; const name = new Map(this.dep.binPools.map((b) => [b.address, b.id]));
     try { this._poolList = (await this.V.sealedPools()).map((s) => ({ address: s.binPool.toBase58(), id: name.get(s.binPool.toBase58()) || s.binPool.toBase58().slice(0, 8) })); } catch { this._poolList = this.dep.binPools; }
+    /* delisted pools: their empty batches aren't rolled any more (a batch holding swaps still closes and settles) */
+    try { const infos = await this.V.conn.getMultipleAccountsInfo(this._poolList.map((b) => new PublicKey(b.address)), 'confirmed'); this._poolList = this._poolList.map((b, j) => ({ ...b, delisted: !!(infos[j] && require('../sdk/veyl.js').decodeBinPool(new PublicKey(b.address), infos[j].data).delisted) })); } catch { /* unknown: as before */ }
     this._poolsAt = Date.now(); return this._poolList; }
   async tick() {
     if (!this.share || !this._chain()) return; const reg = await this.registered(); this.status.registered = reg; if (!reg) return;
     for (const bp of await this._pools()) { const pool = new PublicKey(bp.address); let st; try { st = await this.V.sealedState(pool); } catch { continue; } if (!st) continue;
       try {
-        if (this.doClose && st.batch.state === 'open' && BigInt(st.slot) >= st.batch.endSlot) { await this.V.send([this.V.closeBatchIx(this.key.publicKey, pool, st.batch.seq)], [], 1_400_000); this.log(`node ${this.index}: closed ${bp.id} batch ${st.batch.seq}`); }
+        if (this.doClose && st.batch.state === 'open' && BigInt(st.slot) >= st.batch.endSlot && !(bp.delisted && st.batch.count[0] + st.batch.count[1] === 0)) { await this.V.send([this.V.closeBatchIx(this.key.publicKey, pool, st.batch.seq)], [], 1_400_000); this.log(`node ${this.index}: closed ${bp.id} batch ${st.batch.seq}`); }
         for (const b of await CM.pendingBatches(this.V, pool)) { const c = await this.V.committee(); if (b.committeeEpoch !== c.epoch) continue;
           if (!(b.verified & (1 << (this.index - 1)))) { const r = await CM.postShare(this.V, this.key, { member: this.index, sk: BigInt(this.share.sk), binPool: pool, seq: b.seq });
             this.status.lastShare = { pool: bp.id, seq: String(b.seq), txs: r.txs.length, at: new Date().toISOString() }; this.log(`node ${this.index}: share for ${bp.id} batch ${b.seq} verified (${r.txs.length} txs)`); }
