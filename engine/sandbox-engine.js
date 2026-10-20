@@ -200,6 +200,7 @@ export function makeSandbox(Engine, PrivacyError, Store) {
       const tx = ch.tx('release_bond', [{ name: 'BondReleased', pool, creator: this.pk, amount: a }], this._pub('bond', [['Bond released', fmtA(ch, 'SOL', a) + ' back to the wallet']])); this.lastTx = tx; return { tx }; }
 
     // ------------------------------------------------------------------------------------------ pools
+    async poolStates(addrs, span = 35) { return Promise.all(addrs.map((x) => this.poolState(x, span).catch((e) => e))); }
     async poolState(addr, span = 35) { const ch = this.chain; const P = ch.pool(addr); const bp = await this.V.binPool(addr); const c = this.poolCfg(addr); const a = bp.activeId; const now = Math.floor(Date.now() / 1000);
       const bins = {}; for (let i = a - span; i <= a + span; i++) { const x = P.bins.get(i); bins[i] = x ? { x: x.x, y: x.y, shares: x.shares, askX: x.askX || 0n, bidY: x.bidY || 0n } : { x: 0n, y: 0n, shares: 0n, askX: 0n, bidY: 0n }; }
       const rewards = bp.rewards.map((r, i) => (r.initialized ? { index: i, sym: this.symOf(r.mint) || null, mint: r.mint.toBase58(), live: Number(r.end) > now && r.rate > 0n, end: Number(r.end), ratePerSec: r.rate >> 64n } : null)).filter(Boolean);

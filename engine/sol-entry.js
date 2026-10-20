@@ -291,10 +291,25 @@ export class Engine {
   /// One pool: parameters, active bin, current dynamic fee, reserves in the vaults (less the protocol's balance), lifetime
   /// fees, rewards, and the bins `span` either side of the active bin.
   async poolState(addr, span = 35) { const pk = new PublicKey(addr); const bp = await this.V.binPool(pk); if (!bp) throw new Error('This pool is not on chain.');
-    const c = this.poolCfg(addr); const a = bp.activeId; const fee = Number(await this.V.currentFee(pk)); const now = Math.floor(Date.now() / 1000);
-    const m = await this.V.bins(pk, [...new Set([chunkOf(a - span), chunkOf(a), chunkOf(a + span)])]); const bins = {};
+    const a = bp.activeId; const vault = async (k) => BigInt((await this.conn.getTokenAccountBalance(k)).value.amount);
+    // bins and both vaults in one round trip (they only need the pool account); the fee is computed from it, not re-read
+    const [m, v] = await Promise.all([this.V.bins(pk, [...new Set([chunkOf(a - span), chunkOf(a), chunkOf(a + span)])]), Promise.all([vault(bp.vaultX), vault(bp.vaultY)]).catch(() => [0n, 0n])]);
+    return this._poolStateOf(addr, bp, m, v[0], v[1], span); }
+  /// Many pools' states in a few requests (getMultipleAccounts: the pools, then every bin array and vault they need), the
+  /// same objects poolState returns, in `addrs` order. A pool that isn't on chain gets an Error in its place.
+  async poolStates(addrs, span = 35) { const keys = addrs.map((x) => new PublicKey(x)); const many = async (ks) => { const out = [];
+      for (let i = 0; i < ks.length; i += 100) out.push(...(await this.conn.getMultipleAccountsInfo(ks.slice(i, i + 100), 'confirmed'))); return out; };
+    const bps = (await many(keys)).map((a, i) => (a ? S.decodeBinPool(keys[i], a.data) : null));
+    const need = []; const at = new Map(); const want = (k) => { const s = k.toBase58(); if (!at.has(s)) { at.set(s, need.length); need.push(k); } return at.get(s); };
+    const plan = bps.map((bp, i) => { if (!bp) return null; const a = bp.activeId; const chunks = [...new Set([chunkOf(a - span), chunkOf(a), chunkOf(a + span)])];
+      return { chunks: chunks.map((c) => want(this.V.binArrayPda(keys[i], c))), vx: want(bp.vaultX), vy: want(bp.vaultY) }; });
+    const infos = await many(need); const amount = (j) => { const d = infos[j] && infos[j].data; return d && d.length >= 72 ? Buffer.from(d).readBigUInt64LE(64) : 0n; }; // SPL / Token-2022 account: amount at 64
+    return Promise.all(bps.map(async (bp, i) => { if (!bp) return new Error('This pool is not on chain.'); const m = new Map();
+      for (const j of plan[i].chunks) if (infos[j]) for (const b of S.decodeBinArray(infos[j].data).bins) m.set(b.id, b);
+      return this._poolStateOf(addrs[i], bp, m, amount(plan[i].vx), amount(plan[i].vy), span).catch((e) => (e instanceof Error ? e : new Error(String(e)))); })); }
+  async _poolStateOf(addr, bp, m, vx, vy, span) { const c = this.poolCfg(addr); const a = bp.activeId; const now = Math.floor(Date.now() / 1000);
+    const { ref, iref } = S.refsOf(bp, now); const fee = Number(S.feeOf(bp, S.accOf(ref, iref, a))); const bins = {};
     for (let i = a - span; i <= a + span; i++) { const x = m.get(i); bins[i] = x ? { x: x.x, y: x.y, shares: x.shares, askX: x.askX || 0n, bidY: x.bidY || 0n } : { x: 0n, y: 0n, shares: 0n, askX: 0n, bidY: 0n }; }
-    let vx = 0n, vy = 0n; try { vx = BigInt((await this.conn.getTokenAccountBalance(bp.vaultX)).value.amount); vy = BigInt((await this.conn.getTokenAccountBalance(bp.vaultY)).value.amount); } catch {}
     const rewards = bp.rewards.map((r, i) => (r.initialized ? { index: i, sym: this.symOf(r.mint) || null, mint: r.mint.toBase58(), live: Number(r.end) > now && r.rate > 0n, end: Number(r.end), ratePerSec: r.rate >> 64n } : null)).filter(Boolean);
     if (!this._fac) { try { await this._factory(); } catch { /* tier labels from the bin step */ } }
     return { address: b58(addr), x: c.x, y: c.y, binStep: bp.binStep, baseFee: bp.baseFee, fee, active: a, price: priceOf(bp.basePrice, bp.binStep, a), bp, bins,
@@ -506,7 +521,13 @@ export class Engine {
   /// The pool's transactions, newest first, from getSignaturesForAddress (paged, cached, incremental), decoded for its
   /// Swapped events (every swap through the pool, whoever routed it: wallets, the relayer, batch settlements) and its
   /// PoolCreated event. Covers at least `secs` back; `complete` when the pool's whole history was read.
-  async poolActivity(addr, secs = 86400) { const pk = new PublicKey(addr); const key = pk.toBase58(); const A = (this._act = this._act || {})[key] || (this._act[key] = { swaps: [], seen: new Set(), newest: null, created: null, complete: false, oldestT: Infinity });
+  async poolActivity(addr, secs = 86400) { const pk = new PublicKey(addr); const key = pk.toBase58(); this._act = this._act || {};
+    // the relayer's index of every pool's trades (one request for all pools), when it has this pool and is current
+    // (its totals per window, `agg`, and its latest trades; poolStatsChain uses the totals when they cover the window)
+    const R = await this._relayerActivity(); const r = R && R.pools[key];
+    if (r && Math.floor(Date.now() / 1000) - R.at < 120) { const A = { swaps: r.recent.map(([t, x, i, o, f, pf, id, sig]) => ({ sig, t, xForY: !!x, amountIn: BigInt(i), amountOut: BigInt(o), fee: BigInt(f), protocolFee: BigInt(pf), activeId: id })),
+      agg: r.agg, seen: new Set(), newest: r.newest, created: r.created, complete: r.complete, oldestT: r.oldestT ?? Infinity, relayer: true }; this._act[key] = A; return A; }
+    const A = (this._act[key] && !this._act[key].relayer && this._act[key]) || (this._act[key] = { swaps: [], seen: new Set(), newest: null, created: null, complete: false, oldestT: Infinity });
     const now = Math.floor(Date.now() / 1000); const fresh = []; let before;
     for (let page = 0; page < 8; page++) { const sigs = await this.conn.getSignaturesForAddress(pk, { limit: 1000, before }, 'confirmed'); if (!sigs.length) { if (!A.newest) A.complete = true; break; }
       let stop = false; for (const s of sigs) { if (s.signature === A.newest) { stop = true; break; } fresh.push(s); }
@@ -515,10 +536,19 @@ export class Engine {
     const ok = fresh.filter((s) => !s.err && !A.seen.has(s.signature));
     for (let i = 0; i < ok.length; i += 50) { const chunk = ok.slice(i, i + 50); const txs = await this.conn.getTransactions(chunk.map((s) => s.signature), { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
       txs.forEach((t, k) => { const sig = chunk[k].signature; A.seen.add(sig); if (!t) return; const bt = t.blockTime || chunk[k].blockTime || now;
-        for (const e of S.parseEvents(t.meta && t.meta.logMessages)) { if (e.name === 'Swapped' && e.pool.toBase58() === key) A.swaps.push({ sig, t: bt, xForY: e.xForY, amountIn: e.amountIn, amountOut: e.amountOut, fee: e.fee, protocolFee: e.protocolFee, activeId: e.activeId });
+        for (const e of S.logEvents(t.meta && t.meta.logMessages)) { if (e.program !== this.V.programs.bin.toBase58()) continue; // only the bin program's own events: any program can log a look-alike
+          if (e.name === 'Swapped' && e.pool.toBase58() === key) A.swaps.push({ sig, t: bt, xForY: e.xForY, amountIn: e.amountIn, amountOut: e.amountOut, fee: e.fee, protocolFee: e.protocolFee, activeId: e.activeId });
           if (e.name === 'PoolCreated' && e.pool.toBase58() === key) A.created = bt; } }); }
     if (fresh.length) A.newest = fresh[0].signature; for (const s of fresh) if (s.blockTime && s.blockTime < A.oldestT) A.oldestT = s.blockTime;
     A.swaps.sort((x, y) => x.t - y.t); return A; }
+  /// The relayer's trade index for every pool (GET /activity: one request, fixed windows, so it can't tell which pool is
+  /// looked at), cached 15 s; null when there is no relayer index (each pool's history is then read from the chain).
+  async _relayerActivity() { if (!this.cfg.relayer) return null; const c = this._ra;
+    if (c && c.v !== undefined && Date.now() - c.at < 15_000) return c.v; if (c && c.p) return c.p;
+    const p = (async () => { try { const r = await fetch(this.cfg.relayer + '/activity'); if (!r.ok) return null; const j = await r.json(); return j && j.pools && j.at ? j : null; } catch { return null; } })();
+    this._ra = { p }; const v = await p; this._ra = { v, at: Date.now() }; return v; }
+  /// Candles for every pool at `res` seconds from the relayer's index (bin ids: price them with humanPrice), or null.
+  async poolCandles(res) { if (!this.cfg.relayer) return null; try { const r = await fetch(this.cfg.relayer + '/candles?res=' + res); if (!r.ok) return null; const j = await r.json(); return j && j.pools ? j : null; } catch { return null; } }
   /// Dollars per token: the live market price; a token without one is valued through a pool against a priced token.
   usdMap(states = []) { const u = {}; for (const s of Object.keys(this.tokens)) { const m = this.market.usd(s); if (m) u[s] = m; }
     for (let pass = 0; pass < 2; pass++) for (const st of states) { if (!st) continue; const px = this.humanPrice(st, st.active); if (u[st.y] && !u[st.x]) u[st.x] = px * u[st.y]; if (u[st.x] && !u[st.y]) u[st.y] = u[st.x] / px; } return u; }
@@ -527,13 +557,15 @@ export class Engine {
   /// they are null without them.
   async poolStatsChain(addr, secs, st, U) { const A = await this.poolActivity(addr, Math.max(secs, 86400)); const now = Math.floor(Date.now() / 1000); const t0 = now - secs;
     const w = A.swaps.filter((s) => s.t > t0); const c = this.poolCfg(addr); const ux = U[c.x], uy = U[c.y]; const X = (a) => this.fmt(c.x, a), Y = (a) => this.fmt(c.y, a);
-    let vx = 0n, vy = 0n, fx = 0n, fy = 0n, px = 0n, py = 0n; for (const s of w) { if (s.xForY) { vx += s.amountIn; fx += s.fee; px += s.protocolFee; } else { vy += s.amountIn; fy += s.fee; py += s.protocolFee; } }
+    let vx = 0n, vy = 0n, fx = 0n, fy = 0n, px = 0n, py = 0n; const g = A.agg && A.agg[secs]; // the relayer's totals (its trade list here is only the latest)
+    if (g) { vx = BigInt(g.vx); vy = BigInt(g.vy); fx = BigInt(g.fx); fy = BigInt(g.fy); px = BigInt(g.px); py = BigInt(g.py); }
+    else for (const s of w) { if (s.xForY) { vx += s.amountIn; fx += s.fee; px += s.protocolFee; } else { vy += s.amountIn; fy += s.fee; py += s.protocolFee; } }
     const priced = ux != null && uy != null; const usd = (a, b) => (priced ? X(a) * ux + Y(b) * uy : null);
     const tvl = usd(st.reserves.x, st.reserves.y); const fees = usd(fx, fy), lp = usd(fx - px, fy - py);
     let near = 0, all = 0; if (priced) for (const [id, b] of Object.entries(st.bins)) { const v = X(b.x) * ux + Y(b.y) * uy; all += v; if (Math.abs(+id - st.active) <= 10) near += v; }
-    const before = A.swaps.filter((s) => s.t <= t0).pop(); const startId = before ? before.activeId : w.length ? w[0].activeId : st.active; const price = this.humanPrice(st, st.active), p0 = this.humanPrice(st, startId);
+    const before = A.swaps.filter((s) => s.t <= t0).pop(); const startId = g && g.startId != null ? g.startId : before ? before.activeId : w.length ? w[0].activeId : st.active; const price = this.humanPrice(st, st.active), p0 = this.humanPrice(st, startId);
     const apr = tvl > 0 ? (lp / tvl) * (31_536_000 / secs) * 100 : null; const depth = all > 0 ? near / all : null;
-    return { chain: true, price, change: p0 > 0 ? (price / p0 - 1) * 100 : null, active: st.active, fee: st.fee, volumeUsd: usd(vx, vy), feesUsd: fees, lpFeesUsd: lp, tvlUsd: tvl, swaps: w.length, raw: { vx, vy, fx, fy, px, py },
+    return { chain: true, price, change: p0 > 0 ? (price / p0 - 1) * 100 : null, active: st.active, fee: st.fee, volumeUsd: usd(vx, vy), feesUsd: fees, lpFeesUsd: lp, tvlUsd: tvl, swaps: g ? g.n : w.length, raw: { vx, vy, fx, fy, px, py },
       aprPct: apr, feeTvlPct: tvl > 0 ? (fees / tvl) * 100 : null, depth, score: apr != null && depth != null ? apr * depth : null, ageSec: A.created ? now - A.created : A.complete && A.oldestT < Infinity ? now - A.oldestT : null,
       spark: w.length ? [p0, ...w.map((s) => this.humanPrice(st, s.activeId))] : [], sparkT: w.length ? [t0, ...w.map((s) => s.t)] : [], start: p0 }; }
   /// Recent swaps across the deployment's pools (from the cache poolActivity filled), newest first.

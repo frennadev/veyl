@@ -40,6 +40,10 @@ export function installPools(Engine) {
   /// hook: a mint read from the chain (parseMint shape), cached; null when the address holds no mint.
   P._readMint = async function (m) { const c = (this._mints ||= new Map()).get(m); if (c && Date.now() - c.at < MINT_TTL) return c.v;
     const v = await this.V.mint(new PublicKey(m)); this._mints.set(m, { v, at: Date.now() }); return v; };
+  /// Many mints into the same cache in one request each 100 (pool discovery reads every new token at once).
+  P._readMints = async function (ms) { const now = Date.now(); const todo = [...new Set(ms)].filter((m) => { const c = (this._mints ||= new Map()).get(m); return !(c && now - c.at < MINT_TTL); });
+    for (let i = 0; i < todo.length; i += 100) { const part = todo.slice(i, i + 100); const infos = await this.conn.getMultipleAccountsInfo(part.map((m) => new PublicKey(m)), 'confirmed');
+      part.forEach((m, k) => { try { this._mints.set(m, { v: S.parseMint(infos[k]), at: now }); } catch { /* read alone by tokenInfo */ } }); } };
   /// { mint, symbol, name, decimals, program: 'spl' | 'token2022', listed }: the deployment's own entry for a listed token, else
   /// the token's Token-2022 metadata, else the short mint. Cached; a token not listed is registered under its mint.
   P.tokenInfo = async function (mint) { const m = b58(mint); const c = (this._tinfo ||= new Map()).get(m); if (c) return c;
@@ -86,7 +90,9 @@ export function installPools(Engine) {
     const [chain] = await Promise.all([this._discover(), this._factory().catch(() => null)]); const now = Math.floor(Date.now() / 1000);
     const cfgRows = this.cfg.binPools.filter((r) => !r.discovered); const known = new Set(cfgRows.map((r) => r.address));
     const fresh = chain.filter((bp) => !known.has(b58(bp.address)));
-    await Promise.all([...new Set(fresh.flatMap((bp) => [b58(bp.mintX), b58(bp.mintY)]))].map((m) => this.tokenInfo(m).catch(() => null)));
+    const newMints = [...new Set(fresh.flatMap((bp) => [b58(bp.mintX), b58(bp.mintY)]))];
+    await this._readMints(newMints.filter((m) => !(this._tinfo && this._tinfo.has(m)))).catch(() => { /* each read alone below */ });
+    await Promise.all(newMints.map((m) => this.tokenInfo(m).catch(() => null)));
     const bonds = await this._bonds(chain.map((bp) => bp.address)); const byAddr = new Map(chain.map((bp, i) => [b58(bp.address), { bp, bond: bonds[i] }]));
     const meta = (row, bp, bond) => { const mx = bp ? b58(bp.mintX) : this.tok(row.x).mint, my = bp ? b58(bp.mintY) : this.tok(row.y).mint;
       return { mintX: mx, mintY: my, tier: bp ? this._poolTier(bp) : null, status: this._statusOf(row, bp, bond, now), crowd: this._crowd(mx, my), createdAt: bond ? Number(bond.createdAt) * 1000 : null, creator: bond ? b58(bond.creator) : null }; };
