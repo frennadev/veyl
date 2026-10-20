@@ -1,26 +1,31 @@
-# Render blueprint: the relayer (Docker web service) and the static site. Secrets are entered in the Render dashboard
-# (sync: false), never committed. Set NETWORK / the build --network to mainnet only after DEPLOY.md "Before mainnet".
+# Render blueprint: the relayer (Docker web service) and the static site, on devnet. Secrets are entered in the Render
+# dashboard (sync: false), never committed. Set NETWORK / the build --network to mainnet only after DEPLOY.md "Before mainnet".
+# Steps: DEPLOY.md "Hosting on Render".
 services:
+  # ------------------------------------------------------------------ relayer: fees, submissions, faucet, token data, trade index
   - type: web
     name: veyl-sol-relayer
     runtime: docker
     dockerfilePath: ./relayer/Dockerfile
     dockerContext: .
-    plan: starter
+    plan: starter            # always on (the free plan sleeps, and the trade index would rebuild on every wake)
     healthCheckPath: /health
     envVars:
       - key: NETWORK
         value: "devnet"
-      - key: RPC_URL   # a devnet/mainnet RPC URL (paid provider recommended)
+      - key: RPC_URL   # a dedicated devnet RPC (Helius etc.); the public one rate-limits the relayer
         sync: false
-      - key: RELAYER_SECRET_KEY   # the relayer hot wallet (fee-only, low balance)
+      - key: RELAYER_SECRET_KEY   # the relayer hot wallet (fee-only, low balance): JSON byte array or base58
         sync: false
-      - key: POSTMAN_SECRET_KEY   # optional: approved-set publisher key
+      - key: POSTMAN_SECRET_KEY   # optional: approved-set publisher key (never the relayer's key)
         sync: false
       - key: FAUCET_SECRET_KEY   # DEVNET ONLY: the devnet deployer key (mint authority of the mock tokens) for "Get test tokens". Never set on mainnet.
         sync: false
-      - key: ALLOWED_ORIGINS   # the site origin, e.g. https://veyl-sol-site.onrender.com
-        sync: false
+      - key: ALLOWED_ORIGINS   # CORS: the site's host from the service below (a bare host means https://<host>); add a custom domain here later
+        fromService:
+          type: web
+          name: veyl-sol-site
+          property: host
       - key: MIN_FEE_BPS
         value: "5"
       - key: LOW_BALANCE_SOL
@@ -29,19 +34,31 @@ services:
         value: "1"
       - key: FEE_COVER     # the fee must pay back at least this multiple of the rent + fees a request costs (REVIEW.md M-1)
         value: "1"
+      - key: ACTIVITY_MAX_SWAPS   # the trade index's memory cap across pools, sized for the starter plan's 512 MB
+        value: "100000"
+      - key: JUPITER_API_KEY   # optional: token names and logos without the keyless rate limit
+        sync: false
+      - key: POOL_LOOKUP_TABLES   # optional: the relayer's lookup tables for pools listed since the deploy (it prints them when it makes one)
+        sync: false
+
+  # ------------------------------------------------------------------ the site: homepage, docs, app (static, built from web/)
   - type: web
     name: veyl-sol-site
     runtime: static
     buildCommand: npm ci && npm run build:site -- --network devnet
     staticPublishPath: dist/site
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
         value: "1"
-      - key: RELAYER_HOST
+      - key: RELAYER_HOST   # baked into veyl.config.js as https://<host>
         fromService:
           type: web
           name: veyl-sol-relayer
           property: host
+      - key: SITE_RPC_URL   # the RPC the browser uses. It is public (every visitor's browser sees it): use a separate key, limited to the site's domain
+        sync: false
     routes:
       - type: rewrite
         source: /app
@@ -49,10 +66,13 @@ services:
       - type: rewrite
         source: /docs
         destination: /docs.html
+    # The same headers scripts/build-site.js writes to dist/site/_headers (Render doesn't read that file). connect-src and
+    # img-src allow any https origin here because the relayer's and the RPC's hosts are only known once the services exist;
+    # tighten them to those hosts after the first deploy if you like.
     headers:
       - path: "/*"
         name: Content-Security-Policy
-        value: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+        value: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https: wss:; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
       - path: "/*"
         name: X-Content-Type-Options
         value: "nosniff"
@@ -83,6 +103,12 @@ services:
       - path: "/*.zkey"
         name: Cache-Control
         value: "public, max-age=31536000, immutable"
+      - path: "/zk/*"
+        name: Cache-Control
+        value: "public, max-age=31536000, immutable"
+      - path: "/*.bin"
+        name: Content-Type
+        value: "application/octet-stream"
       - path: "/*.js"
         name: Content-Type
         value: "application/javascript; charset=utf-8"
@@ -95,3 +121,26 @@ services:
       - path: "/veyl.config.js"
         name: Cache-Control
         value: "no-cache"
+      - path: "/sandbox.config.js"
+        name: Cache-Control
+        value: "no-cache"
+
+  # ------------------------------------------------------------------ optional: the sealed-batch committee (2 of 3)
+  # Sealed swaps settle only while t of the n committee nodes run. Each node keeps its key share on a persistent disk, and
+  # members should run on separate infrastructure (committee/README.md "Trust"). Hosting all three here is for devnet
+  # testing only. To add them: uncomment, give each its node key, config and the shared DKG_SESSION, and copy its existing
+  # state (or run a fresh key generation and register the new committee). Disks need a paid plan.
+  # - type: pserv   # a private service: the nodes reach each other over HTTP, nothing public
+  #   name: veyl-sol-committee-1
+  #   runtime: docker
+  #   dockerfilePath: ./committee/Dockerfile
+  #   dockerContext: .
+  #   plan: starter
+  #   disk: { name: committee-1, mountPath: /data, sizeGB: 1 }
+  #   envVars:
+  #     - { key: NETWORK, value: "devnet" }
+  #     - { key: RPC_URL, sync: false }
+  #     - { key: NODE_SECRET_KEY, sync: false }
+  #     - { key: COMMITTEE_JSON, sync: false }   # { index, t, n, peers: [{ index, url, node, boxKey }] }
+  #     - { key: DKG_SESSION, sync: false }
+  # (veyl-sol-committee-2 and -3 the same, with their own key, config and disk)

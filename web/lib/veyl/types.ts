@@ -142,6 +142,8 @@ export interface Batch { seq: string; state: string; count: [number, number]; ro
 export interface SealedState {
   enabled: boolean; paused?: boolean; demo?: boolean; slot?: number; slotMs?: number; epochSlots?: string; minIn?: string[]; kMin?: number; maxRollovers?: number;
   batch?: Batch | null; last?: Batch | null; committee?: { t: number; n: number } | null; err?: string;
+  /// why sealed swaps are off for this pool (engines since open pool creation): 'not-enabled' | 'unknown-pool', and in words
+  reason?: string; why?: string;
 }
 export type SealedSwapState = 'waiting' | 'sealed' | 'claim' | 'refund' | 'claimed' | 'refunded' | 'failed' | 'unknown';
 export interface SealedSwap { id: string; pool: Base58; pair: string; x: Sym; y: Sym; seq: string; sym: Sym; other: Sym; amount: bigint; state: SealedSwapState; expect: bigint | null; at: number }

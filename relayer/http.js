@@ -99,10 +99,12 @@ function app(relayer, srv = { inflight: 0 }) {
     }
   }, 600_000).unref();
   // CORS: ALLOWED_ORIGINS=https://veyl.example,https://www.veyl.example limits browsers to the site; unset = any origin.
+  // A bare host (what a Render blueprint passes from the site service) means https://<host>.
   const allowed = (process.env.ALLOWED_ORIGINS || "")
     .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+    .map((x) => x.trim().replace(/\/+$/, ""))
+    .filter(Boolean)
+    .map((x) => (/^https?:\/\//.test(x) ? x : "https://" + x));
   const send = (res, code, o) =>
     res.status(code).type("application/json").send(j(o)); // j: bigint-safe JSON
   const pools = shared(() => relayer.binPools(), num("POOLS_CACHE_MS", 5_000));

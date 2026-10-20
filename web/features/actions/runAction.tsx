@@ -40,6 +40,15 @@ function stepsFor(rt: Runtime, kind: ActionKind): Step[] {
 }
 
 // ---------------------------------------------------------------- the task (runs outside React, the dialog only shows it)
+/// A next step for errors that have one, shown under the message (which is always shown as it came). A list: a new case is
+/// an entry.
+const ERROR_HINTS: { test: RegExp; hint: string }[] = [
+  // the relayer won't take its fee in a token it can't price (a pool listed since the deploy), or has taken its daily share of it
+  { test: /pay the fee in a listed token|has taken all the fees in .+ it accepts today/i,
+    hint: "Add some of the pair's listed token too (for example SOL or USDC): the relayer then takes its fee from that side." },
+];
+const hintFor = (m: string | null) => (m ? ERROR_HINTS.find((h) => h.test.test(m))?.hint ?? null : null);
+
 interface TaskState { step: number; subs: string[]; status: 'running' | 'done' | 'failed'; error: string | null; outcome: ActionOutcome | null; bar: number | null }
 interface Task { title: string; kind: ActionKind; steps: Step[]; state: Store<TaskState> }
 
@@ -117,6 +126,7 @@ function ActionDialog({ task }: { task: Task }) {
       </ol>
       {s.status === 'failed' && <>
         <p className="err" id="actErr">{s.error}</p>
+        {hintFor(s.error) && <Hint icon="bolt">{hintFor(s.error)}</Hint>}
         <Hint icon="alert">Nothing was taken unless a step above shows confirmed. Notes created for this action stay on this device.</Hint>
         <button className="btn ghost" type="button" id="errClose" onClick={closeModal}>Close</button>
       </>}

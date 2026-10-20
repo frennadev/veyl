@@ -26,6 +26,9 @@ fake.tokens = TK.makeTokens({ network: "devnet", jupiter: async (q) => q.split("
   let r = await go("GET", "/info"); ok("GET /info 200, bigint-safe", r.s === 200 && r.b.a === "1");
   ok("security headers", r.h.get("x-content-type-options") === "nosniff" && r.h.get("x-frame-options") === "DENY" && /default-src 'none'/.test(r.h.get("content-security-policy")) && r.h.get("cache-control") === "no-store" && !r.h.get("x-powered-by") && !r.h.get("etag"));
   ok("CORS any origin by default", r.h.get("access-control-allow-origin") === "*");
+  { process.env.ALLOWED_ORIGINS = "veyl-site.onrender.com/, https://veyl.example"; const s2 = M.serve(fake, 0); await new Promise((r) => s2.once("listening", r)); delete process.env.ALLOWED_ORIGINS;
+    const h = (await fetch("http://127.0.0.1:" + s2.address().port + "/info", { headers: { origin: "https://veyl-site.onrender.com", ...as(250) } })).headers.get("access-control-allow-origin");
+    ok("ALLOWED_ORIGINS: a bare host (what a Render blueprint passes) means https://<host>", h === "https://veyl-site.onrender.com"); s2.close(); }
   r = await go("OPTIONS", "/submit"); ok("preflight 204", r.s === 204 && /POST/.test(r.h.get("access-control-allow-methods")));
   ok("missing pool 400", (await go("GET", "/state")).s === 400);
   ok("repeated pool param 400", (await go("GET", "/state?pool=a&pool=b")).s === 400);

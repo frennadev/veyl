@@ -22,6 +22,39 @@ git add deploy.devnet.json && git commit -m "devnet deploy" && git push   # publ
 Then create the Render blueprint (`render.yaml`: relayer + static site) and set the secrets below; or build the site yourself:
 `RELAYER_URL=https://<relayer> npm run build:site -- --network devnet` and upload `dist/site/` (`vercel deploy dist/site`, `netlify deploy --dir dist/site`). `VEYL-DEVNET.command` does all of this on your Mac with one key, plus seeding and two public links (`START-HERE-DEVNET.md`).
 
+## Hosting on Render (devnet)
+`render.yaml` is a Render blueprint for two services: **veyl-sol-relayer** (Docker web service, starter plan, always on)
+and **veyl-sol-site** (static site, built from `web/` by `npm run build:site`). Render builds from the Git repo, so push the
+branch first; `deploy.devnet.json` (public addresses only) is committed and goes into both.
+
+1. Render dashboard → New → Blueprint → this repo and branch. It reads `render.yaml` and creates both services. Each
+   service's host is passed to the other: the site bakes `https://<relayer host>` into `veyl.config.js`, the relayer allows
+   the site's host in CORS (`ALLOWED_ORIGINS`; a bare host means `https://<host>`).
+2. Enter the secrets it asks for (never committed):
+   | Service | Key | Value |
+   |---|---|---|
+   | relayer | `RPC_URL` | a dedicated devnet RPC (Helius etc.); the public one rate-limits it |
+   | relayer | `RELAYER_SECRET_KEY` | the relayer hot wallet: the JSON byte array in `~/keys/veyl/devnet-relayer.json` (fee-only; keep its balance low) |
+   | relayer | `FAUCET_SECRET_KEY` | devnet only: the devnet deployer key (mint authority of the mock tokens) for "Get test tokens". Never on mainnet |
+   | relayer | `POSTMAN_SECRET_KEY` | optional: the approved-set publisher (never the relayer's key) |
+   | relayer | `JUPITER_API_KEY`, `POOL_LOOKUP_TABLES` | optional (token data without the keyless limit; the relayer's tables for pools listed since the deploy, printed in its log when it makes one) |
+   | site | `SITE_RPC_URL` | the RPC browsers use. **Public**: every visitor sees it. Use a separate key limited to the site's domain, not the relayer's |
+3. The first deploy: the relayer starts, then the site builds. If the site built before the relayer had a host, redeploy
+   the site once. Check `https://<relayer>/health` (`ok`, `balanceSol`), then open `https://<site>/app`.
+4. After a relayer start its trade index reads 7 days of every pool's trades (about 2 minutes on devnet; until then the
+   app reads the chain itself, more slowly), and token names and logos are fetched again. Nothing else is kept on disk:
+   faucet limits also reset on a restart.
+5. A custom domain: add it to the site in Render, then set the relayer's `ALLOWED_ORIGINS` by hand to both origins
+   (`https://<site>.onrender.com,https://veyl.example`) instead of the value from the blueprint.
+
+Costs: the relayer's starter plan (the free plan sleeps, and every wake would rebuild the trade index); the static site is
+free. Keep the relayer wallet funded with devnet SOL (`/health` shows `lowBalance` under `LOW_BALANCE_SOL`). The starter
+plan's 512 MB is why `ACTIVITY_MAX_SWAPS` is 100000 there.
+
+Sealed swaps settle only while the batch committee runs (2 of 3 nodes). They are not in the blueprint by default: each
+node keeps its key share on a persistent disk, and members should run on separate infrastructure. `render.yaml` has a
+commented section for running all three on Render for devnet testing (private services with disks, a paid plan).
+
 ## Mainnet (only after Before mainnet)
 ```bash
 export MAINNET_KEYPAIR_DIR=~/keys/veyl/mainnet                 # OUTSIDE the repo; never committed
