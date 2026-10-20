@@ -63,7 +63,7 @@ export const COLUMNS: Column[] = [
   { id: 'fpt', name: 'Fees / TVL', label: (c) => 'Fees / TVL ' + c.ivLabel, sort: 'fpt', term: 'feeTvl', cell: (p, c) => fromStats(p, c, (s) => <OrDash v={pctOrNull(s.feeTvlPct)} />) },
   { id: 'liq', name: 'Liquidity', sort: 'liq', term: 'liquidity', cell: (p, c) => liquidityCell(p, c) },
   { id: 'vol', name: 'Volume', label: (c) => 'Volume ' + c.ivLabel, sort: 'vol', term: 'volume', cell: (p, c) => fromStats(p, c, (s) => <><OrDash v={usd(s.volumeUsd)} /><Sub>{s.swaps} swaps</Sub></>) },
-  { id: 'fee', name: 'Fee now', label: (c) => (c.E ? 'Fee now' : 'Base fee'), sort: 'fee', term: 'dynamicFee',
+  { id: 'fee', name: 'Trading fee', label: (c) => (c.E ? 'Trading fee' : 'Base fee'), sort: 'fee', term: 'dynamicFee',
     cell: (p, c) => (!c.E ? p.base.toFixed(2) + '%' : needsState(p, c, () => <>{pct(p.st!.fee)}<Sub>base {p.base.toFixed(2)}%</Sub></>)) },
   { id: 'bs', name: 'Bin step', sort: 'bs', term: 'binStep', cell: (p) => (p.bs / 100).toFixed(2) + '%' },
 ];

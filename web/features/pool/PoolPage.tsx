@@ -130,7 +130,7 @@ function PoolStats({ pool: p, m, live, usdY }: { pool: PoolView; m: PoolMath | n
   const rows: Stat[] = !mode || mode === 'preview'
     ? [['Bin step', bs, 'per bin'], ['Base fee', p.base.toFixed(2) + '%', 'rises with volatility'], ['Fee cap', '10%', 'never above']]
     : mode === 'sandbox'
-      ? [['Liquidity', v(() => (usdY != null ? usd(m!.liquidityInY() * usdY) : `${tiny(m!.liquidityInY())} ${tl(p.y)}`)), reserves], ['Fee now', v(() => pct(m!.st.fee)), `base ${p.base.toFixed(2)}%`], ['Bin step', bs, 'per bin']]
+      ? [['Liquidity', v(() => (usdY != null ? usd(m!.liquidityInY() * usdY) : `${tiny(m!.liquidityInY())} ${tl(p.y)}`)), reserves], ['Trading fee now', v(() => pct(m!.st.fee)), `base ${p.base.toFixed(2)}%`], ['Bin step', bs, 'per bin']]
       : [
         ['Liquidity', ps ? usd(ps.tvlUsd) ?? <Dash /> : v(() => tiny(m!.liquidityInY())), reserves],
         ['Volume ' + ivn, ps ? usd(ps.volumeUsd) ?? <Dash /> : <Dash />, ps ? `${ps.swaps} swaps` : 'not recorded on chain'],
@@ -139,7 +139,7 @@ function PoolStats({ pool: p, m, live, usdY }: { pool: PoolView; m: PoolMath | n
         ['Dynamic fee', v(() => pct(m!.st.fee)), `base ${p.base.toFixed(2)}% + volatility${protocolFeeBps != null ? ` · swaps also pay ${(protocolFeeBps / 100).toFixed(2)}% protocol` : ''}`],
         ['Fees, all time', v(() => tiny(engine().fmt(p.x, m!.st.totalFees.x) * m!.price(m!.st.active) + engine().fmt(p.y, m!.st.totalFees.y))), m ? `in ${tl(p.y)} at today's price` : ''],
       ];
-  const termOf = (k: string): Term | null => (/^Liquidity/.test(k) ? 'liquidity' : /^Bin step/.test(k) ? 'binStep' : /^(Fee now|Dynamic fee)/.test(k) ? (protocolFeeBps != null ? 'traderCost' : 'dynamicFee') : /^Base fee/.test(k) ? 'baseFee' : /^Volume/.test(k) ? 'volume' : null);
+  const termOf = (k: string): Term | null => (/^Liquidity/.test(k) ? 'liquidity' : /^Bin step/.test(k) ? 'binStep' : /^(Trading fee now|Fee now|Dynamic fee)/.test(k) ? (protocolFeeBps != null ? 'traderCost' : 'dynamicFee') : /^Base fee/.test(k) ? 'baseFee' : /^Volume/.test(k) ? 'volume' : null);
   return <div className={'stats' + (rows.length === 3 ? ' three' : '')} id="pStats">{rows.map(([k, val, sub]) => { const t = termOf(k); return <div key={k} className="stat"><span>{k}{t && <Tip term={t} align="l" />}</span><b>{val}</b><small>{sub}</small></div>; })}</div>;
 }
 

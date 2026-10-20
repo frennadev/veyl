@@ -19,7 +19,7 @@ import { statusOf } from '@/lib/veyl/services/pools';
 import type { PoolConfig } from '@/lib/veyl/types';
 
 /// The fee tier when the pool has one (open pool creation), else its bin step as before.
-const tierText = (p: PoolConfig) => (p.tier ? `${(p.tier.feePips / 1e4).toFixed(2)}% fee · bin ${(p.tier.binStep / 100).toFixed(2)}%` : `Bin ${(p.bs / 100).toFixed(2)}%`);
+const tierText = (p: PoolConfig) => (p.tier ? `${(p.tier.feePips / 1e4).toFixed(2)}% base fee · ${(p.tier.binStep / 100).toFixed(2)}% price steps` : `Bin ${(p.bs / 100).toFixed(2)}%`);
 
 /// Verified / unverified and "show delisted", shown only once some pool isn't simply verified.
 function StatusChips({ pools }: { pools: PoolView[] }) {

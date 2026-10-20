@@ -220,7 +220,7 @@ function useSwap(c: PanelCtx): TabModel {
   );
   if (sealed && ss.batch) {
     const batch = ss.batch, dir = s.swapX ? 0 : 1, min = E ? E.fmt(a, BigInt(ss.minIn?.[dir] || '0')) : 0, open = batch.state === 'open';
-    const blocker = c.block || (!priv ? 'Sealed swaps spend your shielded balance' : !(v > 0) ? 'Enter an amount' : over(v, c.bal(a)) ? `Not enough ${a} in your shielded balance`
+    const blocker = c.block || (!priv ? 'Sealed swaps pay from your private balance' : !(v > 0) ? 'Enter an amount' : over(v, c.bal(a)) ? `Not enough ${a} in your private balance`
       : v < min ? `The smallest sealed swap here is ${tiny(min)} ${a}` : !open ? `Batch ${batch.seq} is sealing; the next one opens in a moment` : '');
     const proofS = E?.proveMs?.swap?.length ? Math.round(E.proveMs.swap[E.proveMs.swap.length - 1] / 1000) : DEFAULT_PROOF_S;
     return {
@@ -232,7 +232,7 @@ function useSwap(c: PanelCtx): TabModel {
         title: 'Sealing your swap', kind: 'proof', exec: (X) => X.sealedSwap(p, { xIn: s.swapX, amount: v }),
         done: (r) => { clearAmounts(); return {
           title: 'Sealed into batch ' + r.seq, tx: r.tx,
-          body: `Your ${a} left your shielded balance as an encrypted amount. Nobody, the relayer included, can see it. When the batch settles, claim your ${b} on this page.`,
+          body: `Your ${a} left your private balance as an encrypted amount. Nobody, the relayer included, can see it. When the batch settles, claim your ${b} on this page.`,
           activity: { t: `Sealed swap ${a} → ${b}`, s: `Batch ${r.seq} · size hidden`, amt: `${tiny(v)} ${a}` },
         }; },
       }),
@@ -249,7 +249,7 @@ function useSwap(c: PanelCtx): TabModel {
       exec: (X) => (priv ? X.swap(a, b, v) : X.swapPublic(a, b, v)),
       done: (r) => { clearAmounts(); const got = tiny(E!.fmt(b, r.out)); return {
         title: `Got ${got} ${b}`, tx: r.tx,
-        body: priv ? 'Delivered as a new shielded note. The swap\'s amounts were public at the pool; who made it was not.' : 'Delivered to your wallet.',
+        body: priv ? 'Now in your private balance. The swap\'s amounts were public at the pool; who made it was not.' : 'Delivered to your wallet.',
         activity: { t: `Swapped ${a} → ${b}`, s: `${whereOf(priv)} · via ${r.route.join(' → ')}`, amt: `+${got} ${b}` },
       }; },
     }),

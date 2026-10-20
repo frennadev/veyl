@@ -67,7 +67,7 @@ export const GLOSSARY = {
   sendDest: 'To a Veyl address (veyl:…) the money stays private: nobody sees the amount, the sender or the receiver. To a regular Solana address it leaves Veyl: the amount and receiver are public, but not that it came from you.',
   paymentLink: 'A link (and QR code) anyone can use to pay you privately. It only holds your Veyl address and the amount you typed, never any key.',
   passphrase: 'Locks your backup file. Without it the file is useless, to anyone, including you. Write it down and keep it apart from the file.',
-  restore: 'Adds the keys and notes from a backup file to this browser. Nothing already here is removed.',
+  restore: 'Adds what a backup file holds (your keys and private positions) to this browser. Nothing already here is removed.',
   sendTo: 'Where the money goes: back into your private balance (stays hidden), or out to a Solana address (public from there on).',
   claimFees: 'Collects the fees this position has earned so far. The position itself stays open and keeps earning.',
   rebalance: 'Moves the position so it is centred on today\'s price again, in one step, so it starts earning fees again. Fees already earned stay yours.',
@@ -92,7 +92,7 @@ export const GLOSSARY = {
   tokenRules: 'Only plain tokens can be pooled. Tokens that can charge fees on transfer, freeze accounts, be taken back by an issuer or change supply on their own are refused, so a pool can always be withdrawn from.',
   openingPrice: 'The price the pool starts at, in the second token per first token. Set it close to the market price: if it is far off, the first trades will move it there at your expense.',
   poolCrowd: 'How many people provide liquidity in this pool. A quiet pool gives you less to blend in with.',
-  outbox: 'Your device keeps a copy of the private notes each action creates until they show up on Solana, so a note can never be lost on the way. This usually takes a few seconds.',
+  outbox: 'Your device keeps a copy of what each private action adds to your balance until it shows up on Solana, so nothing can be lost on the way. This usually takes a few seconds.',
 } as const;
 
 export type Term = keyof typeof GLOSSARY;

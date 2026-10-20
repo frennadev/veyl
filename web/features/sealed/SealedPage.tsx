@@ -69,7 +69,7 @@ export default function SealedPage() {
       </div>
       <div className="sec"><h2>Your sealed swaps</h2></div>
       <div className="list" id="sealMine">
-        {live && (mine.length ? mine.map((x) => <SealRow key={x.id} x={x} />) : <div className="card empty">No sealed swaps yet. Open a pool with batches, choose Swap, then Sealed.</div>)}
+        {live && (mine.length ? mine.map((x) => <SealRow key={x.id} x={x} />) : <div className="card empty">No sealed swaps yet. Pick a pool above and seal a swap into its next batch.</div>)}
       </div>
     </section>
   );

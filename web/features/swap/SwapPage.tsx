@@ -44,7 +44,7 @@ export default function SwapPage() {
       title: 'Swapping', kind: priv ? 'proof' : 'wallet', exec: (E) => (priv ? E.swap(a, b, v) : E.swapPublic(a, b, v)),
       done: (r) => { swap.set({ amount: '' }); const got = tiny(engine().fmt(b, r.out)); return {
         title: `Got ${got} ${b}`, tx: r.tx,
-        body: priv ? 'Routed through Veyl pools into a new shielded note. The amounts were public at the pool; nothing on-chain connects them to you.' : 'Settled to your wallet.',
+        body: priv ? 'Routed through Veyl pools into your private balance. The amounts were public at the pool; nothing on-chain connects them to you.' : 'Settled to your wallet.',
         activity: { t: `Swapped ${a} → ${b}`, s: `${priv ? 'Private' : 'Public'} · via ${r.route.join(' → ')}`, amt: `+${got} ${b}` },
       }; },
     });

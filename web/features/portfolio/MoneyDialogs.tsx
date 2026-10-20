@@ -54,9 +54,9 @@ function DepositForm() {
       title: 'Depositing', kind: 'wallet', exec: (E) => E.deposit(sym, v),
       done: (r) => ({
         title: `Deposited ${tiny(v)} ${sym}`, tx: r.tx,
-        body: sbx ? 'The approved-set publisher admits it into the shielded pool in a few seconds.'
-          : 'The approved-set publisher admits it into the shielded pool, usually within seconds; until then you can take it back. Back up your keys: they are the only key to these funds.',
-        activity: { t: 'Deposited to shielded balance', s: 'From ' + short(account), amt: `+${tiny(v)} ${sym}` },
+        body: sbx ? 'It joins your private balance after a quick automatic check, in a few seconds.'
+          : 'It joins your private balance after a quick automatic check, usually within seconds. Until then you can take it back from your portfolio. Back up your keys: they are the only way to reach this money.',
+        activity: { t: 'Deposited to private balance', s: 'From ' + short(account), amt: `+${tiny(v)} ${sym}` },
       }),
     });
   };
@@ -79,7 +79,7 @@ export interface SendPrefill { to?: string; amt?: number; sym?: string }
 export const openSend = (pre: SendPrefill = {}) => openModal(<SendDialog pre={pre} />);
 
 const recipientKind = (to: string) =>
-  to.startsWith('veyl:') ? 'Veyl address: stays shielded' : SOLANA_ADDRESS.test(to) ? 'Solana address: leaves the shielded pool' : '';
+  to.startsWith('veyl:') ? 'Veyl address: stays private' : SOLANA_ADDRESS.test(to) ? 'Solana address: leaves Veyl, public from there' : '';
 
 function SendDialog({ pre }: { pre: SendPrefill }) {
   const f = useTokenAmount(pre.sym, pre.amt ? String(pre.amt) : '');
@@ -92,25 +92,26 @@ function SendDialog({ pre }: { pre: SendPrefill }) {
   const submit = () => {
     const v = f.value, dest = to.trim(), inside = dest.startsWith('veyl:'); f.setError('');
     if (!(v > 0)) return f.setError('Enter an amount above zero.');
-    if (!covers(have, v)) return f.setError(`Your shielded balance has ${tiny(have)} ${f.sym}.`);
-    if (!inside && !SOLANA_ADDRESS.test(dest)) return f.setError('Enter a Veyl address (veyl:…) or a full Solana address.');
+    if (!dest) return f.setError('Enter where it goes: a Veyl address (veyl:…) or a Solana address.');
+    if (!inside && !SOLANA_ADDRESS.test(dest)) return f.setError(`“${dest.length > 24 ? dest.slice(0, 22) + '…' : dest}” isn't a Veyl address (veyl:…) or a Solana address. Paste the whole address.`);
+    if (!covers(have, v)) return f.setError(`${tiny(v)} ${f.sym} is more than your private balance of ${tiny(have)} ${f.sym}. Use Max, or deposit more first.`);
     const sym = f.sym;
     runAction({
       title: 'Sending privately', kind: 'proof', exec: (E) => E.withdraw(sym, v, dest),
       done: (r) => ({
         title: `Sent ${tiny(v)} ${sym}`, tx: r.tx,
         body: inside
-          ? 'Delivered as a note only the receiver can read. On chain: two spent notes and two new ones, no amount.'
-            + (sbx && dest === sbx.friendAddress() ? ` Mara's shielded ${sym} here: ${tiny(sbx.fmt(sym, sbx.friendBalance(sym)))}.` : '')
+          ? 'Delivered privately: only the receiver can open it. On-chain, nobody can see the amount, who sent it or who received it.'
+            + (sbx && dest === sbx.friendAddress() ? ` Mara's private ${sym} here: ${tiny(sbx.fmt(sym, sbx.friendBalance(sym)))}.` : '')
           : `Delivered to ${short(dest)}. On-chain it came from the pool, not from you.`,
-        activity: { t: inside ? 'Sent inside the shielded pool' : 'Sent from shielded balance', s: 'To ' + (inside ? 'a Veyl address' : short(dest)), amt: `−${tiny(v)} ${sym}` },
+        activity: { t: inside ? 'Sent privately' : 'Withdrawn from private balance', s: 'To ' + (inside ? 'a Veyl address' : short(dest)), amt: `−${tiny(v)} ${sym}` },
       }),
     });
   };
   return (
     <>
-      <h3 id="dlgTitle">{pre.to ? 'Pay privately' : 'Send privately'}</h3>
-      <p>From your shielded balance. To a <b>Veyl address</b> it stays inside the pool: nobody sees the amount, the sender or the receiver. To a <b>Solana address</b> it leaves the pool: the amount and the receiver are public, not where it came from.</p>
+      <h3 id="dlgTitle">{pre.to ? 'Pay privately' : 'Withdraw or send'}</h3>
+      <p>From your private balance. Send to a <b>Veyl address</b> to pay someone privately: nobody sees the amount, the sender or the receiver. Send to a <b>Solana address</b> to withdraw: the amount and the receiver are public, not where it came from.</p>
       <AssetPicker id="wA" value={f.sym} onChange={f.setSym} />
       <Field id="wAmt" label="Amount" hintId="wBal" hint={`Private: ${tiny(have)} ${f.sym}`}>
         <input id="wAmt" type="text" inputMode="decimal" placeholder="0.00" autoComplete="off" value={f.text} onChange={(e) => f.onAmount(e.target.value)} />
@@ -118,7 +119,7 @@ function SendDialog({ pre }: { pre: SendPrefill }) {
       <div className="fld">
         <label htmlFor="wTo">To<Tip term="sendDest" align="l" /></label>
         <input id="wTo" type="text" placeholder="veyl:… or a fresh Solana address" autoComplete="off" spellCheck={false} value={to} onChange={(e) => setTo(e.target.value)} />
-        <small id="wKind">{isRequest ? 'Payment request · Veyl address: stays shielded' : recipientKind(to.trim())}</small>
+        <small id="wKind">{isRequest ? 'Payment request · Veyl address: stays private' : recipientKind(to.trim())}</small>
         {sbx && <div className="quick">
           <button type="button" id="wMara" onClick={() => setTo(sbx.friendAddress())}>Mara&apos;s Veyl address</button>
           <button type="button" id="wFresh" onClick={() => setTo(sbx.freshAddress())}>A fresh Solana address</button>

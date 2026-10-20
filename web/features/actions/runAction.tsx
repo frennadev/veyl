@@ -8,6 +8,7 @@ import { session, setBusy, invalidate, logActivity } from '@/features/session/se
 import { openModal, closeModal } from '@/components/overlay';
 import { Icon, Hint } from '@/components/ui/primitives';
 import type { ActivityEntry, Runtime, SandboxEngine, VeylEngine } from '@/lib/veyl/types';
+import { rpcTrouble } from '@/lib/rpcErrors';
 
 export type ActionKind = 'proof' | 'sign' | 'wallet';
 export interface ActionOutcome { title: string; body: ReactNode; tx?: string | null; activity?: Omit<ActivityEntry, 'ts'> }
@@ -47,7 +48,7 @@ const ERROR_HINTS: { test: RegExp; hint: string }[] = [
   { test: /pay the fee in a listed token|has taken all the fees in .+ it accepts today/i,
     hint: "Add some of the pair's listed token too (for example SOL or USDC): the relayer then takes its fee from that side." },
 ];
-const hintFor = (m: string | null) => (m ? ERROR_HINTS.find((h) => h.test.test(m))?.hint ?? null : null);
+const hintFor = (m: string | null) => (m ? ERROR_HINTS.find((h) => h.test.test(m))?.hint ?? rpcTrouble(m) : null);
 
 interface TaskState { step: number; subs: string[]; status: 'running' | 'done' | 'failed'; error: string | null; outcome: ActionOutcome | null; bar: number | null }
 interface Task { title: string; kind: ActionKind; steps: Step[]; state: Store<TaskState> }
@@ -177,9 +178,14 @@ function Receipt({ tx }: { tx?: string | null }) {
   const rows = (l: [string, string][]) => l.map(([k, v], i) => <div key={i}><dt>{k}</dt><dd>{v}</dd></div>);
   return (
     <>
-      {(r.proofs || []).map((p, i) => (
-        <div key={i} className="vrf"><Icon name="check" /><span><b>Proof verified</b> · {p.circuit} circuit · made in {(p.ms / 1000).toFixed(1)} s on this device · verified in {p.verifyMs} ms against its verifying key</span></div>
-      ))}
+      {!!r.proofs?.length && (
+        <details className="cw tech">
+          <summary>Technical details</summary>
+          {r.proofs.map((p, i) => (
+            <div key={i} className="vrf"><Icon name="check" /><span><b>Proof verified</b> · {p.circuit} circuit · made in {(p.ms / 1000).toFixed(1)} s on this device · verified in {p.verifyMs} ms against its verifying key</span></div>
+          ))}
+        </details>
+      )}
       {r.seen && (
         <details className="cw" open>
           <summary>What the chain would see</summary>

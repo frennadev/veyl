@@ -42,7 +42,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     await ev(() => window.veylEngine.pause(true)); // bots off: nothing moves under the test except what it does
     await pg.waitForFunction(() => /\$/.test(document.getElementById('poolRows').textContent), null, { timeout: 15000 });
     const head = await pg.textContent('#poolHead');
-    check('pools list: price, liquidity and fee only; no simulated volume, APR, fees or age in practice mode', (await pg.$$('#poolRows tr')).length === 5 && /Price/.test(head) && /Liquidity/.test(head) && /Fee now/.test(head) && !/APR|Volume|Fees \/ TVL|Age/.test(head) && (await pg.$$('#poolRows .spk')).length === 0, head);
+    check('pools list: price, liquidity and fee only; no simulated volume, APR, fees or age in practice mode', (await pg.$$('#poolRows tr')).length === 5 && /Price/.test(head) && /Liquidity/.test(head) && /Trading fee/.test(head) && !/APR|Volume|Fees \/ TVL|Age/.test(head) && (await pg.$$('#poolRows .spk')).length === 0, head);
 
     // the app shell: sidebar, top bar, the pools table, rows -> pool page
     const kp = await pg.textContent('#kpis'); check('top bar: no simulated TVL, positions or fees', !/TVL|Your positions|Fees earned/.test(kp), kp);
@@ -54,7 +54,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     check('clicking a column header sorts by it (liquidity)', liqs.every((v, i) => i === 0 || liqs[i - 1] >= v) && (await pg.getAttribute('#poolHead th[data-sort="liq"]', 'aria-sort')) === 'descending', liqs.join());
     await pg.fill('#poolQ', 'bonk'); await pg.waitForTimeout(200); check('search narrows the list', (await rowsOrder()).join() === 'bonk-sol', (await rowsOrder()).join()); await pg.fill('#poolQ', ''); await pg.waitForTimeout(200);
     await pg.click('#poolRows tr[data-pool="sol-usdt"]'); await pg.waitForFunction(() => /sol-usdt/.test(location.hash) && /\d/.test(document.getElementById('pPx').textContent), null, { timeout: 10000 });
-    const ph = await pg.textContent('#pStats'); check('row opens the pool page: price, liquidity, fee now, bin step; no simulated volume, fees or price history', /Liquidity\$/.test(ph) && /Fee now/.test(ph) && /Bin step0\.10%/.test(ph) && !/Volume|Fees 24h|all time/.test(ph) && !(await pg.isVisible('#pxCard')) && !(await pg.isVisible('#pIv')) && !(await pg.isVisible('#pParamsCard')), ph.slice(0, 120));
+    const ph = await pg.textContent('#pStats'); check('row opens the pool page: price, liquidity, fee now, bin step; no simulated volume, fees or price history', /Liquidity\$/.test(ph) && /Trading fee now/.test(ph) && /Bin step0\.10%/.test(ph) && !/Volume|Fees 24h|all time/.test(ph) && !(await pg.isVisible('#pxCard')) && !(await pg.isVisible('#pIv')) && !(await pg.isVisible('#pParamsCard')), ph.slice(0, 120));
     await pg.click('.side-nav [data-go="sealed"]'); await pg.waitForFunction(() => document.querySelectorAll('#sealPools .sealcard').length === 2, null, { timeout: 15000 });
     check('Sealed swaps page: each sealed pool\'s batch', /SOL–USDC/.test(await pg.textContent('#sealPools')));
     await pg.click('#sideCol'); const coll = await ev(() => document.body.classList.contains('side-c')); await pg.click('#sideCol'); check('sidebar collapses and expands', coll && !(await ev(() => document.body.classList.contains('side-c'))));
@@ -124,7 +124,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
 
     // shielded send to Mara (inside the pool) and a deposit
     await pg.click('[data-open="withdraw"]'); await pg.click('#wA [data-a="USDC"]'); await pg.fill('#wAmt', '25'); await pg.click('#wMara'); await pg.click('#wGo'); b = await done('shielded send');
-    check('shielded send to a Veyl address: hidden amount, Mara receives', b && /Mara's shielded USDC here: 25/.test(b) && /none: not even the token|no amounts|Amount/.test(b), b && b.slice(0, 120)); await closeDone();
+    check('shielded send to a Veyl address: hidden amount, Mara receives', b && /Mara's private USDC here: 25/.test(b) && /none: not even the token|no amounts|Amount/.test(b), b && b.slice(0, 120)); await closeDone();
     // receive: QR + payment link; opening a link pre-fills Send ("Pay privately") and pays inside the pool
     await pg.click('[data-open="receive"]'); await pg.click('#rA [data-a="USDC"]'); await pg.fill('#rAmt', '12');
     const rcv = await ev(() => ({ qr: !!document.querySelector('#rQr svg.qrsvg path'), addr: document.querySelector('#dlgBody .vaddr code').textContent, me: window.veylEngine.veylAddress(), link: document.getElementById('rLink').dataset.link }));
@@ -135,7 +135,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     const pre = await ev(() => ({ to: document.getElementById('wTo').value, amt: document.getElementById('wAmt').value, t: document.getElementById('dlgTitle').textContent, tok: (document.querySelector('#wA [aria-pressed="true"]') || {}).textContent, hash: location.hash }));
     check('a payment link opens "Pay privately" pre-filled (address, amount, token) and clears itself from the URL', pre.to === mara && pre.amt === '7' && pre.t === 'Pay privately' && pre.tok === 'USDC' && pre.hash === '#portfolio', JSON.stringify(pre).slice(0, 120));
     await pg.click('#wGo'); b = await done('payment link');
-    check('paying a link stays inside the pool: Mara now holds 32 USDC privately', b && /Mara's shielded USDC here: 32/.test(b), b && b.slice(0, 120)); await closeDone();
+    check('paying a link stays inside the pool: Mara now holds 32 USDC privately', b && /Mara's private USDC here: 32/.test(b), b && b.slice(0, 120)); await closeDone();
     await pg.click('[data-open="deposit"]'); await pg.click('#dA [data-a="USDT"]'); await pg.fill('#dAmt', '100'); await pg.click('#dGo'); b = await done('deposit');
     check('deposit into the shielded balance (proof, then admitted by the simulated publisher)', b && /Deposited 100(\.00)? USDT/.test(b)); await closeDone();
     await pg.waitForFunction(() => window.veylEngine.chain.shield.pending.length === 0, null, { timeout: 15000 }); await ev(() => window.veylEngine.shieldSync());

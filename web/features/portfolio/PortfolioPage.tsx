@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/primitives';
 import { useBalances } from './balances';
 import { useChainQuery } from '@/features/session/query';
 import { openDeposit, openSend, openReceive } from './MoneyDialogs';
+import { rpcTrouble } from '@/lib/rpcErrors';
 
 export default function PortfolioPage() {
   const live = useSession((s) => isLive(s));
@@ -77,9 +78,9 @@ function PrivateBalanceCard() {
   const E = engine();
   const held = Object.keys(E.tokens).filter((k) => balanceOf(b, 'priv', k) > 1e-12);
   const addr = E.veylAddress();
-  const empty = E.shieldError ? 'Could not read the shielded pool: ' + E.shieldError
-    : account ? 'Nothing shielded yet. ' + (sbx ? 'Top up from your wallet card.' : 'Deposit to start, or share your Veyl address to be paid privately.')
-      : 'Nothing shielded yet. Share your Veyl address to be paid privately, or connect a wallet to deposit.';
+  const empty = E.shieldError ? (rpcTrouble(E.shieldError) ?? 'Could not read your private balance: ' + E.shieldError)
+    : account ? 'Nothing in your private balance yet. ' + (sbx ? 'Top up from your wallet card.' : 'Deposit to start, or share your Veyl address to be paid privately.')
+      : 'Nothing in your private balance yet. Share your Veyl address to be paid privately, or connect a wallet to deposit.';
   return (
     <div className="card shield" id="shieldCard">
       <div className="k"><span>Private balance<Tip term="privateBalance" align="l" /></span><span className="pill priv"><Icon name="lock" />Hidden on-chain</span></div>
@@ -156,14 +157,14 @@ const symOfMint = (E: VeylEngine, mint: string) => Object.keys(E.tokens).find((k
 function takeBack(d: PendingDeposit) {
   runAction({
     title: 'Taking a deposit back', kind: 'wallet', exec: (E) => E.cancelDeposit(d),
-    done: (tx) => ({ title: 'Taken back', body: 'The deposit went back to your wallet. Nothing entered the shielded pool.', tx, activity: { t: 'Deposit taken back', s: 'Before approval', amt: '' } }),
+    done: (tx) => ({ title: 'Taken back', body: 'The deposit went back to your wallet. Nothing reached your private balance.', tx, activity: { t: 'Deposit taken back', s: 'Before approval', amt: '' } }),
   });
 }
 function moveIn(n: LegacyNote, E: VeylEngine) {
   runAction({
-    title: 'Moving a note into the shielded pool', kind: 'proof', exec: (X) => X.migrate(n),
-    done: (r) => ({ title: 'Moved in', tx: r.tx, body: 'The note is now a shielded note. Its amount was already public; from here on what you do with it is not.',
-      activity: { t: 'Moved into the shielded pool', s: 'Legacy note · one proof', amt: `${tiny(E.fmt(n.sym, BigInt(n.value)))} ${n.sym}` } }),
+    title: 'Moving an older deposit into your private balance', kind: 'proof', exec: (X) => X.migrate(n),
+    done: (r) => ({ title: 'Moved in', tx: r.tx, body: 'It\'s now part of your private balance. Its amount was already public; what you do with it from here is not.',
+      activity: { t: 'Moved into private balance', s: 'Older deposit · one proof', amt: `${tiny(E.fmt(n.sym, BigInt(n.value)))} ${n.sym}` } }),
   });
 }
 
@@ -183,7 +184,7 @@ function PendingNotes() {
         {pending.map(({ d, sym }) => (
           <div key={d.pending} className="row">
             <div className="mid"><b className="sens">{tiny(E.fmt(sym, BigInt(d.amount)))} {sym}</b>
-              <small>{sbx ? 'Deposit waiting for the approved-set publisher (a few seconds)' : 'Deposit waiting for the approved-set publisher · yours to take back until then'}</small></div>
+              <small>{sbx ? 'Deposit waiting for a quick automatic check (a few seconds)' : 'Deposit waiting for a quick automatic check · yours to take back until then'}</small></div>
             <div className="rt"><span className="pill warn">Pending</span>
               {!sbx && <div style={{ marginTop: 6 }}><button className="btn sm ghost" type="button" data-cancel={d.pending} onClick={() => takeBack(d)}>Take back</button></div>}</div>
           </div>

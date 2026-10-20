@@ -127,7 +127,7 @@ function StartOverDialog() {
   return (
     <>
       <h3 id="dlgTitle">Start over?</h3>
-      <p>Pools, prices, your wallet, your shielded account and its history go back to the start. Only this browser is affected.</p>
+      <p>Pools, prices, your wallet, your private balance and its history go back to the start. Only this browser is affected.</p>
       <button className="btn" type="button" id="rsYes" onClick={reset}>Reset</button>
     </>
   );

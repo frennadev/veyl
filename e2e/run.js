@@ -113,7 +113,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     await page.click('#doneBtn'); await sleep(2500); await toPortfolio();
     const sh1 = await V.shield(); const pend1 = (await V.readShield()).pending;
     check('on chain: 1,000 USDC in the shielded vault, the notes pending outside the tree (depositor + amount public)', pend1.length === 1 && pend1[0].amount === units(1000, 6) && pend1[0].depositor.equals(user.publicKey) && sh1.nextIndex === 0n && BigInt((await conn.getTokenAccountBalance(V.shieldVault(USDC))).value.amount) === units(1000, 6));
-    check('portfolio lists the pending deposit with "Take back"', /waiting for the approved-set publisher/.test(await page.textContent('#noteList')) && !!(await page.$('#noteList [data-cancel]')));
+    check('portfolio lists the pending deposit with "Take back"', /waiting for a quick automatic check/.test(await page.textContent('#noteList')) && !!(await page.$('#noteList [data-cancel]')));
     // a second deposit, taken back before approval (the depositor's exit; no proof needed)
     await page.click('[data-open="deposit"]'); await sleep(600); if (await page.$('#dAck')) { await page.click('#dAck'); await sleep(300); } await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '25'); await page.click('#dGo'); await page.waitForSelector('#doneBtn, #errClose', { timeout: 300000 }); await page.click('#doneBtn, #errClose'); await sleep(1500); await toPortfolio();
     const w0 = await V.tokenBalance(USDC, user.publicKey); const pend2 = (await V.readShield()).pending.find((p) => p.amount === units(25, 6));
@@ -128,7 +128,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     // send 200 USDC to another Veyl address: stays inside the pool
     await page.click('[data-open="withdraw"]'); await sleep(500); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '200'); await page.fill('#wTo', friend.address); await sleep(200);
     const kind = await page.textContent('#wKind'); await page.click('#wGo'); let t = await finish(); const sp = await noteProof(); await scan(friend);
-    check('private send to a Veyl address through the UI: the receiver decrypts a 200 USDC note; no amount on chain', /Sent 200(\.0+)? USDC/.test(t) && /stays shielded/.test(kind) && friend.balance(USDC) === units(200, 6), t.slice(0, 120) + (sp ? ` (worker proof ${sp.ms} ms)` : ''));
+    check('private send to a Veyl address through the UI: the receiver decrypts a 200 USDC note; no amount on chain', /Sent 200(\.0+)? USDC/.test(t) && /stays private/.test(kind) && friend.balance(USDC) === units(200, 6), t.slice(0, 120) + (sp ? ` (worker proof ${sp.ms} ms)` : ''));
     // send 300 USDC to a fresh Solana address: leaves the pool (amount + receiver public)
     const fresh = Keypair.generate().publicKey; const rel0 = await V.tokenBalance(USDC, relayer.publicKey);
     await page.click('[data-open="withdraw"]'); await sleep(500); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '300'); await page.fill('#wTo', fresh.toBase58()); await page.click('#wGo'); t = await finish(); await noteProof();
@@ -257,7 +257,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     await toPortfolio(); if (!(await page.waitForSelector('#posList [data-pa="withdraw"][data-id="' + zW + '"]', { timeout: 20000 }).catch(() => null))) console.log('    posList:', (await page.textContent('#posList')).replace(/\s+/g, ' ').slice(0, 600), JSON.stringify(await page.evaluate(() => window.veylEngine.shieldPositions().map((p) => p.id))));
     await page.click('#posList [data-pa="withdraw"][data-id="' + zW + '"]'); await sleep(400); await page.click('#wdGo'); t = await finish(); await noteProof();
     const zl = (await aggOf()).find((x) => x.id === zW);
-    check('shielded withdrawal of 100%: the note\'s shares burned from the aggregate, proceeds back as shielded notes', /Withdrew 100%/.test(t) && /shielded balance/.test(t) && (!zl || zl.shares.every((s) => s === '0')), t.slice(0, 160));
+    check('shielded withdrawal of 100%: the note\'s shares burned from the aggregate, proceeds back as shielded notes', /Withdrew 100%/.test(t) && /private balance/.test(t) && (!zl || zl.shares.every((s) => s === '0')), t.slice(0, 160));
     await page.screenshot({ path: path.join(SHOTS, 'app-portfolio-after.png'), fullPage: true });
 
     // encrypted backup -> clear the browser -> restore (the seed brings back every shielded note and position)

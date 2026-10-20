@@ -70,8 +70,8 @@ export function SealBox({ pool: p, read }: { pool: PoolConfig; read: SealedRead 
         <div className="bar"><i id="sealBar" style={{ width: done.toFixed(1) + '%' }}></i></div>
       </>}
       <div className="sides"><div><span>Selling {tl(p.x)}<Tip term="sellers" align="l" /></span><b>{b.count[0]}</b></div><div><span>Selling {tl(p.y)}</span><b>{b.count[1]}</b></div></div>
-      <small><Tip term="kFloor" align="l" /> Sellers, never amounts. A side settles with at least {ss.kMin} sellers or none; short of that the batch runs another epoch{ss.maxRollovers ? ` (up to ${ss.maxRollovers} times)` : ''}, then refunds.
-        {sbx && ' In the demo the epoch is 20 s, and bots seal small swaps so batches fill; a batch waits for a proof you are still making.'}</small>
+      <small><Tip term="kFloor" align="l" /> Sellers, never amounts. A side settles with at least {ss.kMin} sellers or none; short of that the batch runs another round{ss.maxRollovers ? ` (up to ${ss.maxRollovers} times)` : ''}, then refunds.
+        {sbx && ' In the demo a round lasts 20 s, and bots seal small swaps so batches fill; a batch waits for a proof you are still making.'}</small>
       <LastBatch pool={p} last={ss.last} />
     </div>
   );
@@ -107,7 +107,7 @@ function claimSealed(x: SealedSwap) {
     done: (r) => { const got = `${tiny(engine().fmt(r.sym, r.value))} ${r.sym}`; return {
       title: (refund ? 'Refunded ' : 'Claimed ') + got, tx: r.tx,
       body: refund ? `Batch ${x.seq} did not settle, so your ${tl(x.sym)} came back as a new hidden note (minus the relayer's flat fee).`
-        : `Your share of batch ${x.seq} at its clearing price, delivered as a new hidden note. The chain saw a nullifier and a commitment, not the amount.`,
+        : `Your share of batch ${x.seq} at its clearing price, now in your private balance. The chain saw that a claim was made, not the amount.`,
       activity: { t: (refund ? 'Refunded sealed swap · ' : 'Claimed sealed swap · ') + x.pair, s: `Batch ${x.seq} · into a hidden note`, amt: '+' + got },
     }; },
   });

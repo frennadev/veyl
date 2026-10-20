@@ -52,7 +52,7 @@ export function PositionCard({ q, d }: { q: PositionRecord; d: PositionsData }) 
       <div className="b">
         <div><span>Value</span><b className="sens">{amt(q.x, i.value.x)} {q.x}<br />{amt(q.y, i.value.y)} {q.y}</b></div>
         <div><span>Unclaimed fees<Tip term="unclaimedFees" /></span><b className="sens up">{fees ? <>{amt(q.x, i.fees.x)} {q.x}<br />{amt(q.y, i.fees.y)} {q.y}</> : 'None yet'}</b></div>
-        <div><span>Rewards</span><b className="sens">{q.kind === 'shielded' ? <span className="dim">Not earned while shielded</span>
+        <div><span>Rewards</span><b className="sens">{q.kind === 'shielded' ? <span className="dim">Not earned on private positions</span>
           : rewards.length ? rewards.map((r, n) => <span key={r.k}>{n > 0 && <br />}{tiny(engine().fmt(rewardSym(r.k), r.v))} {rewardSym(r.k)}</span>) : 'None'}</b></div>
       </div>
       <PositionPro q={q} i={i} st={st} />

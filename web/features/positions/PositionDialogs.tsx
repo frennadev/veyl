@@ -19,7 +19,7 @@ const PublicHint = () => <Hint icon="alert" tone="warn">Paid to your wallet, in 
 /// A label / value list; a row's optional third item is its value's element id.
 const Amounts = ({ rows }: { rows: [string, ReactNode, string?][] }) => <dl className="dl">{rows.map(([k, v, id]) => <div key={k}><dt>{k}</dt><dd id={id}>{v}</dd></div>)}</dl>;
 /// Where a one-time-key payout goes, in words: the private balance (to = null) or an address.
-const destWords = (to: string | null) => (to ? 'to ' + short(to) : 'to shielded balance');
+const destWords = (to: string | null) => (to ? 'to ' + short(to) : 'to private balance');
 
 // ---------------------------------------------------------------- where a one-time-key payout goes
 function useDestination(id: string) {
@@ -51,8 +51,8 @@ function ClaimDialog({ q, i }: { q: PositionRecord; i: PositionInfo }) {
       title: 'Claiming fees', kind: kindOf(q.kind), exec: (E) => E.claimFees(q, { to: d.to }),
       done: (r) => ({
         title: 'Fees claimed', tx: r.tx,
-        body: `${amt(q.x, r.x)} ${q.x} and ${amt(q.y, r.y)} ${q.y}` + (isPrivate(q.kind) ? (d.to ? ` sent to ${short(d.to)}.` : ' are in your shielded balance as new notes.') : ' are in your wallet.'),
-        activity: { t: `Claimed fees · ${q.x}–${q.y}`, s: isPrivate(q.kind) ? (d.to ? 'To ' + short(d.to) : 'To shielded balance') : 'To wallet', amt: `${amt(q.x, r.x)} ${q.x} + ${amt(q.y, r.y)} ${q.y}` },
+        body: `${amt(q.x, r.x)} ${q.x} and ${amt(q.y, r.y)} ${q.y}` + (isPrivate(q.kind) ? (d.to ? ` sent to ${short(d.to)}.` : ' are in your private balance.') : ' are in your wallet.'),
+        activity: { t: `Claimed fees · ${q.x}–${q.y}`, s: isPrivate(q.kind) ? (d.to ? 'To ' + short(d.to) : 'To private balance') : 'To wallet', amt: `${amt(q.x, r.x)} ${q.x} + ${amt(q.y, r.y)} ${q.y}` },
       }),
     });
   };
@@ -78,15 +78,15 @@ function RewardDialog({ q, i, st }: { q: PositionRecord; i: PositionInfo; st?: P
   const go = () => runAction({
     title: 'Claiming rewards', kind: kindOf(q.kind), exec: (E) => E.claimReward(q, first.k),
     done: (r) => ({
-      title: 'Rewards claimed', tx: r.tx, body: `${tiny(engine().fmt(r.sym, r.amount))} ${r.sym}${isPrivate(q.kind) ? ' in your shielded balance.' : ' in your wallet.'}`,
-      activity: { t: `Claimed rewards · ${q.x}–${q.y}`, s: isPrivate(q.kind) ? 'To shielded balance' : 'To wallet', amt: `${tiny(engine().fmt(r.sym || sym(first.k), r.amount))} ${r.sym || ''}` },
+      title: 'Rewards claimed', tx: r.tx, body: `${tiny(engine().fmt(r.sym, r.amount))} ${r.sym}${isPrivate(q.kind) ? ' in your private balance.' : ' in your wallet.'}`,
+      activity: { t: `Claimed rewards · ${q.x}–${q.y}`, s: isPrivate(q.kind) ? 'To private balance' : 'To wallet', amt: `${tiny(engine().fmt(r.sym || sym(first.k), r.amount))} ${r.sym || ''}` },
     }),
   });
   return (
     <>
       <h3 id="dlgTitle">Claim rewards · {tl(q.x)}–{tl(q.y)}</h3>
       <Amounts rows={list.map((r) => [`Slot ${r.k + 1}`, `${tiny(engine().fmt(sym(r.k), r.v))} ${sym(r.k)}`])} />
-      <Hint icon={isPrivate(q.kind) ? 'lock' : 'alert'}>{isPrivate(q.kind) ? 'Into a new note in your shielded balance.' : 'Paid to your wallet, in public.'}</Hint>
+      <Hint icon={isPrivate(q.kind) ? 'lock' : 'alert'}>{isPrivate(q.kind) ? 'Into your private balance.' : 'Paid to your wallet, in public.'}</Hint>
       <button className="btn" type="button" id="rGo" onClick={go}>Claim {sym(first.k)}</button>
     </>
   );
@@ -144,7 +144,7 @@ function WithdrawDialog({ q, i }: { q: PositionRecord; i: PositionInfo }) {
       title: 'Withdrawing', kind: kindOf(q.kind), exec: (E) => E.removeLiquidity(q, share, { to: d.to }),
       done: (r) => ({
         title: `Withdrew ${share}%`, tx: r.tx,
-        body: isPrivate(q.kind) ? (d.to ? `Sent to ${short(d.to)}. On-chain it came from the pool.` : `Back in your shielded balance: ${amt(q.x, r.x)} ${q.x} and ${amt(q.y, r.y)} ${q.y}.`) : 'Back in your wallet.',
+        body: isPrivate(q.kind) ? (d.to ? `Sent to ${short(d.to)}. On-chain it came from the pool.` : `Back in your private balance: ${amt(q.x, r.x)} ${q.x} and ${amt(q.y, r.y)} ${q.y}.`) : 'Back in your wallet.',
         activity: { t: `Withdrew liquidity · ${q.x}–${q.y}`, s: `${share}% · ${isPrivate(q.kind) ? destWords(d.to) : 'to wallet'}`, amt: '' },
       }),
     });
@@ -154,7 +154,7 @@ function WithdrawDialog({ q, i }: { q: PositionRecord; i: PositionInfo }) {
       <h3 id="dlgTitle">Withdraw · {tl(q.x)}–{tl(q.y)}<Tip term="withdrawShare" align="l" /></h3>
       <Amounts rows={[[q.x, amt(q.x, i.value.x)], [q.y, amt(q.y, i.value.y)]]} />
       <Segmented id="wdPct" dataKey="p" label="Share to withdraw" value={pc} onChange={setPc} options={SHARES.map((v) => ({ value: v, label: v + '%' }))} />
-      {q.kind === 'shielded' ? <Hint icon="lock">Back into your shielded balance as new notes. Public: the shares this removes per bin and what they pay out, not your position&apos;s size or who you are. Your fees so far are claimed into notes in the same proof.</Hint>
+      {q.kind === 'shielded' ? <Hint icon="lock">Back into your private balance. Public: the shares this removes per price bin and what they pay out, not your position&apos;s size or who you are. Fees earned so far come with it.</Hint>
         : q.kind === 'private' ? dest.node : <PublicHint />}
       {q.kind !== 'shielded' && <Hint icon="clock">Unclaimed fees and rewards stay with the position until you claim them.</Hint>}
       <ErrorLine id="wdErr">{err}</ErrorLine>
@@ -177,7 +177,7 @@ function OrderWithdrawDialog({ o, i }: { o: OrderRecord; i: OrderInfo | null }) 
       title: 'Withdrawing the order', kind: kindOf(o.kind), exec: (E) => E.withdrawOrder(o, { to: d.to }),
       done: (r) => ({
         title: 'Order withdrawn', tx: r.tx,
-        body: `${amt(o.x, r.x)} ${o.x} and ${amt(o.y, r.y)} ${o.y}` + (isPrivate(o.kind) ? (d.to ? ` sent to ${short(d.to)}.` : ' back in your shielded balance.') : ' back in your wallet.'),
+        body: `${amt(o.x, r.x)} ${o.x} and ${amt(o.y, r.y)} ${o.y}` + (isPrivate(o.kind) ? (d.to ? ` sent to ${short(d.to)}.` : ' back in your private balance.') : ' back in your wallet.'),
         activity: { t: `Order withdrawn · ${o.x}–${o.y}`, s: (r.filled ? 'Filled · ' : '') + (isPrivate(o.kind) ? destWords(d.to) : 'to wallet'), amt: `${amt(o.x, r.x)} ${o.x} + ${amt(o.y, r.y)} ${o.y}` },
       }),
     });

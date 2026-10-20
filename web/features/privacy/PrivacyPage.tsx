@@ -31,7 +31,7 @@ export function PrivacyChip() {
   const c = usePrivacyChecks();
   return (
     <button className={'pvchip' + (c && c.passed >= 4 ? ' ok' : '')} id="pvChip" type="button" title="Your privacy" aria-label={'Privacy' + (c ? `: ${c.passed} of 5 checks pass` : '')} onClick={() => go('privacy')}>
-      <Icon name="shield" size="sm" /><span className="lg">Private</span><em id="pvChipN">{c ? `${c.passed}/5` : ''}</em>
+      <Icon name="shield" size="sm" /><span className="lg">Privacy</span><em id="pvChipN">{c ? `${c.passed}/5` : ''}</em>
     </button>
   );
 }
