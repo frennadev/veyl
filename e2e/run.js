@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Veyl on Solana, end to end: local validator (8933) -> deploy -> relayer + approved-set publisher (8843) -> the site and the
+// Veyl on Solana, end to end: local validator (8933) -> deploy -> relayer + approved-set publisher (8845, E2E_RELAYER_PORT) -> the site and the
 // real app in Chromium (8873) with a mock Phantom wallet. Phase 2: a shielded deposit (REAL transact proof made in the
 // browser's Web Worker), take-back of a pending deposit, a hidden send to a Veyl address, a withdrawal to a fresh wallet, a
 // shielded swap, shielded liquidity (add, zap, claim, rebalance, remove: position proofs), a shielded limit order, public
@@ -13,7 +13,10 @@ const { chromium } = require('playwright');
 const S = require('../sdk/veyl.js'); const { Veyl, zeros, STATE_DEPTH } = S; const Z = require('../sdk/shield.js');
 const { ROOT, RPC_PORT, startValidator, deployAll, fund, units, sleep } = require('../scripts/lib.js'); const { makeConfig } = require('../scripts/make-config.js');
 const { build } = require('../scripts/build-site.js'); const { serveDist } = require('../scripts/serve-dist.js');
-const RELAYER_PORT = 8843, WEB_PORT = 8873; const WEB = 'http://127.0.0.1:' + WEB_PORT;
+// its own relayer port (E2E_RELAYER_PORT): 8843 is the relayer's default, and a devnet relayer left running there used to answer
+// this test instead of its own (whose spawn then failed to bind), with another approved-set publisher behind it
+const RELAYER_PORT = Number(process.env.E2E_RELAYER_PORT || 8845), WEB_PORT = Number(process.env.E2E_WEB_PORT || 8873); const WEB = 'http://127.0.0.1:' + WEB_PORT;
+const portFree = (port) => new Promise((ok) => { const s = require('net').createServer(); s.once('error', () => ok(false)); s.listen(port, '127.0.0.1', () => s.close(() => ok(true))); });
 const { counts, check, lap, chromePath, finish: report } = require('./harness.js');
 /// the app opens in Sandbox mode by default; this test drives the deployment (Devnet mode against the local validator)
 const { mockMarket } = require('./market-mock.js'); // the price APIs are not reachable from tests: answered in their own shapes
@@ -21,6 +24,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
 const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.mkdirSync(SHOTS, { recursive: true });
 
 (async () => {
+  for (const [name, port] of [['E2E_RELAYER_PORT', RELAYER_PORT], ['E2E_WEB_PORT', WEB_PORT]]) if (!(await portFree(port))) { console.error(`port ${port} is taken (another relayer or site?): stop it or set ${name}`); process.exit(1); }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-e2e-')); const payer = Keypair.generate(); const payerFile = path.join(dir, 'payer.json'); fs.writeFileSync(payerFile, JSON.stringify([...payer.secretKey]));
   const { val, rpc, conn } = await startValidator(dir, payer, RPC_PORT); let browser, web, rel;
   try {
@@ -112,7 +116,9 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     await page.click('[data-open="deposit"]'); await sleep(600); if (await page.$('#dAck')) { await page.click('#dAck'); await sleep(300); } await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '25'); await page.click('#dGo'); await page.waitForSelector('#doneBtn, #errClose', { timeout: 300000 }); await page.click('#doneBtn, #errClose'); await sleep(1500); await toPortfolio();
     const w0 = await V.tokenBalance(USDC, user.publicKey); const pend2 = (await V.readShield()).pending.find((p) => p.amount === units(25, 6));
     if (pend2 && (await page.$('#noteList [data-cancel="' + pend2.pending.toBase58() + '"]'))) { await page.click('#noteList [data-cancel="' + pend2.pending.toBase58() + '"]'); var tb = await finish(); } else var tb = 'no take-back button';
-    check('take back a pending deposit from the UI: the wallet gets the 25 USDC back', (await V.tokenBalance(USDC, user.publicKey)) - w0 === units(25, 6) && (await V.readShield()).pending.length === 1, tb.slice(0, 120));
+    /* only this test's publisher holds the postman key and it admits once an hour here: a deposit admitted anyway means another publisher with that key ran */
+    const admitted = (await V.shield()).nextIndex > 0n; if (admitted) tb = 'the deposit was admitted before the take-back: another approved-set publisher with this POSTMAN_KEY is running; ' + tb;
+    check('take back a pending deposit from the UI: the wallet gets the 25 USDC back', !admitted && (await V.tokenBalance(USDC, user.publicKey)) - w0 === units(25, 6) && (await V.readShield()).pending.length === 1, tb.slice(0, 160));
     check('the publisher admits the first deposit into the tree', (await approveAll()) === 1 && (await V.shield()).nextIndex === 2n);
     await toPortfolio(); await page.waitForFunction(() => /1,?000/.test(document.querySelector('#balList').textContent), null, { timeout: 30000 }).catch(() => {});
     check('shielded balance shows 1,000 USDC (decrypted from the chain with the viewing key)', /1,?000/.test(await page.textContent('#balList')), await page.textContent('#balList'));

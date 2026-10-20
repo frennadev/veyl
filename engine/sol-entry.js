@@ -323,9 +323,15 @@ export class Engine {
   ataIx(payer, mint, owner, tp) { const ata = this.V.ata(mint, owner, tp); return new TransactionInstruction({ programId: S.ATA_PROGRAM, data: Buffer.from([1]),
     keys: [{ pubkey: payer, isSigner: true, isWritable: true }, { pubkey: ata, isSigner: false, isWritable: true }, { pubkey: new PublicKey(owner), isSigner: false, isWritable: false }, { pubkey: new PublicKey(mint), isSigner: false, isWritable: false }, { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, { pubkey: tp, isSigner: false, isWritable: false }] }); }
   async ataIxs(bp) { return [this.ataIx(this.pk, bp.mintX, this.pk, bp.tokenProgramX), this.ataIx(this.pk, bp.mintY, this.pk, bp.tokenProgramY)]; }
-  /// Every lookup table of the deployment (one per 256 addresses), loaded once.
-  async _luts() { if (this._lutAll !== undefined) return this._lutAll; const keys = [this.cfg.lookupTable, ...(this.cfg.lookupTables || [])].filter(Boolean); const out = [];
-    for (const k of keys) { try { const t = (await this.conn.getAddressLookupTable(new PublicKey(k))).value; if (t) out.push(t); } catch { /* skip */ } } this._lutAll = out; return out; }
+  /// Every lookup table to compile against: the deployment's (one per 256 addresses) and the relayer's for pools listed
+  /// since the deploy (/info poolLookupTables, at most 8), refreshed every minute. A table's entries never change once added,
+  /// so a relayer's table can only shorten a transaction, never redirect it; addresses added this slot wait (usableLut).
+  async _luts() { if (this._lutAll && Date.now() - this._lutAt < this._lutTtl) return this._lutAll; if (this._lutP) return this._lutP;
+    this._lutP = (async () => { try { let extra = [];
+      if (this.cfg.relayer) { try { const i = await fetch(this.cfg.relayer + '/info', typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(3000) } : {}).then((x) => x.json()); extra = Array.isArray(i.poolLookupTables) ? i.poolLookupTables.slice(0, 8) : []; } catch { /* the deployment's tables still work */ } }
+      const keys = [...new Set([this.cfg.lookupTable, ...(this.cfg.lookupTables || []), ...extra].filter(Boolean))]; const out = []; let partial = false;
+      for (const k of keys) { try { const raw = (await this.conn.getAddressLookupTable(new PublicKey(k))).value; const t = await S.usableLut(this.conn, raw); if (t) out.push(t); if (t !== raw && raw && raw.isActive()) partial = true; } catch { /* skip */ } }
+      this._lutAll = out; this._lutAt = Date.now(); this._lutTtl = partial ? 2_000 : 60_000; return out; } finally { this._lutP = null; } })(); return this._lutP; }
   async _lut() { const all = await this._luts(); return all[0] || null; }
   /// Sign every transaction in one wallet prompt where the wallet allows it, then send them in order, each confirmed.
   async _sendAll(groups, cu = 1_400_000) {
@@ -377,9 +383,12 @@ export class Engine {
       const ax = o.amountX > 0 ? this.unit(pool.x, o.amountX) : 0n, ay = o.amountY > 0 ? this.unit(pool.y, o.amountY) : 0n;
       const pl = this.plan(st, lo, hi, shape, ax, ay); if (!pl.ids.length) throw new Error(this._sideHint(st, lo, hi, ax, ay));
       const owner = Keypair.generate().publicKey; const groups = []; const per = 16;
-      for (let k = 0; k < pl.ids.length; k += per) { const ids = pl.ids.slice(k, k + per), xs = pl.xs.slice(k, k + per), ys = pl.ys.slice(k, k + per);
-        const pre = await this.V.ensureBinAccountsIxs(this.pk, pk, ids, owner, this.pk); if (pre.length) groups.push(pre);
-        groups.push([await this.V.mintIx(this.pk, pk, { owner, authority: this.pk, ids, amountsX: xs, amountsY: ys, minShares: await this.minSharesFor(pk, ids, xs, ys, slip), deadline: this.deadline() })]); }
+      // the bin arrays and share accounts first (once per chunk), then the mints: 16 bins each, halved while one does not
+      // fit a transaction (a pool listed since the deploy has no lookup table entries yet)
+      const pre = await this.V.ensureBinAccountsIxs(this.pk, pk, pl.ids, owner, this.pk); for (let k = 0; k < pre.length; k += 3) groups.push(pre.slice(k, k + 3));
+      const mint = async (ids, xs, ys) => { const ix = await this.V.mintIx(this.pk, pk, { owner, authority: this.pk, ids, amountsX: xs, amountsY: ys, minShares: await this.minSharesFor(pk, ids, xs, ys, slip), deadline: this.deadline() });
+        if (ids.length > 1 && (await this._bytes([ix], this.pk)) > Engine.MAX_TX) { const h = Math.ceil(ids.length / 2); await mint(ids.slice(0, h), xs.slice(0, h), ys.slice(0, h)); await mint(ids.slice(h), xs.slice(h), ys.slice(h)); } else groups.push([ix]); };
+      for (let k = 0; k < pl.ids.length; k += per) await mint(pl.ids.slice(k, k + per), pl.xs.slice(k, k + per), pl.ys.slice(k, k + per));
       const tx = await this._sendAll(groups);
       return this._savePos({ id: 'q' + Date.now(), kind: 'public', pool: addr, x: pool.x, y: pool.y, owner: owner.toBase58(), authority: this.account, ids: pl.ids, lo, hi, shape, createdAt: Date.now(), tx }); }
     const info = await this.relayerInfo(); const spend = [];
