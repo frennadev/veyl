@@ -228,7 +228,7 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
           await R2.send([V.postProofIx(relayer.publicKey, 1, pr.proof, pr.pubs)], [], 1_400_000); await R2.sendV0([await V.shieldTransactIx(relayer.publicKey, t2.ext, pr.pubs)], [], 600_000); }
         // six users seal into one batch from the pool page (3 sell SOL, 3 sell USDC), proofs in each page's Web Worker
         await setParams({ ...base, epochSlots: 1500n, settleTimeout: 1500n }); const st = await waitRoom(1200); const seq = st.batch.seq; // after funding: room for six
-        const sizes = REAL_SOL ? [['0.04', '0.06', '0.02'], ['95', '210.5', '60']] : [['0.8', '1.25', '0.4'], ['95', '210.5', '60']]; const SW = [];
+        const sizes = REAL_SOL ? [['0.04', '0.06', '0.02'], ['3', '5.5', '2']] : [['0.8', '1.25', '0.4'], ['95', '210.5', '60']]; const SW = [];
         for (const [k, u] of users.entries()) { const pg = u.pg; await pg.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }); await pg.waitForFunction(() => window.veylEngine && window.veylEngine.zw, null, { timeout: 60000 }); await openSeal(pg);
           const mode = await pg.evaluate(() => [...document.querySelectorAll('#swMode [data-m]')].map((b) => b.dataset.m + ':' + b.getAttribute('aria-pressed')).join('|'));
           if (k === 0) check('pool page on devnet: "Sealed" is the default swap mode while the pool has an open batch', /sealed:true/.test(mode), mode);

@@ -83,7 +83,7 @@ class Node {
             this.status.lastShare = { pool: bp.id, seq: String(b.seq), txs: r.txs.length, at: new Date().toISOString() }; this.log(`node ${this.index}: share for ${bp.id} batch ${b.seq} verified (${r.txs.length} txs)`); }
           const nb = await this.V.batch(pool, b.seq); let nv = 0; for (let i = 0; i < 8; i++) if (nb.verified & (1 << i)) nv++;
           if (this.doSettle && nb.state === 'closed' && nv >= c.t) { const r = await CM.settle(this.V, this.key, pool, b.seq, { totals: await CM.recoverTotals(this.V, pool, b.seq, this.bits) }); this.status.lastSettle = { pool: bp.id, seq: String(b.seq), at: new Date().toISOString() }; this.log(`node ${this.index}: settled ${bp.id} batch ${b.seq}`); void r; } }
-      } catch (e) { const m = String((e && e.message) || e); if (m.slice(0, 200) !== this.status.lastError) this.log(`node ${this.index}: ${bp.id}: ${m.slice(0, 600)}`); this.status.lastError = m.slice(0, 200); }
+      } catch (e) { const m = String((e && e.message) || e); if (m.slice(0, 200) !== this.status.lastError && !/"Custom":60(16|18|19)\b|0x17(80|82|83)\b/.test(m)) this.log(`node ${this.index}: ${bp.id}: ${m.slice(0, 600)}`); this.status.lastError = m.slice(0, 200); }
     } }
   async health() { let bal = null; try { bal = this.conn ? (await this.conn.getBalance(this.key.publicKey)) / 1e9 : null; } catch {}
     return { ok: true, version: VERSION, index: this.index, t: this.cfg.t, n: this.cfg.n, node: this.key.publicKey.toBase58(), boxKey: Buffer.from(this.box.publicKey).toString('base64'), pk: this.share ? this.share.pk : null,
@@ -109,7 +109,14 @@ if (require.main === module) {
   // a failed RPC call outside the tick's try/catch (a dropped connection, ECONNRESET) is logged; it must not stop the node
   process.on('unhandledRejection', (e) => console.error('unhandled', (e && e.message) || e));
   const config = env.COMMITTEE_JSON ? JSON.parse(env.COMMITTEE_JSON) : JSON.parse(fs.readFileSync(env.COMMITTEE_CONFIG, 'utf8'));
-  const node = new Node({ config, key, stateDir: env.STATE_DIR || path.join(process.cwd(), 'committee-state-' + config.index), depLoader: () => deployFromEnv(env), rpc: env.RPC_URL || null, settle: env.SETTLE !== '0', close: env.CLOSE !== '0', bits: Number(env.BSGS_BITS || J.TOTAL_BITS) });
+  const stateDir = env.STATE_DIR || path.join(process.cwd(), 'committee-state-' + config.index);
+  // SHARE_JSON: an existing key share (and TRANSCRIPT_JSON, else the network's committed transcript) from the environment, for
+  // hosts without a disk; written to the state dir once, checked against this member's index and committee first
+  if (env.SHARE_JSON && !fs.existsSync(path.join(stateDir, 'share.json'))) { let sh; try { sh = JSON.parse(env.SHARE_JSON); } catch { console.error('SHARE_JSON is not JSON'); process.exit(1); }
+    if (sh.index !== config.index || sh.t !== config.t || sh.n !== config.n || !sh.sk || !sh.pk) { console.error(`SHARE_JSON is not member ${config.index}'s share of this ${config.t}-of-${config.n} committee`); process.exit(1); }
+    const tr = env.TRANSCRIPT_JSON || fs.readFileSync(path.join(__dirname, 'transcript.' + (env.NETWORK || 'local') + '.json'), 'utf8'); try { JSON.parse(tr); } catch { console.error('TRANSCRIPT_JSON is not JSON'); process.exit(1); }
+    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(stateDir, 'share.json'), JSON.stringify(sh), { mode: 0o600 }); fs.writeFileSync(path.join(stateDir, 'transcript.json'), tr, { mode: 0o644 }); }
+  const node = new Node({ config, key, stateDir, depLoader: () => deployFromEnv(env), rpc: env.RPC_URL || null, settle: env.SETTLE !== '0', close: env.CLOSE !== '0', bits: Number(env.BSGS_BITS || J.TOTAL_BITS) });
   const port = Number(env.PORT || 8863); const srv = node.serve(port);
   console.log(`committee node ${config.index} of ${config.n} (t = ${config.t}) v${VERSION} on ${port}, node key ${key.publicKey.toBase58()}`);
   (async () => {
