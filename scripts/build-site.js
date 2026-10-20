@@ -12,6 +12,7 @@
 'use strict';
 const fs = require('fs'); const path = require('path'); const crypto = require('crypto'); const { spawnSync } = require('child_process');
 const N = require('./net.js'); const H = require('./site-headers.js'); const { makeConfig } = require('./make-config.js');
+const { publicRpcFor } = require('../sdk/rpc.js');
 const R = N.ROOT;
 
 /// noDeploy: build the no-deployment preview (VEYL_CONFIG = null) even when deploy.<network>.json exists (the sandbox and smoke tests).
@@ -54,7 +55,8 @@ function build(network, { out = path.join(R, 'dist/site'), env = process.env, lo
     let js = makeConfig(dep, { RELAYER_URL: relayer, RPC_URL: rpc, CHAIN_NAME: env.CHAIN_NAME || cfg.chainName, EXPLORER: env.EXPLORER || cfg.explorer });
     const c = JSON.parse(js.slice('window.VEYL_CONFIG='.length).replace(/;\s*$/, '')); c.zk = zk; if (cfg.explorerSuffix !== undefined) c.explorerSuffix = cfg.explorerSuffix;
     fs.writeFileSync(path.join(out, 'veyl.config.js'), 'window.VEYL_CONFIG=' + JSON.stringify(c, null, 1) + ';\n');
-    connect = [rpc, relayer]; ws = [rpc]; img = [relayer]; // the relayer serves token logos (relayer/tokens.js)
+    const pub = publicRpcFor(dep.network); // the app falls back to it when the RPC fails (sdk/rpc.js): HTTP only, no websocket
+    connect = [rpc, relayer, ...(pub ? [pub] : [])]; ws = [rpc]; img = [relayer]; // the relayer serves token logos (relayer/tokens.js)
     log(`config baked from deploy.${network}.json: rpc ${rpc}, relayer ${relayer}`);
   } else {
     fs.writeFileSync(path.join(out, 'veyl.config.js'), 'window.VEYL_CONFIG=null; /* no deploy.' + network + '.json yet: the app shows its "no configuration" state */\n');

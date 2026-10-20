@@ -8,6 +8,7 @@ const S = require('../sdk/veyl.js');
 const { Veyl, H, rand, merklePath, packProof, withdrawInput, newNote, encodeAction, contextOf, removeDigest, signedDigest, STATE_DEPTH, ASP_DEPTH, priceOf, chunkOf, slotOf, j, shapeWeights, sideWeights, distribute, sharesForMint, EMPTY_BIN, MIN_LIQUIDITY } = S;
 const snarkjs = () => { if (!window.snarkjs) throw new Error('snarkjs is not loaded'); return window.snarkjs; };
 const Z = require('../sdk/shield.js');
+const { connectionFor } = require('../sdk/rpc.js');
 import { walletList, onWallets, waitForWallet, setChain } from './wallets.js';
 import { installShield } from './shield-engine.js';
 import { installSealed } from './sealed-engine.js';
@@ -67,7 +68,7 @@ export async function decryptBackup(text, pass) { let o; try { o = JSON.parse(te
 export class Engine {
   /// cfg = window.VEYL_CONFIG: { chainName, rpc, explorer, relayer, programs, zk:{wasm,zkey}, tokens:{SYM:{mint,decimals,pool}}, binPools:[...] }
   constructor(cfg) {
-    this.cfg = cfg; this.conn = new Connection(cfg.rpc, 'confirmed');
+    this.cfg = cfg; this.conn = connectionFor(cfg.rpc, cfg.cluster, { log: (m) => console.warn('[veyl] ' + m) }); // falls back to the cluster's public RPC
     setChain(cfg.cluster); // Wallet Standard sign requests name this chain
     this.V = new Veyl({ connection: this.conn, programs: cfg.programs });
     this.store = new Store('veyl:sol:' + cfg.programs.entry);

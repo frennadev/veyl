@@ -8,7 +8,7 @@
     "vkey": "node scripts/vkey-to-rust.js --all",
     "bundle": "esbuild engine/sol-entry.js --bundle --minify --format=iife --global-name=Veyl --outfile=site/veyl-sol.js --define:global=window --external:crypto && esbuild engine/committee-worker.src.js --bundle --minify --format=iife --outfile=site/committee-worker.js --define:global=self --external:crypto",
     "arb": "node arb/arb.js",
-    "test": "node tests/http.js && node tests/tokens.js && node tests/activity.js && node tests/market.js && node tests/markets.js && node tests/wallets.js && node tests/arb.js && node tests/run.js",
+    "test": "node tests/http.js && node tests/tokens.js && node tests/activity.js && node tests/market.js && node tests/markets.js && node tests/wallets.js && node tests/rpc.js && node tests/arb.js && node tests/run.js",
     "e2e": "node e2e/run.js",
     "preflight": "node scripts/preflight.js",
     "deploy": "node scripts/deploy.js",

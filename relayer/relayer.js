@@ -38,8 +38,9 @@
 // postman.js (approved-set publisher), faucet.js (/drip), luts.js (lookup tables for pools listed since the deploy), screening.js (denylist),
 // env.js (keys and deployment from env).
 'use strict';
-const { Connection, PublicKey } = require('@solana/web3.js');
+const { PublicKey } = require('@solana/web3.js');
 const S = require('../sdk/veyl.js'); const { Veyl } = S;
+const { connectionFor } = require('../sdk/rpc.js');
 require('../sdk/shield.js'); require('../sdk/sealed.js'); // they add the shielded and sealed instructions to Veyl
 const VERSION = require('../package.json').version;
 const LOW_BALANCE_LAMPORTS = Number(process.env.LOW_BALANCE_SOL || 0.05) * 1e9;
@@ -136,7 +137,8 @@ if (require.main === module) {
   const env = process.env; const dep = deployFromEnv(env);
   // a dropped connection to the RPC (a connect timeout, a reset) is retried a few times: resending a signed transaction is safe
   const retryFetch = async (url, init) => { for (let i = 0; ; i++) { try { return await fetch(url, init); } catch (e) { if (i >= 3) throw e; await new Promise((r) => setTimeout(r, 500 * 2 ** i)); } } };
-  const conn = new Connection(env.RPC_URL || dep.rpc, { commitment: 'confirmed', fetch: retryFetch });
+  // and when the RPC fails (down, rate-limited, key rejected, 5xx), the cluster's public RPC takes the request (sdk/rpc.js)
+  const conn = connectionFor(env.RPC_URL || dep.rpc, dep.network, { fetch: retryFetch, log: (m) => console.error(m) });
   const wallet = keyFromEnv(env, 'RELAYER_SECRET_KEY', 'RELAYER_KEY'); if (!wallet) { console.error('Set RELAYER_SECRET_KEY (or RELAYER_KEY=<keypair file>): the relayer\'s own fee-only hot wallet.'); process.exit(1); }
   const postman = keyFromEnv(env, 'POSTMAN_SECRET_KEY', 'POSTMAN_KEY');
   const r = new Relayer({ connection: conn, wallet, deploy: dep, postman, minFeeBps: Number(env.MIN_FEE_BPS || 5), feeCover: Number(env.FEE_COVER || 1) });
