@@ -591,3 +591,22 @@ button:disabled{cursor:not-allowed}
 .lwc-read b{font-weight:500;color:var(--ink)}
 .lwc-read .up{color:var(--good)}.lwc-read .dn{color:var(--bad)}
 .lwc a[href*="tradingview"]{opacity:.55}
+/* create pool: fee tiers as cards (web/features/create/CreatePoolPage.tsx) */
+.tierkey{display:block;line-height:1.5;margin-top:-2px}
+.tiercat{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:4px 0 8px}.tiercat b{font-weight:500;font-size:13.5px;color:var(--ink-2)}.tiercat span{font-size:12.5px;color:var(--muted)}
+.tiers{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tier{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:2px 7px;padding:12px 14px;text-align:left;border-radius:var(--r-s);border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink);cursor:pointer;font:inherit;transition:border-color var(--d-fast) var(--ease),background var(--d-fast) var(--ease)}
+.tier b{font-size:17px;font-weight:500;font-variant-numeric:tabular-nums}.tier span{font-size:12.5px;color:var(--muted)}
+.tier small{grid-column:1/-1;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tier:hover{border-color:var(--line-3)}
+.tier:focus-visible{outline:2px solid var(--rose);outline-offset:2px}
+.tier[aria-pressed="true"]{border-color:var(--rose);background:var(--wine-tint)}.tier[aria-pressed="true"] span,.tier[aria-pressed="true"] small{color:var(--ink-2)}
+/* pool panel: the default range choice and "More options" (web/features/pool/panel/parts.tsx) */
+.rangenote{display:block;font-size:12.5px;line-height:1.5;color:var(--ink-2)}.rangenote b{font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+.moreopts{display:grid;gap:12px;margin-top:4px}
+.morebtn{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:0 2px;border-top:1px solid var(--line);color:var(--ink-2);font:inherit;font-size:14px;font-weight:500;text-align:left;cursor:pointer;background:none}
+.morebtn small{font-size:12.5px;font-weight:400;color:var(--muted)}.morebtn .ic{margin-left:auto;transition:transform var(--d-fast) var(--ease)}
+.morebtn[aria-expanded="true"] .ic{transform:rotate(180deg)}.morebtn:hover{color:var(--ink)}
+.morebtn:focus-visible{outline:2px solid var(--rose);outline-offset:2px;border-radius:4px}
+.linkbtn{display:inline;padding:0;border:0;background:none;color:var(--wine);font:inherit;font-weight:500;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.linkbtn:hover{color:var(--wine-2)}

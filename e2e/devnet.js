@@ -73,7 +73,9 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
     const finish = async () => { await page.waitForSelector('#doneBtn, #errClose', { timeout: 180000 }); const t = await dlgText(); if (await page.$('#doneBtn')) await page.click('#doneBtn'); else { console.log('    dialog error:', t.slice(-400)); await page.click('#errClose'); } await sleep(900); return t; };
     const ready = async (sel = '#actGo') => { try { await page.waitForFunction((s) => { const b = document.querySelector(s); return b && !b.disabled; }, sel, { timeout: 60000 }); return true; } catch { console.log('    not ready:', await page.textContent(sel)); return false; } };
     const openPool = async (id) => { await page.evaluate((h) => { location.hash = h; }, 'pool-' + id); await page.waitForFunction(() => !document.querySelector('#pStats .skel') && /\d/.test(document.querySelector('#pStats').textContent), null, { timeout: 60000 }); await sleep(800); };
-    const panel = async (tab, src) => { await page.click('#tabs [data-tab="' + tab + '"]'); await page.click('#srcSeg [data-src="' + src + '"]'); await sleep(300); };
+    // the tab and the source; Add and Zap keep the exact range (bin presets, shape) under "More options", so open it
+    const panel = async (tab, src) => { await page.click('#tabs [data-tab="' + tab + '"]'); await page.click('#srcSeg [data-src="' + src + '"]'); await sleep(300);
+      await page.evaluate(() => { const b = document.querySelector('#moreBtn[aria-expanded="false"]'); if (b) b.click(); }); await sleep(100); };
     const toPortfolio = async () => { await page.evaluate(() => { location.hash = 'pools'; }); await sleep(300); await page.click('[data-go="home"]'); await sleep(300); await page.waitForFunction(() => !document.body.dataset.loading && !document.querySelector('#posList .skel'), null, { timeout: 30000 }).catch(() => {}); await sleep(600); };
     const mints = Object.fromEntries(Object.values(T).map((t) => [t.mint.toBase58(), { sym: t.sym, decimals: t.decimals }]));
     const friend = new Z.ShieldWallet(require('crypto').randomBytes(32), { mints, pools: [] });

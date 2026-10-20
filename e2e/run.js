@@ -88,7 +88,9 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     const finish = async () => { await page.waitForSelector('#doneBtn, #errClose', { timeout: 600000 }); const t = await dlgText(); if (await page.$('#doneBtn')) await page.click('#doneBtn'); else { console.log('    dialog error:', t.slice(-400)); await page.click('#errClose'); } await sleep(900); return t; };
     const ready = async (sel = '#actGo') => { try { await page.waitForFunction((s) => { const b = document.querySelector(s); return b && !b.disabled; }, sel, { timeout: 30000 }); return true; } catch { console.log('    not ready:', await page.textContent(sel)); return false; } };
     const openPool = async (id) => { await page.evaluate((h) => { location.hash = h; }, 'pool-' + id); await page.waitForFunction(() => !document.querySelector('#pStats .skel') && /\d/.test(document.querySelector('#pStats').textContent), null, { timeout: 30000 }); await sleep(800); };
-    const panel = async (tab, src) => { await page.click('#tabs [data-tab="' + tab + '"]'); await page.click('#srcSeg [data-src="' + src + '"]'); await sleep(300); };
+    // the tab and the source; Add and Zap keep the exact range (bin presets, shape) under "More options", so open it
+    const panel = async (tab, src) => { await page.click('#tabs [data-tab="' + tab + '"]'); await page.click('#srcSeg [data-src="' + src + '"]'); await sleep(300);
+      await page.evaluate(() => { const b = document.querySelector('#moreBtn[aria-expanded="false"]'); if (b) b.click(); }); await sleep(100); };
     const toPortfolio = async () => { await page.evaluate(() => { location.hash = 'pools'; }); await sleep(300); await page.click('[data-go="home"]'); await sleep(300); await page.waitForFunction(() => !document.body.dataset.loading && !document.querySelector('#posList .skel'), null, { timeout: 90000 }); await sleep(500); };
     const swapLp = async (xForY, amount) => L.send([await L.swapIx(lp.publicKey, BPX.address, xForY, amount)], [], 1_400_000);
     const proveMs = () => page.evaluate(() => (window.veylEngine.lastProof ? window.veylEngine.lastProof : null));
@@ -177,7 +179,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     console.log('  proving a shielded add (2 legs + position)...', lap()); if (await ready()) { await page.click('#actGo'); t = await finish(); } await noteProof();
     let zps = await aggOf(); const zp = zps[0];
     const aggOnChain = zp && (await V.aggregateOf(BPX.address, zp.lo));
-    check('shielded add through the UI: two hidden-amount legs + a position proof; the aggregate holds exactly the note\'s shares', /Position added/.test(t) && /shielded aggregate/.test(t) && zp && aggOnChain.every((s, i) => s === BigInt(zp.shares[i])) && zp.shares.some((s) => s !== '0'), t.slice(0, 140) + ' ' + lap());
+    check('shielded add through the UI: two hidden-amount legs + a position proof; the aggregate holds exactly the note\'s shares', /Position added/.test(t) && /not who added it or how big your position is/.test(t) && zp && aggOnChain.every((s, i) => s === BigInt(zp.shares[i])) && zp.shares.some((s) => s !== '0'), t.slice(0, 140) + ' ' + lap());
     check('on chain the shares belong to the shielded owner PDA (never a wallet or a one-time key)', !!(await V.shareAccount(BPX.address, V.shieldOwner(), EP, S.chunkOf(zp.lo))));
     // public zap (wallet)
     await panel('zap', 'pub'); await page.click('#zapSeg [data-z="y"]'); await page.click('#presets [data-w="5"]'); await page.fill('#zapAmt', '100'); await sleep(1500);
@@ -207,7 +209,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     await openPool('sol-usdc'); await panel('zap', 'priv'); await page.click('#zapSeg [data-z="y"]'); await page.click('#presets [data-w="5"]'); await page.fill('#zapAmt', '40'); await sleep(1500);
     console.log('  proving a shielded zap...', lap()); if (await ready()) { await page.click('#actGo'); t = await finish(); } await noteProof();
     zps = await aggOf();
-    check('shielded zap through the UI: one USDC note -> a two-sided shielded position (size hidden)', /Zapped in/.test(t) && /hidden/.test(t) && zps.length >= 1, t.slice(0, 140) + ' ' + lap());
+    check('shielded zap through the UI: one USDC note -> a two-sided shielded position (size hidden)', /Zapped in/.test(t) && /held privately: nobody can see how big it is/.test(t) && zps.length >= 1, t.slice(0, 140) + ' ' + lap());
 
     // portfolio: shielded + public positions and orders
     await toPortfolio();

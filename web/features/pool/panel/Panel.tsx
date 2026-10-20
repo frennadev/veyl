@@ -65,8 +65,8 @@ function TabView({ tab, ctx }: { tab: Tab; ctx: PanelCtx }) {
 function ActionHint({ ctx }: { ctx: PanelCtx }) {
   if (!ctx.E) return <p className="hint" id="actHint"><Icon name="wallet" /><span>Connect a wallet to continue.</span></p>;
   if (ctx.priv) return (
-    <p className="hint" id="actHint"><Icon name="lock" /><span>Spends from your shielded balance: up to two notes per token, merged first when it takes more. Proofs are made on this device
-      {ctx.mode === 'sandbox' ? ' (several seconds, longer on a phone). For an instant try, pay from the wallet: no proof, all public.' : '.'}</span></p>
+    <p className="hint" id="actHint"><Icon name="lock" /><span>Paid from your private balance. Your device first makes a proof that the money is yours, which takes a few seconds (longer on a phone).
+      {ctx.mode === 'sandbox' ? ' For an instant try, pay from the wallet: no proof, all public.' : ''}</span></p>
   );
   return <Hint id="actHint" icon="alert" tone="warn">Public: linked to your wallet for anyone to read.</Hint>;
 }

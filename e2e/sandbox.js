@@ -98,7 +98,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     // public add around the price
     await pg.goto(WEB + '/app.html#pool-sol-usdc'); await pg.waitForTimeout(1200); await pg.click('#srcSeg [data-src="pub"]'); await pg.fill('#amtX', '2'); await pg.fill('#amtY', '300');
     await pg.waitForFunction(() => !document.getElementById('actGo').disabled, null, { timeout: 10000 }); await pg.click('#actGo'); b = await done('add liquidity');
-    check('add liquidity (spot, 11 bins) from the play wallet', b && /Position added/.test(b), lap()); await closeDone();
+    check('add liquidity (spot, the default Balanced range) from the play wallet', b && /Position added/.test(b), lap()); await closeDone();
     const bars0 = await pg.$$eval('#binChart rect.bar', (r) => r.length); check('bin chart drawn from sandbox state (71 bins)', bars0 === 71, bars0);
 
     // limit order, then a bot buy fills it

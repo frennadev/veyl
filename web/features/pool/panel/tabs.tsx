@@ -10,13 +10,13 @@ import { runAction } from '@/features/actions/runAction';
 import { tiny } from '@/lib/format';
 import { useAsyncQuery } from '@/features/session/query';
 import {
-  PRIVATE_MAX_BINS, SHAPE_LABEL, binIds, distribution, engineShape, rangeFromBins, simPlan, type Side,
+  MAX_BINS, PRIVATE_MAX_BINS, SHAPE_LABEL, binIds, distribution, engineShape, rangeFromBins, simFeesPerDay, simPlan, type Side,
 } from '@/lib/veyl/services/liquidity';
 import { quoteFees, type PoolView } from '@/lib/veyl/services/pools';
 import type { Mode, SdkPort, VeylEngine } from '@/lib/veyl/types';
 import { priceInput, type PoolMath } from '../poolMath';
 import { clearAmounts, panel, setPanel, type PanelState, type Tab } from '../state';
-import { AmountBox, ShapeRange, Simulator, maxText, type Detail, type SeenText } from './parts';
+import { AmountBox, MoreOptions, RangeChoice, ShapeRange, Simulator, maxText, usd2, usdCents, type Detail, type SeenText } from './parts';
 
 export interface PanelCtx {
   pool: PoolView; m: PoolMath | null; E: VeylEngine | null; sdk: SdkPort | null; mode: Mode; s: PanelState;
@@ -45,32 +45,49 @@ function useAdd(c: PanelCtx): TabModel {
   const dist = m && c.sdk ? distribution(c.sdk, ids, a, s.shape, s.side, m.price(a), ax, ay) : null;
   const plan = m && c.sdk ? simPlan(c.sdk, ids, a, s.shape, s.side, m.price, ax, ay, c.usdY) : null;
   const setSide = (side: Side) => panel.set((x) => ({ side, ...rangeFromBins(x.hi - x.lo + 1, side) }));
+  const X = tl(p.x), Y = tl(p.y);
   const short = over(ax, c.bal(p.x)) ? p.x : over(ay, c.bal(p.y)) ? p.y : null;
+  // "Both tokens" around the price with only one amount: the half of the range meant for the other token stays empty and
+  // that share is paid back, so the position comes out smaller than typed and lopsided. Say so and offer the one-token side.
+  const oneSided = s.side === 'both' && lo < a && hi > a && (ax > 0) !== (ay > 0) ? (ax > 0 ? 'x' : 'y') : null;
   const blocker = c.block || (!m ? 'Reading the pool…' : !(ax > 0 || ay > 0) ? 'Enter an amount'
-    : short ? `Not enough ${short}${priv ? ' in your shielded balance' : ' in your wallet'}`
-      : priv && n > PRIVATE_MAX_BINS ? `Narrow the range to ${PRIVATE_MAX_BINS} bins`
-        : (lo > a && ax === 0) || (hi < a && ay === 0) ? `This range takes only ${lo > a ? p.x : p.y}` : '');
-  const details: Detail[] = [['Bins', <>{n}{n > PRIVATE_MAX_BINS && priv && <> <span className="down">(max {PRIVATE_MAX_BINS} private)</span></>}</>]];
-  if (m) details.push(['Value', `${tiny(ax * m.price(a) + ay)} ${tl(p.y)}`]);
-  if (!priv) details.push(['Rent', '≈ 0.049 SOL per 60-bin share account', 'rent']);
-  details.push(['Network fee', networkFee(priv, 'Relayer, a flat fee per proof (quoted when you confirm)'), 'networkFee']);
+    : short ? `Not enough ${tl(short)}${priv ? ' in your private balance' : ' in your wallet'}`
+      : oneSided ? `Add ${oneSided === 'x' ? Y : X} too, or choose Only ${oneSided === 'x' ? X : Y}`
+        : priv && n > PRIVATE_MAX_BINS ? `Narrow the range to ${PRIVATE_MAX_BINS} bins`
+          : (lo > a && ax === 0) || (hi < a && ay === 0) ? `This range takes only ${lo > a ? X : Y}` : '');
+  // what happens to the money, in plain words, right above the button
+  const valueY = m ? ax * m.price(a) + ay : null;
+  const day = plan && m && c.usdY != null && (ax > 0 || ay > 0) && !oneSided ? simFeesPerDay(plan, m.st, p.stats, c.ivSecs, m.binValue, m.binFor) : null;
+  const startsLater = m && (lo > a || hi < a) ? (lo > a ? `when ${X} rises to ${tiny(m.price(lo))} ${Y}` : `when ${X} falls to ${tiny(m.price(hi))} ${Y}`) : null;
+  const details: Detail[] = [
+    ['You add', ax > 0 || ay > 0 ? [ax > 0 ? `${tiny(ax)} ${X}` : '', ay > 0 ? `${tiny(ay)} ${Y}` : ''].filter(Boolean).join(' + ') + (valueY != null && c.usdY != null ? ` (≈ ${usd2(valueY * c.usdY)})` : '') : '—'],
+    ['Earns', oneSided ? '—' : startsLater ? `nothing until the price is in range, ${startsLater}` : day != null ? `about ${usdCents(day)} a day in fees at recent volume, while the price stays in range` : 'swap fees while the price stays in range', 'estFees'],
+    ['Held', priv ? 'privately: only this browser can open it' : 'by your wallet, in public'],
+  ];
+  if (!priv) details.push(['Rent', '≈ 0.049 SOL per 60-bin share account, refunded when it closes', 'rent']);
+  details.push(['Network fee', networkFee(priv, 'a small flat relayer fee, taken from what you add'), 'networkFee']);
   return {
     body: <>
       <div className="list" id="tab-add" style={{ gap: 12 }}>
         <div className="lbl"><span>Tokens to add<Tip term="side" align="l" /></span></div>
         <Segmented id="sideSeg" dataKey="side" label="Tokens to add" value={s.side} onChange={setSide}
-          options={[{ value: 'both', label: 'Both tokens' }, { value: 'x', label: 'Only ' + tl(p.x), id: 'sideX' }, { value: 'y', label: 'Only ' + tl(p.y), id: 'sideY' }]} />
-        <AmountBox ids={{ box: 'boxX', input: 'amtX', tk: 'tkX', left: 'hintX', bal: 'balX', max: 'maxX' }} label="Amount of the first token" sym={p.x} hidden={s.side === 'y'}
+          options={[{ value: 'both', label: 'Both tokens' }, { value: 'x', label: 'Only ' + X, id: 'sideX' }, { value: 'y', label: 'Only ' + Y, id: 'sideY' }]} />
+        <AmountBox ids={{ box: 'boxX', input: 'amtX', tk: 'tkX', left: 'hintX', bal: 'balX', max: 'maxX' }} label={'Amount of ' + X} sym={p.x} hidden={s.side === 'y'}
           value={s.amtX} onChange={(amtX) => setPanel({ amtX })} left={m && hi < a ? 'Not used below the price' : ''} balance={c.balText(p.x)} onMax={() => setPanel({ amtX: maxText(c.bal(p.x)) })} />
-        <AmountBox ids={{ box: 'boxY', input: 'amtY', tk: 'tkY', left: 'hintY', bal: 'balY', max: 'maxY' }} label="Amount of the second token" sym={p.y} hidden={s.side === 'x'}
+        <AmountBox ids={{ box: 'boxY', input: 'amtY', tk: 'tkY', left: 'hintY', bal: 'balY', max: 'maxY' }} label={'Amount of ' + Y} sym={p.y} hidden={s.side === 'x'}
           value={s.amtY} onChange={(amtY) => setPanel({ amtY })} left={m && lo > a ? 'Not used above the price' : ''} balance={c.balText(p.y)} onMax={() => setPanel({ amtY: maxText(c.bal(p.y)) })} />
+        {oneSided && <div className="hint warn" id="oneSided"><Icon name="alert" /><span>
+          &ldquo;Both tokens&rdquo; needs some {oneSided === 'x' ? Y : X} as well. With only {oneSided === 'x' ? X : Y}, the part of your range {oneSided === 'x' ? 'below' : 'above'} today&apos;s
+          price stays empty: some of your {oneSided === 'x' ? X : Y} can be paid back, and the position can start out of range.{' '}
+          <button type="button" className="linkbtn" id="useOneSide" onClick={() => setSide(oneSided)}>Use only {oneSided === 'x' ? X : Y}</button></span></div>}
+        <RangeChoice m={m} stats={p.stats} binStep={p.bs} cap={priv ? PRIVATE_MAX_BINS : MAX_BINS} capWhy={priv ? `a private position covers at most ${PRIVATE_MAX_BINS} price bins` : `a position covers at most ${MAX_BINS} price bins`} />
       </div>
-      <ShapeRange m={m} stats={p.stats} binStep={p.bs} dist={dist}><Simulator plan={plan} m={m} stats={p.stats} usdY={c.usdY} ivSecs={c.ivSecs} /></ShapeRange>
+      <MoreOptions><ShapeRange m={m} stats={p.stats} binStep={p.bs} dist={dist}><Simulator plan={plan} m={m} stats={p.stats} usdY={c.usdY} ivSecs={c.ivSecs} /></ShapeRange></MoreOptions>
     </>,
     details, blocker,
     label: lockLabel(priv, 'Add privately', 'Add from wallet'),
     seen: priv
-      ? { hidden: 'Your wallet, your balances, how large your position is (the shielded pool holds every shielded position together; your share is a note only you can read).', pub: 'This add: its bins and the amounts and shares it puts in (the pool\'s reserves move), the relayer\'s flat fee.' }
+      ? { hidden: 'Your wallet, your balances, and how big your position is.', pub: 'That liquidity went into these price bins and how much, plus the relayer\'s fee.' }
       : PUBLIC_SEEN('Your wallet, the bins and amounts, and every later claim and withdrawal.'),
     run: () => {
       const shape = s.shape;
@@ -79,8 +96,8 @@ function useAdd(c: PanelCtx): TabModel {
         exec: (E) => E.addLiquidity(p, { priv, amountX: ax, amountY: ay, lo, hi, shape: engineShape(shape) }),
         done: (pos) => { clearAmounts(); return {
           title: 'Position added', tx: pos.tx,
-          body: priv ? `Your ${tl(p.x)}–${tl(p.y)} position is live inside the shielded aggregate. On-chain: this action's change per bin, not whose it is or how large your position is. Back up your keys.` : `Your ${tl(p.x)}–${tl(p.y)} position is live, owned by your wallet.`,
-          activity: { t: `Added liquidity · ${tl(p.x)}–${tl(p.y)}`, s: `${whereOf(priv)} · ${pos.ids.length} bins · ${SHAPE_LABEL[shape]}`, amt: [ax ? `${tiny(ax)} ${tl(p.x)}` : '', ay ? `${tiny(ay)} ${tl(p.y)}` : ''].filter(Boolean).join(' + ') },
+          body: priv ? `Your ${X}–${Y} position is open and earns while the price stays in its range. On-chain, people see liquidity added to ${pos.ids.length} price bins, not who added it or how big your position is. Back up your keys so you can always reach it.` : `Your ${X}–${Y} position is open, owned by your wallet.`,
+          activity: { t: `Added liquidity · ${X}–${Y}`, s: `${whereOf(priv)} · ${pos.ids.length} bins · ${SHAPE_LABEL[shape]}`, amt: [ax ? `${tiny(ax)} ${X}` : '', ay ? `${tiny(ay)} ${Y}` : ''].filter(Boolean).join(' + ') },
         }; },
       });
     },
@@ -108,7 +125,8 @@ function useZap(c: PanelCtx): TabModel {
         <AmountBox ids={{ input: 'zapAmt', tk: 'zapTk', left: 'zapPrev', bal: 'zapBal', max: 'zapMax' }} label="Amount to zap in" sym={sym}
           value={s.zapAmt} onChange={(zapAmt) => setPanel({ zapAmt })} left={prevText && '≈ ' + prevText} balance={c.balText(sym)} onMax={() => setPanel({ zapAmt: maxText(c.bal(sym)) })} />
       </div>
-      <ShapeRange m={m} stats={p.stats} binStep={p.bs} dist={dist} />
+      <RangeChoice m={m} stats={p.stats} binStep={p.bs} cap={ZAP_MAX_BINS} capWhy={`a zap covers at most ${ZAP_MAX_BINS} price bins`} />
+      <MoreOptions><ShapeRange m={m} stats={p.stats} binStep={p.bs} dist={dist} /></MoreOptions>
     </>,
     details: [['Bins', String(n), 'bins'], ['Swap inside the pool', prevText || '—'], ['Network fee', networkFee(priv), 'networkFee']],
     blocker, label: lockLabel(priv, 'Zap in privately', 'Zap in from wallet'),
@@ -118,7 +136,7 @@ function useZap(c: PanelCtx): TabModel {
       exec: (X) => X.zap(p, { priv, xIn: s.zapX, amount: v, lo, hi, shape: engineShape(s.shape) }),
       done: (pos) => { clearAmounts(); return {
         title: 'Zapped in', tx: pos.tx,
-        body: `One ${sym} payment became a ${tl(p.x)}–${tl(p.y)} position across ${pos.ids.length} bins${priv ? ', held in the shielded aggregate (its size is hidden).' : '.'}`,
+        body: `One ${sym} payment became a ${tl(p.x)}–${tl(p.y)} position across ${pos.ids.length} price bins${priv ? '. It\'s held privately: nobody can see how big it is or that it\'s yours.' : '.'}`,
         activity: { t: `Zapped into ${tl(p.x)}–${tl(p.y)}`, s: `${whereOf(priv)} · ${pos.ids.length} bins`, amt: `${tiny(v)} ${sym}` },
       }; },
     }),

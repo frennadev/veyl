@@ -15,7 +15,14 @@ import { cleanAmount, tiny, SOLANA_ADDRESS } from '@/lib/format';
 import type { FeeTier, TokenCheck } from '@/lib/veyl/types';
 
 const CATEGORY_LABEL: Record<string, string> = { stable: 'Stablecoins', major: 'Major tokens', volatile: 'Volatile tokens' };
-const pctOf = (pips: number) => (pips / 1e4).toFixed(pips < 1000 ? 2 : 2).replace(/\.?0+$/, '') + '%';
+const CATEGORY_HINT: Record<string, string> = {
+  stable: 'two tokens that both stay near the same value, like USDC–USDT',
+  major: 'large, liquid tokens, like SOL–USDC',
+  volatile: 'new or fast-moving tokens, where prices jump',
+};
+/// 0.01%, 0.05%, 0.30%, 1%, 2%: two decimals under 1%, whole numbers above, so a column of tiers reads evenly.
+const pct = (v: number) => (v < 1 ? v.toFixed(2) : String(+v.toFixed(2))) + '%';
+const pctOf = (pips: number) => pct(pips / 1e4);
 
 /// A token field: a mint address typed in, or one of Veyl's listed tokens picked from the list.
 function TokenField({ id, label, mint, onMint, check }: { id: string; label: string; mint: string; onMint: (m: string) => void; check: TokenCheck | null }) {
@@ -85,6 +92,10 @@ export default function CreatePoolPage() {
   const market = useMemo(() => { const ua = symA ? usdOf(symA) : null, ub = symB ? usdOf(symB) : null; return ua && ub ? ua / ub : null; }, [symA, symB]);
   const tier = tiers.find((t) => t.id === tierId) || null;
   const p = cleanAmount(price).value;
+  const offBy = market && p > 0 ? p / market - 1 : null; // how far the typed price is from the market's
+  const priceHint = !symA || !symB ? 'The price is set in the second token: how many of it one of the first token is worth.'
+    : market ? <>Market: 1 {symA} = {tiny(market)} {symB} <button className="btn sm ghost" type="button" onClick={() => setPrice(String(+market.toPrecision(6)))}>Use it</button></>
+      : `No market price found for ${symA} in ${symB}. Check one before you set it: a pool opened far from the market loses money to the first traders.`;
   const blocker = unavailable ? 'Not available on this deployment yet' : !live ? 'Not connected' : !account ? 'Connect a wallet' : !valid(mintA) || !valid(mintB) ? 'Choose two tokens' : mintA === mintB ? 'Choose two different tokens'
     : !checkA || !checkB ? 'Checking the tokens…' : !bothOk ? 'A token can\'t be used' : tierId == null ? 'Choose a fee tier' : existing ? 'This pool already exists' : !(p > 0) ? 'Set the opening price' : '';
 
@@ -109,12 +120,17 @@ export default function CreatePoolPage() {
         <div className="card pad list" style={{ gap: 14 }}>
           <TokenField id="cpA" label="First token" mint={mintA} onMint={setMintA} check={checkA} />
           <TokenField id="cpB" label="Second token (the price is quoted in it)" mint={mintB} onMint={setMintB} check={checkB} />
-          <div className="lbl"><span>Fee tier<Tip term="feeTier" align="l" /></span><span className="dim">fixed for the pool&apos;s life</span></div>
+          <div className="lbl"><span>Fee tier<Tip term="feeTier" align="l" /></span><span className="dim">can&apos;t be changed later</span></div>
+          <small className="dim tierkey">Swap fee: what each trade pays, earned by the pool&apos;s liquidity providers. Price step: the gap between one price bin and the next<Tip term="binStep" align="l" /></small>
           {Object.entries(byCategory).map(([cat, list]) => (
             <div key={cat}>
-              <small className="dim">{CATEGORY_LABEL[cat] || 'Other'}</small>
-              <div className="seg full" role="group" aria-label={'Fee tiers for ' + (CATEGORY_LABEL[cat] || cat)} style={{ flexWrap: 'wrap', marginTop: 6 }}>
-                {list.map((t) => <button key={t.id} type="button" data-tier={t.id} aria-pressed={tierId === t.id} onClick={() => setTierId(t.id)}>{pctOf(t.feePips)} <small>bin {(t.binStep / 100).toFixed(2)}%</small></button>)}
+              <div className="tiercat"><b>{CATEGORY_LABEL[cat] || 'Other'}</b>{CATEGORY_HINT[cat] && <span>{CATEGORY_HINT[cat]}</span>}</div>
+              <div className="tiers" role="group" aria-label={'Fee tiers for ' + (CATEGORY_LABEL[cat] || cat)}>
+                {list.map((t) => (
+                  <button key={t.id} type="button" className="tier" data-tier={t.id} aria-pressed={tierId === t.id} onClick={() => setTierId(t.id)}>
+                    <b>{pctOf(t.feePips)}</b><span>swap fee</span><small>{pct(t.binStep / 100)} price step</small>
+                  </button>
+                ))}
               </div>
             </div>
           ))}
@@ -122,10 +138,11 @@ export default function CreatePoolPage() {
             ? <Hint icon="alert" tone="warn">Pool creation isn&apos;t available on this deployment yet: its fee tiers can&apos;t be read. Try again after the next update.</Hint>
             : <small className="dim">Reading the fee tiers…</small>)}
           {existing && <Hint icon="alert" tone="warn">A {symA}–{symB} pool at this tier already exists. {existingId ? <button className="btn sm ghost" type="button" onClick={() => openPool(existingId)}>Open it</button> : 'Pick another tier to create a second pool of this pair.'}</Hint>}
-          <Field id="cpPrice" label={<>Opening price{symA && symB ? ` (${symB} per ${symA})` : ''}<Tip term="openingPrice" align="l" /></>}
-            hint={market ? <>Market: {tiny(market)} <button className="btn sm ghost" type="button" onClick={() => setPrice(String(+market.toPrecision(6)))}>Use it</button></> : 'Set it close to the market price.'}>
-            <input id="cpPrice" type="text" inputMode="decimal" placeholder="0" autoComplete="off" value={price} onChange={(e) => setPrice(cleanAmount(e.target.value).text)} />
+          <Field id="cpPrice" label={<>Opening price{symA && symB ? ` · ${symB} per 1 ${symA}` : ''}<Tip term="openingPrice" align="l" /></>}
+            hint={priceHint}>
+            <input id="cpPrice" type="text" inputMode="decimal" placeholder={symA && symB ? `How many ${symB} one ${symA} is worth` : 'Pick both tokens first'} autoComplete="off" value={price} onChange={(e) => setPrice(cleanAmount(e.target.value).text)} />
           </Field>
+          {offBy !== null && Math.abs(offBy) >= 0.05 && <Hint icon="alert" tone="warn" id="cpPriceWarn">That&apos;s {Math.round(Math.abs(offBy) * 100)}% {offBy > 0 ? 'above' : 'below'} the market price. Traders will buy and sell against your liquidity until the pool reaches the market price, and the difference comes out of what you deposit.</Hint>}
           <dl className="det">
             <div><dt>Bond<Tip term="bond" align="l" /></dt><dd>{terms ? `${Number(terms.amount) / 1e9} SOL, refundable after ${terms.lockDays} days` : 'A refundable SOL deposit, returned after the lock period'}</dd></div>
             {tier && <div><dt>Traders pay<Tip term="traderCost" align="l" /></dt><dd>{pctOf(tier.feePips)} + volatility fee{protocolFeeBps != null ? ` + ${(protocolFeeBps / 100).toFixed(2)}% protocol` : ''}</dd></div>}
