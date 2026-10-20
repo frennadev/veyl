@@ -78,7 +78,7 @@ class Node {
             this.status.lastShare = { pool: bp.id, seq: String(b.seq), txs: r.txs.length, at: new Date().toISOString() }; this.log(`node ${this.index}: share for ${bp.id} batch ${b.seq} verified (${r.txs.length} txs)`); }
           const nb = await this.V.batch(pool, b.seq); let nv = 0; for (let i = 0; i < 8; i++) if (nb.verified & (1 << i)) nv++;
           if (this.doSettle && nb.state === 'closed' && nv >= c.t) { const r = await CM.settle(this.V, this.key, pool, b.seq, { totals: await CM.recoverTotals(this.V, pool, b.seq, this.bits) }); this.status.lastSettle = { pool: bp.id, seq: String(b.seq), at: new Date().toISOString() }; this.log(`node ${this.index}: settled ${bp.id} batch ${b.seq}`); void r; } }
-      } catch (e) { this.status.lastError = String(e.message).slice(0, 200); }
+      } catch (e) { const m = String((e && e.message) || e); if (m.slice(0, 200) !== this.status.lastError) this.log(`node ${this.index}: ${bp.id}: ${m.slice(0, 600)}`); this.status.lastError = m.slice(0, 200); }
     } }
   async health() { let bal = null; try { bal = this.conn ? (await this.conn.getBalance(this.key.publicKey)) / 1e9 : null; } catch {}
     return { ok: true, version: VERSION, index: this.index, t: this.cfg.t, n: this.cfg.n, node: this.key.publicKey.toBase58(), boxKey: Buffer.from(this.box.publicKey).toString('base64'), pk: this.share ? this.share.pk : null,

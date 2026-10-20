@@ -20,6 +20,6 @@ module.exports = (Base) => class Sealed extends Base {
     for (const b of this._sealed) { const pool = new PublicKey(b.address); try { const st = await V.sealedState(pool); if (!st || !st.batch) continue; const { sealed: s, batch: x, slot } = st;
       if (x.state === 'open' && BigInt(slot) >= x.endSlot + 2n) { /* 2 slots of grace: the committee's nodes usually close first */ await V.send([V.closeBatchIx(this.wallet.publicKey, pool, x.seq)], [], 1_400_000); n++; }
       for (let q = s.seq - 1n; q >= 0n && q >= s.seq - 4n; q--) { const y = await V.batch(pool, q); if (y && y.state === 'closed' && BigInt(slot) > y.closedSlot + s.settleTimeout) { await V.send([V.failBatchIx(pool, q)], [], 200_000); n++; } }
-    } catch (e) { if (!/"Custom":60(16|18|19)\b|0x17(80|82|83)\b/.test(e.message)) console.error('sealed crank', b.id, e.message.slice(0, 120)); } } // a node closed or settled it first: nothing to do
+    } catch (e) { const m = String((e && e.message) || e); if (!/"Custom":60(16|18|19)\b|0x17(80|82|83)\b/.test(m)) console.error('sealed crank', b.id, m.slice(0, 120)); } } // a node closed or settled it first: nothing to do
     return n; }
 };
