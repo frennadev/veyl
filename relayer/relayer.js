@@ -116,9 +116,16 @@ class RelayerCore {
     return out > 0 && cost > 0 ? { out, rate: out / cost } : null; }
   /// A discovered token this relayer cannot value for its fee floor.
   _unvalued(sym) { return !!(this.extraTokens && this.extraTokens[sym]) && !(this.derivedPrices && this.derivedPrices[sym] > 0); }
-  /// The relayer's fee account for a discovered token, created when missing (its rent is in shieldCost).
-  async _ensureFeeAccount(mint) { const k = new PublicKey(mint).toBase58(); if (!this.extraTokens || !this.extraTokens[k]) return; const tp = await this.V.tokenProgram(k); const ata = this.V.ata(k, this.wallet.publicKey, tp);
-    if (await this.conn.getAccountInfo(ata)) return; const spl = require('@solana/spl-token'); await this.V.send([spl.createAssociatedTokenAccountIdempotentInstruction(this.wallet.publicKey, ata, this.wallet.publicKey, new PublicKey(k), tp)], [], 100_000); }
+  /// Create fee accounts atomically with the action that pays for them. A rejected request spends no ATA rent.
+  async _feeAccountIxs(kind, req) {
+    const spl = require('@solana/spl-token'); const out = []; const seen = new Set();
+    for (const { sym } of this._shieldFees(kind, req)) {
+      const t = this.extraTokens && this.extraTokens[sym]; if (!t || seen.has(t.mint)) continue; seen.add(t.mint);
+      const mint = new PublicKey(t.mint), tp = await this.V.tokenProgram(mint), ata = this.V.ata(mint, this.wallet.publicKey, tp);
+      if (!(await this.conn.getAccountInfo(ata))) out.push(spl.createAssociatedTokenAccountIdempotentInstruction(this.wallet.publicKey, ata, this.wallet.publicKey, mint, tp));
+    }
+    return out;
+  }
 }
 const Fees = require('./fees.js'), Notes = require('./notes.js'), Shielded = require('./shielded.js'), Sealed = require('./sealed.js'), Postman = require('./postman.js'), Faucet = require('./faucet.js'), Luts = require('./luts.js');
 class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(Luts(RelayerCore))))))) {
@@ -126,11 +133,8 @@ class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(Luts(RelayerCore
   async _withDiscovery(f) { try { await this.discover(); } catch { /* the deployment's tokens still work */ } try { return await f(); } catch (e) { if (!/unknown token/.test(String(e && e.message))) throw e; await this.discover(true); return f(); } }
   async feeQuote(req) { return this._withDiscovery(() => super.feeQuote(req)); }
   /// A pool's accounts being added to a lookup table right now (syncPoolLuts) are waited for, a few seconds at most.
-  async submit(req) { return this._withDiscovery(async () => { for (const m of feeMints(req)) await this._ensureFeeAccount(m); if (this._lutJob) await Promise.race([this._lutJob.catch(() => {}), new Promise((r) => setTimeout(r, 8000))]); return super.submit(req); }); }
+  async submit(req) { return this._withDiscovery(async () => { if (this._lutJob) await Promise.race([this._lutJob.catch(() => {}), new Promise((r) => setTimeout(r, 8000))]); return super.submit(req); }); }
 }
-/// The mints a request pays this relayer's fees in (legs, transact / sealed external data, an LP action's pool tokens).
-function feeMints(req) { const out = new Set(); const add = (m) => { if (m && typeof m === 'string' && m.length >= 32) out.add(m); };
-  add(req.mint); if (req.ext) add(req.ext.mint); if (req.leg && req.leg.ext) add(req.leg.ext.mint); for (const l of req.legs || []) { add(l.mint); if (l.ext) add(l.ext.mint); } return [...out]; }
 module.exports = { Relayer, serve, isAllowed, clientKey, pricesFrom, WORST, SIGNED, PROOF_LEGS, SHIELD_KINDS, keyFromEnv, deployFromEnv };
 
 if (require.main === module) {
@@ -151,7 +155,7 @@ if (require.main === module) {
   const port = Number(env.PORT || 8843); const srv = serve(r, port);
   console.log('relayer', r.wallet.publicKey.toBase58(), 'v' + VERSION, dep.network, 'listening on', port, postman ? '(+ approved-set publisher)' : '');
   // graceful stop: no new connections, let in-flight submissions finish (max 25 s), then exit
-  const stop = (sig) => { console.log(sig, 'received: draining'); clearInterval(srv.asp); clearInterval(srv.bal); clearInterval(srv.crank); srv.close();
+  const stop = (sig) => { console.log(sig, 'received: draining'); clearInterval(srv.asp); clearInterval(srv.bal); clearInterval(srv.crank); clearInterval(srv.admit); srv.close();
     const t0 = Date.now(); const wait = setInterval(() => { if (srv.inflight === 0 || Date.now() - t0 > 25_000) { clearInterval(wait); process.exit(0); } }, 200); };
   process.on('SIGTERM', () => stop('SIGTERM')); process.on('SIGINT', () => stop('SIGINT'));
 }

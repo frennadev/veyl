@@ -28,14 +28,14 @@ const MAX_TOTAL = Number(process.env.ACTIVITY_MAX_SWAPS || 500_000); // across e
 function makeActivity({ conn, pools, program, parse = (logs) => S.logEvents(logs).filter((e) => e.program === program), maxTotal = MAX_TOTAL, intervalMs = Number(process.env.ACTIVITY_MS || 120_000), gapMs = Number(process.env.ACTIVITY_GAP_MS || 250), now = () => Math.floor(Date.now() / 1000), log = () => {} }) {
   const byPool = new Map(); // address -> { swaps: [...], newest, created, complete, oldestT }
   if (!program && !arguments[0].parse) throw new Error("activity: the bin program id is required (only its own events count)");
-  let timer = null, running = null, readyAt = 0;
+  let timer = null, running = null, readyAt = 0, generation = 0, started = false;
   const bodies = new Map(); // what -> { at, json, gz }: serialized once per sweep
   const pause = () => new Promise((r) => setTimeout(r, gapMs));
 
   /// One pool, incrementally: new signatures down to the newest already seen (the first time: back to KEEP), their
   /// transactions in chunks, their Swapped events for this pool.
   async function refresh(addr) {
-    const key = new PublicKey(addr); const A = byPool.get(addr) || { swaps: [], newest: null, created: null, complete: false, oldestT: Infinity };
+    const key = new PublicKey(addr); const cached = byPool.get(addr); const A = cached ? { ...cached, swaps: [...cached.swaps] } : { swaps: [], newest: null, created: null, complete: false, oldestT: Infinity };
     const t = now(); const fresh = []; let before;
     for (let page = 0; page < 50; page++) {
       const sigs = await conn.getSignaturesForAddress(key, { limit: PAGE, before }, "confirmed"); await pause();
@@ -49,7 +49,8 @@ function makeActivity({ conn, pools, program, parse = (logs) => S.logEvents(logs
     for (let i = 0; i < ok.length; i += TX_CHUNK) {
       const chunk = ok.slice(i, i + TX_CHUNK);
       const txs = await conn.getTransactions(chunk.map((s) => s.signature), { commitment: "confirmed", maxSupportedTransactionVersion: 0 }); await pause();
-      txs.forEach((tx, k) => { if (!tx) return; const bt = tx.blockTime || chunk[k].blockTime || t;
+      if (txs.length !== chunk.length || txs.some((tx) => !tx || !tx.meta)) throw new Error('transaction data not available yet; retrying next sweep');
+      txs.forEach((tx, k) => { if (tx.meta.err) return; const bt = tx.blockTime || chunk[k].blockTime || t;
         for (const e of parse(tx.meta && tx.meta.logMessages)) {
           if (e.name === "Swapped" && e.pool.toBase58() === addr) A.swaps.push([bt, e.xForY ? 1 : 0, String(e.amountIn), String(e.amountOut), String(e.fee), String(e.protocolFee ?? 0n), e.activeId, chunk[k].signature]);
           if (e.name === "PoolCreated" && e.pool.toBase58() === addr) A.created = bt;
@@ -69,15 +70,28 @@ function makeActivity({ conn, pools, program, parse = (logs) => S.logEvents(logs
     running = (async () => { try { for (const a of await pools()) { try { await refresh(a); } catch (e) { log("activity: " + a.slice(0, 8) + " " + (e && e.message)); } } capTotal(); readyAt = now(); bodies.clear(); } finally { running = null; } })();
     return running;
   }
-  function start() { if (timer) return; const tick = () => { sweep().finally(() => { timer = setTimeout(tick, intervalMs); if (timer.unref) timer.unref(); }); }; tick(); }
-  function stop() { clearTimeout(timer); timer = null; }
+  function start() {
+    if (started) return; started = true; const current = ++generation;
+    const tick = async () => {
+      try { await sweep(); } catch (e) { log('activity: ' + (e && e.message)); }
+      if (!started || current !== generation) return;
+      timer = setTimeout(tick, intervalMs); timer.unref?.();
+    };
+    void tick();
+  }
+  function stop() { started = false; generation++; clearTimeout(timer); timer = null; }
 
   /// Past `maxTotal` swaps across all pools, the oldest go (whichever pool they're in).
   function capTotal() {
     let total = 0; for (const A of byPool.values()) total += A.swaps.length; if (total <= maxTotal) return;
     const times = []; for (const A of byPool.values()) for (const s of A.swaps) times.push(s[0]);
     times.sort((a, b) => b - a); const cut = times[maxTotal - 1];
-    for (const A of byPool.values()) { let drop = 0; while (drop < A.swaps.length && A.swaps[drop][0] < cut) drop++; if (drop) A.swaps.splice(0, drop); }
+    let remaining = 0;
+    for (const A of byPool.values()) { let drop = 0; while (drop < A.swaps.length && A.swaps[drop][0] < cut) drop++; if (drop) A.swaps.splice(0, drop); remaining += A.swaps.length; }
+    // Many pools can trade in the same second. Trim ties too so the global memory cap remains strict.
+    let excess = remaining - maxTotal;
+    for (const A of byPool.values()) { if (excess <= 0) break; let drop = 0; while (drop < A.swaps.length && drop < excess && A.swaps[drop][0] === cut) drop++;
+      if (drop) { A.swaps.splice(0, drop); excess -= drop; } }
   }
 
   /// Every pool's totals over the app's windows, and its latest trades (for the activity list and the price path).

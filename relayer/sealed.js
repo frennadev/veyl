@@ -20,7 +20,12 @@ module.exports = (Base) => class Sealed extends Base {
   /// included, once the committee turns them on; the others are skipped), refreshed every 15 s (a deployment with no
   /// committee has none, and per-pool reads every few seconds would exhaust a public RPC's rate limit). If that read is
   /// refused, the deployment's pools are checked one batched read per 100 instead.
-  async crankSealed() { const V = this.V; let n = 0;
+  crankSealed() {
+    if (this._crankPromise) return this._crankPromise;
+    this._crankPromise = this._crankSealedOnce().finally(() => { this._crankPromise = null; });
+    return this._crankPromise;
+  }
+  async _crankSealedOnce() { const V = this.V; let n = 0;
     if (!this._sealedAt || Date.now() - this._sealedAt > 15_000) { let found = [];
       try { const name = new Map(this.dep.binPools.map((b) => [b.address, b.id])); found = (await V.sealedPools()).map((s) => ({ address: s.binPool.toBase58(), id: name.get(s.binPool.toBase58()) || s.binPool.toBase58().slice(0, 8) })); }
       catch { const all = this.dep.binPools; for (let i = 0; i < all.length; i += 100) { const part = all.slice(i, i + 100); const infos = await V.conn.getMultipleAccountsInfo(part.map((b) => V.sealedPda(new PublicKey(b.address))), 'confirmed'); part.forEach((b, j) => { if (infos[j]) found.push(b); }); } }

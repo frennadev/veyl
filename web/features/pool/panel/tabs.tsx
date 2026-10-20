@@ -191,6 +191,7 @@ function useSwap(c: PanelCtx): TabModel {
         <button type="button" data-m="sealed" aria-pressed={sealed} onClick={() => setMode('sealed')}><b><Icon name="lock" size="sm" />Sealed</b><small>Size hidden · settles with its batch</small></button>
         <button type="button" data-m="instant" aria-pressed={!sealed} onClick={() => setMode('instant')}><b>Instant</b><small>Now · the amount is public at the pool</small></button>
       </div>
+      {q.error && <p className="err" role="alert">The quote could not be loaded. <button type="button" className="btn sm ghost" onClick={q.retry}>Try again</button></p>}
       {sealed && <SealBox pool={p} read={c.sealed} />}
       <div className="amt"><div className="b"><span>You pay</span><span className="sens" id="pswBal">{bt ? 'Balance ' + bt : ''}</span></div>
         <div className="m"><input id="pswIn" type="text" inputMode="decimal" placeholder="0" autoComplete="off" aria-label="Amount to pay" value={s.swapIn} onChange={(e) => setPanel({ swapIn: e.target.value.replace(/[^0-9.]/g, '') })} /><Tk sym={a} id="pswTkIn" /></div></div>
@@ -219,7 +220,7 @@ function useSwap(c: PanelCtx): TabModel {
       }),
     };
   }
-  const blocker = c.block || (!(v > 0) ? 'Enter an amount' : over(v, c.bal(a)) ? 'Not enough ' + a : !quote ? 'Quoting…' : quote.out == null ? 'No route with liquidity' : '');
+  const blocker = c.block || (!(v > 0) ? 'Enter an amount' : over(v, c.bal(a)) ? 'Not enough ' + a : q.error ? 'Quote unavailable — try again' : !quote ? 'Quoting…' : quote.out == null ? 'No route with liquidity' : '');
   return {
     body, blocker,
     details: [['Rate', quote?.out ? `1 ${a} = ${tiny(quote.out / v)} ${b}` : '—'], ...feeRows(quote?.fees, a), ['Slippage limit', SLIPPAGE, 'slippage'], ['Network fee', networkFee(priv), 'networkFee']],

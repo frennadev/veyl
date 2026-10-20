@@ -51,14 +51,15 @@ function Shell() {
 
   return (
     <>
+      <a className="skip" href="#main-content">Skip to content</a>
       <Sidebar open={drawer} onClose={closeDrawer} />
       <div className="testnet-bar" role="status" hidden><b><i></i>Solana</b></div>
       <Header onMenu={() => setDrawer(true)} />
       <StateBanner />
       <Toasts />
-      <main className="app">
+      <main className="app" id="main-content" tabIndex={-1}>
         {status === 'ready' ? <CurrentPage />
-          : status === 'error' ? <section className="page"><div className="card empty"><b>The app didn&apos;t start</b>{error}</div></section>
+          : status === 'error' ? <section className="page"><div className="card empty"><b>The app didn&apos;t start</b><p>{error}</p><button type="button" className="btn ghost" onClick={() => location.reload()}>Reload app</button></div></section>
             : <section className="page" aria-busy="true"><div className="card pad"><Skeleton width="40%" /><Skeleton width="70%" style={{ marginTop: 10 }} /></div></section>}
       </main>
       <BottomNav />

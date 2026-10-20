@@ -6,7 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { TokenLogo, Tip } from '@/components/ui/primitives';
 import type { Term } from '@/lib/glossary';
 import { toast } from '@/components/overlay';
-import { cleanAmount, tiny } from '@/lib/format';
+import { cleanAmount, maxAmount, tiny } from '@/lib/format';
 import {
   MAX_BINS, PRIVATE_MAX_BINS, SHAPE_LABEL, VOL_PRESETS, presetMove, sideBins, simAt, simFeesPerDay, volatility, type Shape, type SimPlan,
 } from '@/lib/veyl/services/liquidity';
@@ -30,8 +30,8 @@ export function AmountBox({ ids, sym, value, onChange, left, balance, onMax, hid
     </div>
   );
 }
-/// Max: the whole balance, rounded down so it never asks for more than is there.
-export const maxText = (b: number) => (b > 0 ? String(b >= 100 ? Math.floor(b * 100) / 100 : +b.toFixed(6)) : '');
+/// Max uses the full balance without display rounding.
+export const maxText = maxAmount;
 
 /// A detail row: label, value, and optionally the glossary term its label explains.
 export type Detail = [string, ReactNode, Term?];

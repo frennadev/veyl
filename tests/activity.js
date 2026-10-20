@@ -58,5 +58,23 @@ const logsBy = (program, ev) => [`Program ${program} invoke [1]`, swappedLine(ev
   const two = makeActivity({ conn, program: BIN, pools: async () => [POOL, OTHER], gapMs: 0, now: () => NOW, maxTotal: 3 });
   await two.sweep(); const left = [...two._byPool.values()].flatMap((A) => A.swaps.map((s) => s[0])).sort();
   ok("past the global cap the oldest swaps go, whichever pool they're in", left.length === 3 && left[0] === NOW - 100);
+  { const saved = txs; txs = Array.from({ length: 6 }, (_, i) => swap('tie-' + i, NOW - 1, i));
+    const tied = makeActivity({ conn, program: BIN, pools: async () => [POOL], gapMs: 0, now: () => NOW, maxTotal: 3 });
+    await tied.sweep(); ok('global memory cap is strict when trades have equal timestamps', tied.summary().pools[POOL].recent.length === 3); txs = saved;
+  }
+  // A partial RPC response must not advance the cursor or partially append swaps.
+  { const original = conn.getTransactions; txs.push(swap('retry-a', NOW - 5, 11), swap('retry-b', NOW - 4, 12));
+    conn.getTransactions = async (sigs) => (await original(sigs)).map((tx, i) => i === 1 ? null : tx);
+    const before = act.summary().pools[POOL].recent.length; await act.sweep();
+    ok('missing transaction: no partial commit or cursor advance', act.summary().pools[POOL].recent.length === before);
+    conn.getTransactions = original; await act.sweep(); const after = act.summary().pools[POOL].recent;
+    ok('next sweep recovers missing transactions exactly once', after.length === before + 2 && after.filter((s) => s[7] === 'retry-a').length === 1 && after.some((s) => s[7] === 'retry-b'));
+  }
+  // stop during an in-flight sweep must not resurrect the polling timer.
+  { let release, calls = 0; const gate = new Promise((r) => { release = r; });
+    const stopped = makeActivity({ conn, program: BIN, pools: async () => { calls++; await gate; return []; }, intervalMs: 5 });
+    stopped.start(); stopped.start(); stopped.stop(); release(); await new Promise((r) => setTimeout(r, 25));
+    ok('start is idempotent; stop during sweep prevents rescheduling', calls === 1);
+  }
   console.log("all ok");
 })().catch((e) => { console.error("FAIL", e.message); process.exit(1); });

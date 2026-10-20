@@ -9,7 +9,7 @@ import { runAction } from '@/features/actions/runAction';
 import { useBalances } from '@/features/portfolio/balances';
 import { Seen } from '@/features/pool/panel/parts';
 import { engine, isLive, useSession } from '@/features/session/session';
-import { cleanAmount, tiny } from '@/lib/format';
+import { cleanAmount, maxAmount, tiny } from '@/lib/format';
 import { tokenName } from '@/lib/tokens';
 import { useAsyncQuery } from '@/features/session/query';
 import { balanceLabel, balanceOf } from '@/lib/veyl/services/balances';
@@ -37,7 +37,7 @@ export default function SwapPage() {
   } : null, [s.a, s.b, v], 250);
   const quote = q.value && q.key === JSON.stringify([s.a, s.b, v]) ? q.value : null;
   const block = !live ? 'Not connected' : rpc === 'down' ? 'Chain not answering' : !priv && !account ? 'Connect a wallet' : '';
-  const why = block || (!(v > 0) ? 'Enter an amount' : v > have(s.a) + 1e-12 ? 'Not enough ' + s.a : !quote ? 'Quoting…' : quote.out == null ? 'No route' : '');
+  const why = block || (!(v > 0) ? 'Enter an amount' : v > have(s.a) + 1e-12 ? 'Not enough ' + s.a : q.error ? 'Quote unavailable' : !quote ? 'Quoting…' : quote.out == null ? 'No route' : '');
   const go = () => {
     const { a, b } = s;
     runAction({
@@ -49,7 +49,7 @@ export default function SwapPage() {
       }; },
     });
   };
-  const max = () => { const b = have(s.a); swap.set({ amount: b > 0 ? String(b >= 100 ? Math.floor(b) : +b.toFixed(4)) : '' }); };
+  const max = () => swap.set({ amount: maxAmount(have(s.a)) });
   return (
     <section className="page" id="pg-swap">
       <div className="swapwrap">
@@ -71,6 +71,7 @@ export default function SwapPage() {
               <TokenButton id="swTokOut" sym={s.b} onClick={() => openPicker('b', s.src)} /></div>
           </div>
         </div>
+        {q.error && <p className="err" role="alert">The quote could not be loaded. Check your connection. <button type="button" className="btn sm ghost" onClick={q.retry}>Try again</button></p>}
         <Route live={live} a={s.a} v={v} quote={quote} priv={priv} />
         <Seen s={priv ? { hidden: 'Your wallet. The output lands in a new note on this device.', pub: 'The route, the amounts in and out, the relayer fee.' } : { hidden: 'Nothing.', pub: 'Your wallet and the whole swap.' }} />
         <button className={'btn' + (priv ? '' : ' ghost')} type="button" id="swGo" disabled={!!why} onClick={go}>{why || (priv ? <><Icon name="lock" size="sm" />Swap privately</> : 'Swap from wallet')}</button>

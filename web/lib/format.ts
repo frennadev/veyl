@@ -34,8 +34,13 @@ export function ageLong(sec: number | null | undefined): string | null {
 export const short = (a: string): string => a.slice(0, 4) + '…' + a.slice(-4);
 /// Keeps digits and one dot, as the amount fields do; returns the cleaned text and its value.
 export function cleanAmount(text: string): { text: string; value: number } {
-  const c = text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
-  return { text: c, value: parseFloat(c) || 0 };
+  const [whole, ...fraction] = text.replace(/[^0-9.]/g, '').split('.');
+  const c = whole + (fraction.length ? '.' + fraction.join('') : '');
+  const n = Number(c);
+  return { text: c, value: Number.isFinite(n) ? n : 0 };
 }
 export const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export const VEYL_ADDRESS = /^veyl:[1-9A-HJ-NP-Za-km-z]{80,96}$/;
+
+/// Full balance as plain decimal input: no display rounding and no scientific notation.
+export const maxAmount = (b: number): string => Number.isFinite(b) && b > 0 ? b.toLocaleString('en-US', { useGrouping: false, maximumSignificantDigits: 21 }) : '';

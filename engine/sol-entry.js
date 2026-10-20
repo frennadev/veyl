@@ -1,6 +1,7 @@
 // Veyl browser engine for Solana: wallet, notes, trees, proofs, relayer. Bundled by esbuild into veyl-sol.js (window.Veyl).
 // Port of web/engine.src.js: the proving code (snarkjs, same circuit / zkey) is unchanged; only the chain layer differs.
 // Everything private happens on this device: note secrets, Merkle paths, zero-knowledge proofs. The relayer sends.
+import { amountUnits } from './amount.js';
 import { Buffer } from 'buffer'; if (typeof window !== 'undefined' && !window.Buffer) window.Buffer = Buffer;
 import { Connection, PublicKey, Keypair, Transaction, ComputeBudgetProgram, TransactionInstruction, TransactionMessage, VersionedTransaction, SystemProgram } from '@solana/web3.js';
 import nacl from 'tweetnacl';
@@ -80,7 +81,7 @@ export class Engine {
   }
   log(m) { try { this.onLog(m); } catch {} }
   // tok(symbol | mint), tokKey, symOf, tokLabel: pools-engine.js (every call that takes a token also takes its mint)
-  unit(sym, v) { const d = this.tok(sym).decimals; const [i, f = ''] = String(v).split('.'); return BigInt(i || '0') * 10n ** BigInt(d) + BigInt((f + '0'.repeat(d)).slice(0, d) || '0'); }
+  unit(sym, v) { return amountUnits(v, this.tok(sym).decimals); }
   fmt(sym, v) { return Number(BigInt(v)) / 10 ** this.tok(sym).decimals; }
   async ping() { return this.conn.getSlot('confirmed'); }
 

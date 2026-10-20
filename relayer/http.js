@@ -1,7 +1,7 @@
 // The relayer's HTTP API (routes listed in relayer/relayer.js) on Express, its rate limits and background timers.
 // Hardening (all in memory, nothing logged, no IPs kept past the window that limits them):
 //   - per-client limits: RATE_GET reads and RATE_POST writes a minute (IPv6 clients counted per /64)
-//   - at most MAX_INFLIGHT submissions at once (503 beyond), so a burst cannot queue unbounded RPC work
+//   - at most MAX_INFLIGHT fee quotes, faucet requests and submissions at once (503 beyond), so a burst cannot queue unbounded RPC work
 //   - chain reads shared between concurrent callers, and /pools, /sealed cached briefly (each costs many RPC calls)
 //   - faucet: per address, per caller, per caller and pair, and DRIP_MAX_PER_HOUR in total
 //   - security headers, JSON-object bodies only (200 KB), server timeouts, error messages without URLs (an RPC URL can carry a key)
@@ -48,13 +48,15 @@ function bucket(ip) {
 /// Per-bucket counter over a fixed one-minute window. Dropped wholesale if it ever holds too many buckets.
 function counter(max) {
   const m = new Map();
-  setInterval(() => m.clear(), 60_000).unref();
-  return (k) => {
+  const timer = setInterval(() => m.clear(), 60_000); timer.unref();
+  const take = (k) => {
     if (m.size > 100_000) m.clear();
     const n = (m.get(k) || 0) + 1;
     m.set(k, n);
     return n <= max;
   };
+  take.stop = () => clearInterval(timer);
+  return take;
 }
 /// One chain read shared by every caller that asks while it runs, and its result kept `ms` (per key, at most 500 keys).
 function shared(fn, ms = 0) {
@@ -89,7 +91,7 @@ function app(relayer, srv = { inflight: 0 }) {
   const drips = new Map(); // faucet: last drip per address, per caller and per address+pair, in memory only
   const pairDrips = new Map(); // faucet: pair drips per caller (times), in memory only
   let dripHour = { at: Date.now(), n: 0 };
-  setInterval(() => {
+  const dripCleanup = setInterval(() => {
     const old = Date.now() - DRIP_EVERY;
     for (const [k, at] of drips) if (at < old) drips.delete(k);
     for (const [k, ts] of pairDrips) {
@@ -184,9 +186,10 @@ function app(relayer, srv = { inflight: 0 }) {
       return [...relayer.dep.binPools, ...(relayer.discovered || [])].map((b) => b.address).filter((a) => !skip.set.has(a)); },
     log: (m) => console.error(m) }) : null);
   if (activity && !relayer.activity) activity.start();
+  a.locals.stop = () => { clearInterval(dripCleanup); getOk.stop(); postOk.stop(); if (activity && !relayer.activity) activity.stop(); };
   // bodies are built once per sweep inside activity.js; gzipped when the client takes it
   const sendBody = (req, res, b) => { res.status(200).type("application/json").append("vary", "accept-encoding");
-    if (/\bgzip\b/.test(String(req.headers["accept-encoding"] || ""))) res.set("content-encoding", "gzip").send(b.gz); else res.send(b.json); };
+    if (req.acceptsEncodings("gzip", "identity") === "gzip") res.set("content-encoding", "gzip").send(b.gz); else res.send(b.json); };
   a.get("/activity", (req, res) => { if (!activity) return send(res, 404, { error: "no activity index here" }); sendBody(req, res, activity.summaryBody()); });
   a.get("/candles", (req, res) => { if (!activity) return send(res, 404, { error: "no activity index here" }); sendBody(req, res, activity.candlesBody(Number(req.query.res) || 3600)); });
   const tokenMeta = shared((ids) => tokens.getTokens(ids.split(",")), 60_000);
@@ -209,74 +212,83 @@ function app(relayer, srv = { inflight: 0 }) {
       next();
     },
   ];
-  a.post("/fee", body, async (req, res) =>
-    send(res, 200, await relayer.feeQuote(req.body)),
-  );
-  a.post("/drip", body, async (req, res) => {
-    const { tokens } = req.body;
-    const to = String(req.body.to || "");
-    const now = Date.now();
-    const k = req.clientKey;
-    const pair = Array.isArray(tokens) && tokens.length;
-    const key = pair
-      ? to + ":" + tokens.slice(0, 4).map(String).sort().join(",")
-      : to;
-    if (pair) {
-      if (now - (drips.get(key) || 0) < DRIP_EVERY)
-        return send(res, 429, {
-          error: "Test tokens for this pair were already sent here recently.",
-        });
-      const mine = (pairDrips.get(k) || []).filter((t) => now - t < DRIP_EVERY);
-      if (mine.length >= dripPairsPerCaller)
+  a.post(['/fee', '/drip', '/submit'], body, (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    if (srv.inflight >= maxInflight) {
+      res.set('retry-after', '5');
+      return send(res, 503, { error: 'The relayer is busy. Try again in a few seconds.' });
+    }
+    srv.inflight++;
+    let released = false;
+    const release = () => { if (!released) { released = true; srv.inflight--; } };
+    // Count running work even after the client disconnects; routes release in finally.
+    req.releaseWork = release;
+    next();
+  });
+  a.post("/fee", async (req, res) => {
+    try { send(res, 200, await relayer.feeQuote(req.body)); } finally { req.releaseWork(); }
+  });
+  a.post("/drip", async (req, res) => {
+    try {
+      const { tokens } = req.body;
+      const to = String(req.body.to || "");
+      const now = Date.now();
+      const k = req.clientKey;
+      const pair = Array.isArray(tokens) && tokens.length;
+      const key = pair
+        ? to + ":" + tokens.slice(0, 4).map(String).sort().join(",")
+        : to;
+      if (pair) {
+        if (now - (drips.get(key) || 0) < DRIP_EVERY)
+          return send(res, 429, {
+            error: "Test tokens for this pair were already sent here recently.",
+          });
+        const mine = (pairDrips.get(k) || []).filter((t) => now - t < DRIP_EVERY);
+        if (mine.length >= dripPairsPerCaller)
+          return send(res, 429, {
+            error:
+              "Test tokens already sent here recently. Try again in a few hours.",
+          });
+      } else if (now - (drips.get(to) || drips.get("ip:" + k) || 0) < DRIP_EVERY)
         return send(res, 429, {
           error:
             "Test tokens already sent here recently. Try again in a few hours.",
         });
-    } else if (now - (drips.get(to) || drips.get("ip:" + k) || 0) < DRIP_EVERY)
-      return send(res, 429, {
-        error:
-          "Test tokens already sent here recently. Try again in a few hours.",
-      });
-    if (now - dripHour.at > 3600_000) dripHour = { at: now, n: 0 };
-    if (dripHour.n >= dripMaxHour)
-      return send(res, 429, {
-        error: "The faucet is busy. Try again in an hour.",
-      });
-    // claimed before the (slow) drip so two requests at once cannot both pass; given back if it fails
-    const marks = pair ? [key] : [to, "ip:" + k];
-    for (const m of marks) drips.set(m, now);
-    if (pair) pairDrips.set(k, [...(pairDrips.get(k) || []), now]);
-    dripHour.n++;
-    try {
-      send(res, 200, await relayer.drip(to, pair ? tokens : undefined));
-    } catch (e) {
-      for (const m of marks) if (drips.get(m) === now) drips.delete(m);
-      if (pair)
-        pairDrips.set(
-          k,
-          (pairDrips.get(k) || []).filter((t) => t !== now),
-        );
-      dripHour.n--;
-      throw e;
-    }
+      if (now - dripHour.at > 3600_000) dripHour = { at: now, n: 0 };
+      if (dripHour.n >= dripMaxHour)
+        return send(res, 429, {
+          error: "The faucet is busy. Try again in an hour.",
+        });
+      // claimed before the (slow) drip so two requests at once cannot both pass; given back if it fails
+      const marks = pair ? [key] : [to, "ip:" + k];
+      for (const m of marks) drips.set(m, now);
+      if (pair) pairDrips.set(k, [...(pairDrips.get(k) || []), now]);
+      dripHour.n++;
+      try {
+        send(res, 200, await relayer.drip(to, pair ? tokens : undefined));
+      } catch (e) {
+        for (const m of marks) if (drips.get(m) === now) drips.delete(m);
+        if (pair)
+          pairDrips.set(
+            k,
+            (pairDrips.get(k) || []).filter((t) => t !== now),
+          );
+        dripHour.n--;
+        throw e;
+      }
+    } finally { req.releaseWork(); }
   });
-  a.post("/submit", body, async (req, res) => {
-    if (srv.inflight >= maxInflight) {
-      res.set("retry-after", "5");
-      return send(res, 503, {
-        error: "The relayer is busy. Try again in a few seconds.",
-      });
-    }
-    srv.inflight++;
+  a.post("/submit", async (req, res) => {
     try {
       send(res, 200, await relayer.submit(req.body));
     } finally {
-      srv.inflight--;
+      req.releaseWork();
     }
   });
 
   a.use((req, res) => send(res, 404, { error: "not found" }));
   a.use((e, req, res, next) => {
+    req.releaseWork?.();
     if (res.headersSent) return next(e); // Express 5 routes async rejections here
     if (e.type === "entity.too.large")
       return send(res, 413, { error: "too large" });
@@ -286,7 +298,12 @@ function app(relayer, srv = { inflight: 0 }) {
 }
 function serve(relayer, port = 8843) {
   const srv = { inflight: 0 };
-  const server = app(relayer, srv).listen(port); // in-flight submissions, for the graceful stop
+  const api = app(relayer, srv);
+  const server = api.listen(port); // in-flight work, for the graceful stop
+  server.once('close', () => {
+    api.locals.stop();
+    for (const job of ['crank', 'bal', 'asp', 'admit']) clearInterval(server[job]);
+  });
   Object.defineProperty(server, "inflight", { get: () => srv.inflight });
   // slow clients: the whole request (headers and body) within 30 s; idle keep-alive longer than a proxy's 60 s
   server.keepAliveTimeout = 61_000;

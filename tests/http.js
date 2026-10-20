@@ -45,6 +45,21 @@ fake.tokens = TK.makeTokens({ network: "devnet", jupiter: async (q) => q.split("
   ip = 6; const slow = [go("POST", "/submit", '{"kind":"slow"}'), go("POST", "/submit", '{"kind":"slow"}')]; await new Promise((r) => setTimeout(r, 50));
   r = await go("POST", "/submit", '{"kind":"ok"}'); ok("MAX_INFLIGHT: third concurrent submit 503", r.s === 503 && r.h.get("retry-after") === "5" && srv.inflight === 2);
   release(); await Promise.all(slow); ok("inflight back to 0", srv.inflight === 0);
+  { let releaseFee; const old = fake.feeQuote; const feeGate = new Promise((r) => { releaseFee = r; });
+    fake.feeQuote = async () => { await feeGate; return {}; };
+    const pending = [go('POST', '/fee', '{}', as(60)), go('POST', '/fee', '{}', as(61))];
+    await new Promise((r) => setTimeout(r, 30));
+    ok('fee work shares MAX_INFLIGHT with submits and faucet', (await go('POST', '/drip', '{"to":"unused"}', as(62))).s === 503 && srv.inflight === 2);
+    releaseFee(); await Promise.all(pending); fake.feeQuote = old;
+    ok('fee work releases capacity after completion', srv.inflight === 0);
+  }
+  ok('malformed requests release capacity', (await go('POST', '/fee', '[]', as(63))).s === 400 && srv.inflight === 0);
+  { const zlib = require('zlib'), json = '{"at":1,"pools":{}}'; fake.activity = { summaryBody: () => ({ json, gz: zlib.gzipSync(json) }) };
+    const api = M.app(fake); const s = api.listen(0); await new Promise((r) => s.once('listening', r));
+    try { const response = await fetch('http://127.0.0.1:' + s.address().port + '/activity', { headers: { ...as(64), 'accept-encoding': 'gzip;q=0, identity;q=1' } });
+      ok('gzip q=0 is respected', !response.headers.get('content-encoding') && await response.text() === json);
+    } finally { api.locals.stop(); s.close(); delete fake.activity; }
+  }
   ip = 7; for (let i = 0; i < 10; i++) await go("POST", "/fee", "{}"); ok("POST limit 429", (await go("POST", "/fee", "{}")).s === 429);
   // faucet
   ip = 10; ok("drip ok", (await go("POST", "/drip", '{"to":"A"}')).s === 200);

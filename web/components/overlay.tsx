@@ -27,15 +27,41 @@ export function Modal() {
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!node || !body.current) return;
-    const first = body.current.querySelector<HTMLElement>('input,button');
-    if (first && matchMedia('(min-width:900px)').matches) first.focus(); else document.getElementById('dlgX')?.focus();
+    const first = [...body.current.querySelectorAll<HTMLElement>('input,button,select,textarea,a[href]')].find((el) => !el.matches(':disabled') && el.getClientRects().length > 0);
+    if (first && matchMedia('(min-width:900px)').matches) first.focus(); else { const x = document.getElementById('dlgX'); if (x && !x.hidden) x.focus(); else body.current.focus(); }
   }, [key, node]);
+  useEffect(() => {
+    if (!node) return;
+    const overlay = document.getElementById('modal');
+    if (!overlay) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const siblings = [...document.body.querySelectorAll<HTMLElement>('main, .side, .hdr, .bnav, .statebar')].filter((el) => !el.contains(overlay));
+    const previous = siblings.map((el) => el.inert);
+    siblings.forEach((el) => { el.inert = true; });
+    const focusables = () => [...overlay.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]')]
+      .filter((el) => el.tabIndex >= 0 && !el.matches(':disabled') && el.getClientRects().length > 0);
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const all = focusables(), first = all[0], last = all[all.length - 1];
+      if (!first) { e.preventDefault(); body.current?.focus(); return; }
+      if (e.shiftKey && (document.activeElement === first || !overlay.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !overlay.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', trap);
+    return () => {
+      document.removeEventListener('keydown', trap);
+      document.body.style.overflow = previousOverflow;
+      siblings.forEach((el, i) => { el.inert = previous[i]; });
+      if (!modal.get().node) lastFocus?.focus?.();
+    };
+  }, [!!node]);
   return (
     <div className="ov" id="modal" hidden={!node} onPointerDown={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
       <div className="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
         <div className="grab" aria-hidden="true"></div>
         <button className="x" id="dlgX" type="button" aria-label="Close" hidden={busy} onClick={closeModal}><Icon name="x" size="sm" /></button>
-        <div id="dlgBody" ref={body} key={key}>{node}</div>
+        <div id="dlgBody" ref={body} key={key} tabIndex={-1}>{node}</div>
       </div>
     </div>
   );

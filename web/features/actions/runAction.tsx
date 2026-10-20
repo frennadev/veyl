@@ -53,7 +53,7 @@ interface TaskState { step: number; subs: string[]; status: 'running' | 'done' |
 interface Task { title: string; kind: ActionKind; steps: Step[]; state: Store<TaskState> }
 
 export function runAction<R>(spec: ActionSpec<R>): void {
-  const rt = session.get().rt; if (!rt?.engine) return;
+  const rt = session.get().rt; if (!rt?.engine || session.get().busy) return;
   const E = rt.engine, steps = stepsFor(rt, spec.kind);
   const state = createStore<TaskState>({ step: 0, subs: steps.map((s) => s.sub), status: 'running', error: null, outcome: null, bar: null });
   const advance = (k: number) => state.set((s) => ({ step: Math.max(s.step, Math.min(k, steps.length - 1)) }));
@@ -69,14 +69,25 @@ export function runAction<R>(spec: ActionSpec<R>): void {
 
   setBusy(true);
   openModal(<ActionDialog task={{ title: spec.title, kind: spec.kind, steps, state }} />);
-  spec.exec(E).then((r) => {
-    finish(); const outcome = spec.done(r);
-    if (outcome.activity) logActivity(outcome.activity);
-    invalidate(); state.set({ status: 'done', outcome, step: steps.length });
-  }, (e) => {
-    finish(); const m = (e && (e.shortMessage || e.message)) || String(e);
-    state.set({ status: 'failed', error: m.length > 300 ? m.slice(0, 300) + '…' : m });
-  });
+  void (async () => {
+    let result: R;
+    try { result = await spec.exec(E); }
+    catch (e) {
+      const err = e as { shortMessage?: string; message?: string } | null;
+      const m = String(err?.shortMessage || err?.message || e);
+      state.set({ status: 'failed', error: m.length > 300 ? m.slice(0, 300) + '…' : m });
+      invalidate(); // a multi-transaction action may have completed some steps
+      return;
+    } finally { finish(); }
+    // Execution succeeded. A receipt or local-storage failure must never look like a failed transaction.
+    let outcome: ActionOutcome;
+    try { outcome = spec.done(result); }
+    catch { outcome = { title: 'Action completed', body: 'The action completed, but its receipt could not be displayed. Check your balances and activity before trying again.' }; }
+    state.set({ status: 'done', outcome, step: steps.length });
+    try { if (outcome.activity) logActivity(outcome.activity); }
+    catch { /* the confirmed result remains visible even if local storage is unavailable */ }
+    invalidate();
+  })();
 }
 
 /// Sandbox: what the prover is doing inside the running step (downloading the key, then proving against the usual time).
@@ -113,7 +124,7 @@ function ActionDialog({ task }: { task: Task }) {
   return (
     <>
       <h3 id="dlgTitle">{task.title}</h3>
-      <ol className="steps" id="stepList">
+      <ol className="steps" id="stepList" aria-live="polite">
         {task.steps.map((st, i) => (
           <li key={i} id={'st' + i} className={cls(i)}>
             <span className="sc"></span>
@@ -125,9 +136,9 @@ function ActionDialog({ task }: { task: Task }) {
         ))}
       </ol>
       {s.status === 'failed' && <>
-        <p className="err" id="actErr">{s.error}</p>
+        <p className="err" id="actErr" role="alert">{s.error}</p>
         {hintFor(s.error) && <Hint icon="bolt">{hintFor(s.error)}</Hint>}
-        <Hint icon="alert">Nothing was taken unless a step above shows confirmed. Notes created for this action stay on this device.</Hint>
+        <Hint icon="alert">Some steps may already have reached the chain. Check your balances and activity before trying again. Notes created for this action stay on this device.</Hint>
         <button className="btn ghost" type="button" id="errClose" onClick={closeModal}>Close</button>
       </>}
     </>

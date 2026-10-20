@@ -116,7 +116,9 @@ module.exports = (Base) =>
       const kind = req.kind;
       const T = Z.KIND.TRANSACT;
       const cover = async () => {
-        const lam = await this.shieldCost(kind, req);
+        let lam = await this.shieldCost(kind, req);
+        const feeIxs = await this._feeAccountIxs(kind, req);
+        lam += feeIxs.length * S.rentOf(S.SIZES.tokenAccount);
         this._coverOrRefuse(
           lam,
           this._shieldFees(kind, req).length
@@ -124,6 +126,9 @@ module.exports = (Base) =>
             : [{ sym: "SOL", atoms: 0n }],
         );
       };
+      const sendChecked = async (ixs, signers, units) => V.sendV0Checked(
+        [...await this._feeAccountIxs(kind, req), ...ixs], signers, units,
+      );
       let bufId = null;
       try {
         switch (kind) {
@@ -162,7 +167,7 @@ module.exports = (Base) =>
               );
             }
             txs.push(
-              await V.sendV0Checked(
+              await sendChecked(
                 [...pre, await V.shieldTransactIx(me, ext, x.pubs, x.poster)],
                 [],
                 600_000,
@@ -194,7 +199,7 @@ module.exports = (Base) =>
             const lpReq = { core: c, legs: (req.legs || []).map((l) => l.ext) };
             bufId = await V.uploadBuffer(this.wallet, Z.encodeLpRequest(lpReq));
             txs.push(
-              await V.sendV0Checked(
+              await sendChecked(
                 [
                   HEAP(),
                   await V.shieldLpIx(
@@ -227,7 +232,7 @@ module.exports = (Base) =>
               Buffer.concat([Z.encodeSwapCore(c), Z.encodeExt(req.leg.ext)]),
             );
             txs.push(
-              await V.sendV0Checked(
+              await sendChecked(
                 [HEAP(), await V.shieldSwapIx(me, bufId, r, x.poster)],
                 [],
                 1_400_000,
@@ -263,7 +268,7 @@ module.exports = (Base) =>
               Buffer.concat([enc, Z.encodeExt(req.leg.ext)]),
             );
             txs.push(
-              await V.sendV0Checked(
+              await sendChecked(
                 [
                   HEAP(),
                   kind === "shieldOrder"
@@ -313,7 +318,7 @@ module.exports = (Base) =>
             txs.push(await V.send([post], [], 1_400_000));
             try {
               txs.push(
-                await V.sendV0Checked(
+                await sendChecked(
                   [await V.shieldMigrateIx(me, mint, pubs[1], d)],
                   [],
                   1_400_000,
@@ -394,7 +399,7 @@ module.exports = (Base) =>
                   pubs: x.pubs,
                   poster: x.poster,
                 });
-            txs.push(await V.sendV0Checked([ix], [], 600_000));
+            txs.push(await sendChecked([ix], [], 600_000));
             break;
           }
           default:

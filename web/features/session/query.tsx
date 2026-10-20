@@ -89,11 +89,10 @@ export interface ChainQueryOptions<T> {
 export function useChainQuery<T>(key: readonly unknown[], load: ((emit: Emit<T>) => Promise<T>) | null, o: ChainQueryOptions<T>): Resource<T> {
   useSession((s) => s.rt); useSession((s) => (o.account ? s.account : null)); // re-render (new key) when the network or account changes
   const qk = fullKey(key, o.account), partialKey = [...qk, '~partial'];
-  const loader = useRef(load); loader.current = load;
   const enabled = !!load;
   const q = useQuery<T>({
     queryKey: qk, enabled,
-    queryFn: async () => { const f = loader.current; if (!f) throw new Error('disabled'); return f((d) => queryClient.setQueryData(partialKey, d)); },
+    queryFn: async () => { const f = load; if (!f) throw new Error('disabled'); return f((d) => queryClient.setQueryData(partialKey, d)); },
     refetchInterval: o.intervalMs ? () => (session.get().busy ? false : o.intervalMs!) : false,
     staleTime: o.staleMs ?? 10_000,
     placeholderData: (o.keepPrevious ?? !o.account) ? keepPreviousData : undefined,
@@ -105,22 +104,24 @@ export function useChainQuery<T>(key: readonly unknown[], load: ((emit: Emit<T>)
 }
 
 // ---------------------------------------------------------------- computed values (quotes, previews, lookups)
-/// A debounced async computation of some inputs (a quote, a preview, a token check), cached by `scope` + inputs. While new
-/// inputs compute, the last answer stays (with `key` saying which inputs it was for); null before the first answer and
-/// when there is nothing to compute. Errors read as null.
-export function useAsyncQuery<T>(scope: string, compute: (() => Promise<T>) | null, deps: readonly unknown[], delayMs = 0, { staleMs = 15_000, account = false } = {}): { value: T | null; key: string | null } {
+/// A debounced async computation (quote, preview, token check), cached by scope + inputs. Returns null while new inputs
+/// debounce or load, so the previous token or price cannot validate a new request. Failures expose a retry action.
+export function useAsyncQuery<T>(scope: string, compute: (() => Promise<T>) | null, deps: readonly unknown[], delayMs = 0, { staleMs = 15_000, account = false } = {}): { value: T | null; key: string | null; error: string | null; retry: () => void } {
   const key = JSON.stringify(deps, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
   const debounced = useDebounced(compute ? key : null, delayMs);
-  const fn = useRef(compute); fn.current = compute;
+  // Keep the old key bound to its own inputs while the new key is debouncing, including query retries.
+  const fn = useRef(compute); if (debounced === key) fn.current = compute;
+  const calculate = fn.current;
   const lastKey = useRef<string | null>(null);
   const q = useQuery<T | null>({
     queryKey: fullKey(['calc', scope, debounced], account), enabled: !!compute && debounced === key,
-    queryFn: async () => { const f = fn.current; if (!f) return null; try { return await f(); } catch { return null; } },
-    staleTime: staleMs, gcTime: 5 * 60_000, retry: 0, placeholderData: keepPreviousData,
+    queryFn: async () => { return calculate ? await calculate() : null; },
+    staleTime: staleMs, gcTime: 5 * 60_000, retry: 1,
   });
-  if (!compute) return { value: null, key: null };
+  const retry = () => { void q.refetch(); };
+  if (!compute) return { value: null, key: null, error: null, retry };
   if (q.data !== undefined && !q.isPlaceholderData) lastKey.current = debounced;
-  return { value: q.data ?? null, key: q.data !== undefined ? lastKey.current : null };
+  return { value: debounced === key ? q.data ?? null : null, key: q.data !== undefined ? lastKey.current : null, error: debounced === key && q.error ? q.error.message : null, retry };
 }
 
 /// `value`, once it has stayed the same for `ms` (immediately when ms is 0).
