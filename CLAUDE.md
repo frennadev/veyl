@@ -33,7 +33,7 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
   engine/sol-entry.js), funded from any wallet/exchange; key goes into the encrypted backup. Wallet connect is the second option.
 - Native SOL is wrapped automatically on deposit (`wrapIxs`).
 - Relayer faucet `POST /drip` (devnet/local only, `FAUCET_KEY` = key file path or `FAUCET_SECRET_KEY` = the key itself): core basket, or a pool's own pair (`tokens: [..]`), 6 h limits.
-- Pro LP tools in the app (site/app.js): volatility-sized range presets (Tight/Balanced/Wide), position simulator (fees vs holding at ±30%),
+- Pro LP tools in the app (web/features/pool/panel): volatility-sized range presets (Tight/Balanced/Wide), position simulator (fees vs holding at ±30%),
   portfolio summary, per-position edge distance / USD worth / fee APR.
 - Receive (Portfolio → Veyl address → Receive): QR code + payment link `app.html#pay=veyl:…&a=<amount>&t=<token>`; opening a link
   pre-fills Send as "Pay privately" (`openReceive`, `takePayLink`, `site/qrcode.js` = qrcode-generator, MIT). Inspired by NullCash's send flow.
@@ -50,7 +50,10 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 
 ## Commands
 - `npm ci` · `npm run bundle` (rebuild site/veyl-sol.js after editing anything in engine/ or sdk/)
-- Layout: site/ = what is served (app.html markup + app.js + app.css); engine/ = browser engine sources (bundled);
+- Layout: web/ = the pages as a Next.js project (App Router, static export). /app is React: web/features/<screen>/, the engine boundary in
+  web/lib/veyl/ (runtime.ts, types.ts, services/); rules and architecture in web/INTEGRATION.md, build and CSP in web/README.md. site/ =
+  the assets the pages load (app.css, veyl.css, home.js for the homepage, the bundle, workers); `npm run build:site` builds both into
+  dist/site/ (demo.js and dist.js build through it too); engine/ = browser engine sources (bundled; engine/wallets.js = Wallet Standard discovery);
   relayer/relayer.js composes relayer/{fees,notes,shielded,sealed,postman,faucet}.js; tests share tests/harness.js, e2e/harness.js.
 - Tests (run ONE at a time: they share deploy.local.json and validator ports):
   `npm test` (298, ~20 min) · `node e2e/run.js` (67, ~17–25 min) · `node e2e/local.js` (32) · `node e2e/sandbox.js` (64) · `node e2e/smoke.js` (47)

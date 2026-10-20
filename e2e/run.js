@@ -101,7 +101,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     const vaddr = (await page.textContent('#veylAddr code')).trim();
     check('portfolio shows this browser\'s Veyl address (veyl: + spending and viewing public keys) with a copy button', vaddr.startsWith('veyl:') && Z.decodeAddress(vaddr).pk > 0n && !!(await page.$('#veylAddr [data-copy]')), vaddr.slice(0, 24) + '…');
     // deposit 1,000 USDC: the proof is made in the Web Worker, the wallet signs the post + the deposit; it waits for approval
-    await page.click('[data-open="deposit"]'); await sleep(600); await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '1000'); await page.click('#dGo');
+    await page.click('[data-open="deposit"]'); await sleep(600); if (await page.$('#dAck')) { await page.click('#dAck'); await sleep(300); } /* the backup step before a first real deposit: accept the risk */ await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '1000'); await page.click('#dGo');
     await page.waitForSelector('#doneBtn, #errClose', { timeout: 300000 }); const dTxt = await dlgText(); const dp = await noteProof();
     check('shielded deposit through the UI: transact proof made in a Web Worker, wallet-signed', /Deposited 1,?000 USDC/.test(dTxt) && dp && dp.worker === true, dTxt.slice(0, 120) + (dp ? ` (worker proof ${dp.ms} ms)` : ''));
     await page.click('#doneBtn'); await sleep(2500); await toPortfolio();
@@ -109,7 +109,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     check('on chain: 1,000 USDC in the shielded vault, the notes pending outside the tree (depositor + amount public)', pend1.length === 1 && pend1[0].amount === units(1000, 6) && pend1[0].depositor.equals(user.publicKey) && sh1.nextIndex === 0n && BigInt((await conn.getTokenAccountBalance(V.shieldVault(USDC))).value.amount) === units(1000, 6));
     check('portfolio lists the pending deposit with "Take back"', /waiting for the approved-set publisher/.test(await page.textContent('#noteList')) && !!(await page.$('#noteList [data-cancel]')));
     // a second deposit, taken back before approval (the depositor's exit; no proof needed)
-    await page.click('[data-open="deposit"]'); await sleep(600); await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '25'); await page.click('#dGo'); await page.waitForSelector('#doneBtn, #errClose', { timeout: 300000 }); await page.click('#doneBtn, #errClose'); await sleep(1500); await toPortfolio();
+    await page.click('[data-open="deposit"]'); await sleep(600); if (await page.$('#dAck')) { await page.click('#dAck'); await sleep(300); } await page.click('#dA [data-a="USDC"]'); await page.fill('#dAmt', '25'); await page.click('#dGo'); await page.waitForSelector('#doneBtn, #errClose', { timeout: 300000 }); await page.click('#doneBtn, #errClose'); await sleep(1500); await toPortfolio();
     const w0 = await V.tokenBalance(USDC, user.publicKey); const pend2 = (await V.readShield()).pending.find((p) => p.amount === units(25, 6));
     if (pend2 && (await page.$('#noteList [data-cancel="' + pend2.pending.toBase58() + '"]'))) { await page.click('#noteList [data-cancel="' + pend2.pending.toBase58() + '"]'); var tb = await finish(); } else var tb = 'no take-back button';
     check('take back a pending deposit from the UI: the wallet gets the 25 USDC back', (await V.tokenBalance(USDC, user.publicKey)) - w0 === units(25, 6) && (await V.readShield()).pending.length === 1, tb.slice(0, 120));

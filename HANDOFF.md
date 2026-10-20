@@ -7,7 +7,7 @@ Welcome. This is the brief for picking the project up. Read this, then the doc e
 A private DLMM on Solana: Meteora-style concentrated-liquidity bin pools where nobody can link a position, swap or fee claim
 to the wallet behind it. Pools are curated (Delta-style: only the factory authority lists pools). Three Anchor programs
 (`veyl_pool` shielded pool, `veyl_bin` DLMM, `veyl_entry` private entry points and sealed batch swaps), five Groth16 circuits
-(`zk/circuits`), a browser engine that proves on the user's device (`site/`), a relayer (`relayer/`), and a t-of-n batch
+(`zk/circuits`), a browser engine that proves on the user's device (`engine/`, bundled into `site/`; pages in `web/`, Next.js), a relayer (`relayer/`), and a t-of-n batch
 committee for sealed swaps (`committee/`). `README.md` = architecture, `PRIVACY.md` = exactly what is and isn't hidden,
 `REVIEW.md` = internal security review, `DEPLOY.md` = every deploy step.
 

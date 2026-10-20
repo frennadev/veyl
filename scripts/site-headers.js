@@ -11,14 +11,15 @@ const origin = (u) => { try { const x = new URL(u); return x.origin; } catch { r
 // @solana/web3.js opens its websocket on the RPC host, at port + 1 when the URL names a port (solana-test-validator style).
 const wsOrigins = (u) => { try { const x = new URL(u); const proto = x.protocol === 'https:' ? 'wss:' : 'ws:'; const out = [`${proto}//${x.host}`]; if (x.port) out.push(`${proto}//${x.hostname}:${Number(x.port) + 1}`); return out; } catch { return []; } };
 
-/// connect: URLs the browser must reach over HTTP (RPC, relayer); ws: URLs whose websocket it also opens (the RPC).
-/// Empty = only the site itself (no deployment yet).
-function csp(connect = [], { ws = [], loose = false } = {}) {
+/// connect: URLs the browser must reach over HTTP (RPC, relayer); ws: URLs whose websocket it also opens (the RPC);
+/// img: hosts images may load from besides the site (the relayer, which serves token logos it fetched from Jupiter's list,
+/// so no third-party image host is ever contacted by a visitor). Empty = only the site itself (no deployment yet).
+function csp(connect = [], { ws = [], img = [], loose = false } = {}) {
   const c = loose ? ["'self'", 'https:', 'wss:'] : ["'self'", ...new Set([...connect.map(origin), ...ws.flatMap(wsOrigins), ...MARKET].filter(Boolean))];
   const https = loose || connect.every((u) => /^https:/.test(u));
   return [
     "default-src 'self'", "script-src 'self' 'wasm-unsafe-eval'", "worker-src 'self' blob:", `connect-src ${c.join(' ')}`,
-    "img-src 'self' data:", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "font-src 'self' https://fonts.gstatic.com",
+    ["img-src 'self' data:", ...new Set(img.map(origin).filter(Boolean))].join(' '), "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "font-src 'self' https://fonts.gstatic.com",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'", ...(https ? ['upgrade-insecure-requests'] : []),
   ].join('; ');
 }

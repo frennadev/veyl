@@ -3,15 +3,10 @@
 // programs, pools, entry, committee, sealed pools -> relayer + approved-set publisher (8843) -> the site and the app (8873). Mock mints are created; FUND=<wallet> mints 10 SOL-token, 10,000 USDC/USDT, 10,000 JUP, 100,000,000 BONK
 // to that wallet (your Phantom address, switched to http://127.0.0.1:8933) so you can deposit from the app.
 'use strict';
-const { spawn } = require('child_process'); const path = require('path'); const fs = require('fs'); const os = require('os'); const http = require('http');
+const { spawn } = require('child_process'); const path = require('path'); const fs = require('fs'); const os = require('os');
 const { Keypair, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 const { ROOT, RPC_PORT, startValidator, fund, units, sleep } = require('./lib.js');
 const RELAYER_PORT = Number(process.env.PORT || 8843), WEB_PORT = 8873;
-const MIME = { html: 'text/html', css: 'text/css', js: 'application/javascript', png: 'image/png', svg: 'image/svg+xml', webp: 'image/webp', json: 'application/json', wasm: 'application/wasm', zkey: 'application/octet-stream' };
-/// Serves site/ as it is (edit and reload, no build). The circuits and proving keys are read from zk/ and the logos from brand/,
-/// as build-site.js does for dist/site/, so neither is copied into site/.
-function serveSite(port) { const find = (f) => { const b = path.basename(f); if (f.startsWith('/brand/')) return path.join(ROOT, f); if (b.endsWith('.zkey')) return path.join(ROOT, 'zk/keys', b); if (b.endsWith('.wasm')) return path.join(ROOT, 'zk/build', b); return path.join(ROOT, 'site', f); };
-  return http.createServer((req, res) => { let f = path.posix.normalize(decodeURIComponent(req.url.split('?')[0])); f = f === '/' ? '/index.html' : f; const fp = find(f); if (f.includes('..') || f.startsWith('/_') || !fs.existsSync(fp) || fs.statSync(fp).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': MIME[f.split('.').pop()] || 'application/octet-stream' }); fs.createReadStream(fp).pipe(res); }).listen(port); }
 if (require.main === module) (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'veyl-demo-')); const payer = Keypair.generate(); const payerFile = path.join(dir, 'payer.json'); fs.writeFileSync(payerFile, JSON.stringify([...payer.secretKey]));
   console.log('starting a local validator on :' + RPC_PORT); const { val, rpc, conn } = await startValidator(dir, payer, RPC_PORT);
@@ -32,8 +27,10 @@ if (require.main === module) (async () => {
   console.log('programs deployed', JSON.stringify(dep.programs, null, 1));
   if (process.env.FUND) { const who = new PublicKey(process.env.FUND); await conn.requestAirdrop(who, 5e9).catch(() => {}); for (const t of Object.values(T)) await fund(conn, payer, t.mint, who, units(t.sym === 'SOL' ? 10 : t.sym === 'BONK' ? 100_000_000 : 10_000, t.decimals)); console.log('funded', process.env.FUND, 'with mock tokens and 5 SOL'); }
   const rel = spawn('node', [path.join(ROOT, 'relayer/relayer.js')], { env: { ...process.env, PORT: String(RELAYER_PORT), RPC_URL: rpc, DEPLOY_FILE: path.join(ROOT, 'deploy.local.json'), RELAYER_KEY: relayerFile, POSTMAN_KEY: postmanFile }, stdio: 'inherit' });
-  const web = serveSite(WEB_PORT);
+  // the site, built against deploy.local.json (the pages are the Next.js export, so they need a build)
+  const { build } = require('./build-site.js'); const { serveDist } = require('./serve-dist.js');
+  const site = build('local', { out: path.join(dir, 'site'), env: { ...process.env, RELAYER_URL: 'http://127.0.0.1:' + RELAYER_PORT } });
+  const web = serveDist(WEB_PORT, site.out);
   await sleep(1500); console.log(`\nVeyl is up: http://localhost:${WEB_PORT}  (app: http://localhost:${WEB_PORT}/app.html, relayer: http://127.0.0.1:${RELAYER_PORT})`);
   const stop = () => { rel.kill(); cmt.stop(); val.kill(); web.close(); process.exit(0); }; process.on('SIGINT', stop); process.on('SIGTERM', stop);
 })().catch((e) => { console.error(e); process.exit(1); });
-module.exports = { serveSite };

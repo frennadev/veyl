@@ -26,7 +26,8 @@ veyl/
                         shielded (Phase 2/3), sealed, postman, faucet; http.js serves it
   engine/               the browser engine: sol-entry.js + shield-engine.js + sealed-engine.js, the Sandbox (sandbox-*.js), market data
                         (market.js, markets.js); npm run bundle -> site/veyl-sol.js
-  site/                 what gets served: index.html (+ home.js), docs.html, app.html (+ app.js, app.css), veyl.css, the bundle;
+  web/                  the pages as a Next.js project (static export: index.html, docs.html, app.html); web/README.md
+  site/                 the scripts and assets the pages load: app.js, home.js, app.css, veyl.css, the bundle (site/*.html superseded);
                         prove-worker.js proves in a Web Worker
   tests/harness.js      shared by the runners: check/refused/compute units, a fresh validator; tests/phase-only.js <2|3> runs one phase
   tests/run.js          298 tests on a local validator (RPC 8933), real proofs verified on-chain, a regression test per review finding;

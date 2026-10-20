@@ -1,0 +1,163 @@
+// /docs (exported as docs.html). Ported 1:1 from the old site/docs.html: same ids, classes, text and links; its inline
+// <script> (table-of-contents highlight, nav border on scroll) is now <DocsEffects/>, a client component.
+import PageHead from '@/components/PageHead';
+import SiteNav from '@/components/SiteNav';
+import SiteFooter from '@/components/SiteFooter';
+import DocsEffects from './DocsEffects';
+
+const DESCRIPTION = 'How to use Veyl: provide liquidity privately, swap instantly or sealed, what the fees are, what stays hidden and what is public, and answers to common questions.';
+
+export default function Docs() {
+  return (
+    <>
+      <PageHead title="Veyl Docs" ogTitle="Veyl Docs: using Veyl" description={DESCRIPTION} />
+      <a className="skip" href="#main">Skip to content</a>
+      <SiteNav links={[['index.html#how', 'How it works'], ['index.html#privacy', 'Privacy'], ['index.html#pools', 'Pools'], ['docs.html', 'Docs', true]]} />
+
+      <main id="main" className="w docs">
+        <nav className="toc" aria-label="On this page">
+          <h4>Use Veyl</h4>
+          <a href="#start">Getting started</a>
+          <a href="#privacy">What stays private</a>
+          <a href="#liquidity">Provide liquidity</a>
+          <a href="#swap">Swap</a>
+          <a href="#more">Orders &amp; rewards</a>
+          <a href="#fees">Fees</a>
+          <h4>Trust</h4>
+          <a href="#roadmap">Roadmap</a>
+          <a href="#faq">FAQ</a>
+          <a href="app.html#privacy">Privacy check</a>
+        </nav>
+
+        <div className="doc">
+          <section id="start">
+            <p className="eyebrow"><i></i>Docs</p>
+            <h1>Using <em>Veyl</em></h1>
+            <p className="lede">Provide liquidity and swap on Solana without your wallet showing up.</p>
+            <h2 style={{marginTop:40}}>Getting started</h2>
+            <h3>Open the app</h3>
+            <p><a href="app.html">Open the app</a> and press <b>Get started</b>. You don't need a wallet: choose <b>No wallet needed</b> and Veyl makes a deposit address in your browser. Send SOL, USDC or USDT to it from any wallet or exchange, then move it into your private balance. Prefer your own wallet? Connect Phantom, Solflare or Backpack instead. Veyl lists 83 pools: SOL–USDC and the other majors, plus every major Meteora pair. Pools, positions and fees are read from the chain.</p>
+            <p><b>Every pool is curated.</b> Veyl lists each pool itself, choosing the pair, price step and fee, so there are no copycat or spam pools to sort through. You can add liquidity to any of them; you can't open a new pool yet. Open pool creation is on the roadmap.</p>
+            <h3>The deposit address</h3>
+            <p>Its key lives only in this browser and goes into your encrypted backup. Keep about 0.01 SOL in it for network fees. Anything left over can be sent out from the account menu with <b>Send what's left out</b>; that transfer is public, so for privacy withdraw from your private balance instead.</p>
+            <h3>Your Veyl wallet, and its seed</h3>
+            <p>The app makes a private account on first open. Its seed lives only in this browser and is the only thing that can read or spend your private balance: <b>your seed is your balance</b>. Choose <b>Back up (encrypted)</b> in the account menu early; clear your browser data without a backup and the funds are gone.</p>
+            <h3>Send and receive privately</h3>
+            <p>On the Portfolio page, <b>Receive</b> shows your Veyl address as a QR code and a payment link; add an amount and a token if you want to ask for something specific. Whoever opens the link gets the <b>Send</b> screen already filled in. A payment between Veyl addresses stays inside the private pool: nobody sees the amount, who sent it or who received it. The link only carries your Veyl address and the amount; it can be used to pay you, never to spend from you.</p>
+            <h3>Private · Public</h3>
+            <p>Every action panel has this toggle. <b>Private</b> pays from your private balance: your browser makes a proof, a relayer submits it, your wallet never appears. <b>Public</b> pays from your wallet, signed by it, like any Solana app. On the Portfolio page, <b>Deposit</b> moves tokens into your private balance (public; admitted after a moment) and <b>Withdraw</b> pays a Veyl address (hidden) or a fresh Solana address (amount and recipient public).</p>
+          </section>
+
+          <section id="privacy">
+            <h2>What stays private</h2>
+            <div className="ledger" style={{marginTop:20}}>
+              <div className="hid-side">
+                <h3><span className="tag hid">What stays hidden</span></h3>
+                <ul>
+                  <li><b>Your private balance</b> How much you hold, in which tokens.</li>
+                  <li><b>Private sends</b> Who paid whom, and how much.</li>
+                  <li><b>Your positions</b> Who owns them and how large they are.</li>
+                  <li><b>Fees you claim</b> They go straight into your private balance.</li>
+                  <li><b>Sealed swap sizes</b> Only the batch's total is decrypted.</li>
+                  <li><b>Which deposit paid for what</b> A proof shows you own funds, not which.</li>
+                </ul>
+              </div>
+              <div className="pub-side">
+                <h3><span className="tag pub">What's public</span></h3>
+                <ul>
+                  <li><b>Deposits and withdrawals</b> Wallet, token and amount in; amount and recipient out.</li>
+                  <li><b>Everything at a pool</b> Prices, liquidity per bin, each swap's amounts, each liquidity action's change per bin (never who).</li>
+                  <li><b>Sealed batches as a whole</b> Totals, seller counts, clearing price; never one person's size.</li>
+                  <li><b>The token of a shielded action</b> The relayer's fee is paid in it.</li>
+                  <li><b>Timing</b> When things happened, not who did them.</li>
+                </ul>
+              </div>
+            </div>
+            <h3>Keep yourself private</h3>
+            <ol>
+              <li><b>Pay out to a fresh address.</b> The app refuses your deposit wallet and any address with history.</li>
+              <li><b>Wait between depositing and using.</b> Acting right after a deposit links the two by timing.</li>
+              <li><b>Avoid amounts that match a deposit.</b> Withdrawing exactly what was just deposited gives it away.</li>
+              <li><b>Prefer a Veyl address over a Solana address</b> when sending out; a public payout names its recipient.</li>
+              <li><b>Use a VPN or Tor.</b> The relayer sees the network address a request comes from.</li>
+            </ol>
+            <h3>Two honest notes</h3>
+            <p><b>Small crowds are weaker.</b> Privacy comes from being one of many; a pool or batch with few users is easier to read. Treat privacy as thin until there is real volume.</p>
+            <p><b>The committee.</b> Sealed swap totals are decrypted by a group of 3 servers. If 2 teamed up they could see individual sealed-swap sizes, never take funds: a wrong answer is rejected on chain, and if they go quiet the batch refunds.</p>
+          </section>
+
+          <section id="liquidity">
+            <h2>Provide liquidity privately</h2>
+            <div className="deflist" style={{marginTop:20}}>
+              <div className="def"><h3>Pick a pool</h3><p>Open <b>Pools</b>, choose a pair, and keep <b>Private</b> selected in the Add panel.</p></div>
+              <div className="def"><h3>Pick a shape</h3><p><b>Spot</b> spreads your tokens evenly across the range. <b>Curve</b> concentrates them around the current price. <b>Bid-Ask</b> weights the edges, for an expected move.</p></div>
+              <div className="def"><h3>Pick a range and size</h3><p>Type a minimum and maximum price or pick a preset width; only bins the price trades through earn fees. Enter one or both tokens. A shielded position covers up to 16 bins.</p></div>
+              <div className="def"><h3>Confirm</h3><p>Your browser makes a proof (a few seconds; longer on phones), the relayer submits it, the position appears in your Portfolio. The chain sees liquidity arrive in those bins, not who added it.</p></div>
+              <div className="def"><h3>What "shielded" means here</h3><p>All shielded positions sit under one shared on-chain owner; a private note says which part is yours. Nobody can see who owns a position or how large it is, and your later actions on it are not linked.</p></div>
+              <div className="def"><h3>Fees accrue, then claim</h3><p>Every swap through your bins pays you its fee. Press <b>Claim</b> on the position: the amount lands in your private balance, never shown on chain.</p></div>
+              <div className="def"><h3>Rebalance</h3><p>If the price moved, <b>Rebalance</b> re-places your liquidity around it in one action, keeping your shape.</p></div>
+              <div className="def"><h3>Remove</h3><p><b>Remove</b> takes 25%, 50% or all of it back into your private balance as new notes, fees included; the chain sees shares leave, not whose.</p></div>
+            </div>
+          </section>
+
+          <section id="swap">
+            <h2>Swap</h2>
+            <h3>Instant</h3>
+            <p>Settles now at the current pool price. Paid from your shielded balance it hides who you are; the amounts in and out are public at the pool, as with any swap. Use it when you want the trade done now and the size is not sensitive.</p>
+            <h3>Sealed</h3>
+            <p>Hides the size too. Your amount is encrypted on your device and joins the pool's current batch (about a minute). Only the batch's totals are decrypted; buyers are netted against sellers, one swap covers the difference, and you <b>Claim</b> your share at the clearing price with a second proof. Use it when your size is sensitive; it settles with the batch and has no limit price, only a guard against the price drifting too far. A side with under three sellers waits for the next batch, and is refunded if it never fills.</p>
+          </section>
+
+          <section id="more">
+            <h2>Limit orders, Zap, Rewards</h2>
+            <h3>Limit orders</h3>
+            <p>An order sits in one price bin next to the current price. Swaps that cross it fill it at that price; it earns that bin's fee share while it waits. Withdraw any time, filled or not.</p>
+            <h3>Zap</h3>
+            <p>Have only one of the pair's tokens? Zap swaps part of it in the pool and adds both sides at once.</p>
+            <h3>Rewards</h3>
+            <p>Some pools pay farm rewards to liquidity in the active bin. For now <b>shielded positions do not earn farm rewards</b>, only swap fees; a public position earns both.</p>
+          </section>
+
+          <section id="fees">
+            <h2>Fees</h2>
+            <div className="scroll">
+              <table className="tbl fees-tbl" style={{marginTop:16}}>
+                <thead><tr><th>Fee</th><th>You pay it when</th><th>Who gets it</th><th>Typical size</th></tr></thead>
+                <tbody>
+                  <tr><td data-label="Fee">Swap fee</td><td data-label="You pay it when">You swap, instant or sealed</td><td data-label="Who gets it">Liquidity providers in the bins you traded through</td><td data-label="Typical size">0.01% to 0.5% at rest, more when the market is busy, never above 10%</td></tr>
+                  <tr><td data-label="Fee">Relayer fee</td><td data-label="You pay it when">Any shielded action</td><td data-label="Who gets it">The relayer, for submitting your proof</td><td data-label="Typical size">About 0.05%, more on small amounts, never above 1%</td></tr>
+                  <tr><td data-label="Fee">Protocol share</td><td data-label="You pay it when">Out of the swap fee, not on top</td><td data-label="Who gets it">The protocol treasury</td><td data-label="Typical size">10% of the swap fee</td></tr>
+                  <tr><td data-label="Fee">Network fee</td><td data-label="You pay it when">Public actions and deposits</td><td data-label="Who gets it">Solana validators</td><td data-label="Typical size">A fraction of a cent in SOL; the relayer covers it on shielded actions</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="roadmap">
+            <h2>Roadmap</h2>
+            <ul className="roadmap">
+              <li><b>Now</b> · Private liquidity, instant and sealed swaps, limit orders, zap and rewards on Solana.</li>
+              <li><b>Next</b> · Public key ceremony, where independent people each add to the keys behind the proofs, followed by an independent audit.</li>
+              <li><b>Later</b> · Open pool creation, so any project can list its own pair, with a listing bond and checks. Rewards for shielded positions, limit prices on sealed swaps, larger private positions, Jupiter routing, viewing keys for accountants, hardware-wallet support.</li>
+            </ul>
+          </section>
+
+          <section id="faq" className="faq">
+            <h2>FAQ</h2>
+            <details><summary>Can I lose funds?</summary><p>Yes, as with any liquidity protocol: concentrated liquidity can lose value against simply holding when the price leaves your range. Fees offset that; they do not guarantee it. Start small while you learn the app.</p></details>
+            <details><summary>What if I lose my seed?</summary><p>Your private balance and positions are gone; nobody can recover them, including us. Back up from the account menu: the file is encrypted with your passphrase, and restoring it in another browser brings everything back.</p></details>
+            <details><summary>Why is proving slow on my phone?</summary><p>Every shielded action is a proof your device makes itself, and a phone has far less power than a laptop: expect two to four times longer, sealed swaps most of all. The first proof also downloads a key of a few megabytes.</p></details>
+            <details><summary>Why can't I pay out to the wallet I deposited from?</summary><p>Anyone watching could line up the deposit and the payout, which undoes the point. The app refuses that wallet and any address with a history.</p></details>
+            <details><summary>Is this audited?</summary><p>Veyl has had two internal security reviews, with every finding fixed. An independent audit and the public key ceremony are the next items on the roadmap.</p></details>
+            <details><summary>Can I create my own pool?</summary><p>Not yet. Every pool is listed by Veyl, which keeps out copycat and scam pairs and keeps liquidity deep where it counts. Open pool creation, with a listing bond and duplicate checks, is on the roadmap.</p></details>
+            <details><summary>What does the relayer see?</summary><p>Your request and the network address it came from. It cannot redirect funds, raise its fee or change what you asked for: all of that is locked inside your proof. It never sees your balance or who you are.</p></details>
+            <details><summary>Is Veyl a mixer? Who screens deposits?</summary><p>No. A publisher checks each deposit against a deny list before admitting it, keeping stolen or sanctioned funds out; until then you can take it back, and the admitted list is public. The market stays fully visible: Veyl hides who you are and how much you hold, not what the market did.</p></details>
+          </section>
+        </div>
+      </main>
+
+      <SiteFooter />
+      <DocsEffects />
+    </>
+  );
+}

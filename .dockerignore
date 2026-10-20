@@ -16,3 +16,5 @@ deploy.local.json
 ceremony/work
 ceremony/ptau
 ceremony/rehearsal
+web/.next
+web/out
