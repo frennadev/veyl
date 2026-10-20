@@ -24,6 +24,7 @@
     "handover": "node scripts/handover.js",
     "test:bin": "node tests/bin-permissionless.js",
     "test:pools": "node tests/pools-api.js",
+    "test:newpools": "node tests/new-pools.js",
     "test:phase2": "node tests/phase-only.js 2",
     "test:phase3": "node tests/phase-only.js 3",
     "committee": "node committee/node.js",

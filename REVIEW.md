@@ -36,6 +36,8 @@ self-inflicted. **Info** = design notes and things checked and found sound.
 | L-6 | Low | A user can make the relayer post, then make execution fail, costing it a few signature fees | Acknowledged (fee floor + rate limit) |
 | L-7 | Low | The relayer's HTTP API was unbounded: unlimited reads (each `/pools` ~2 RPC calls per pool), faucet drainable with fresh addresses, no cap on concurrent submissions | Fixed |
 | M-7 | Medium | Pool history trusted look-alike events from any program: a forged `Deposited` could get a denylisted deposit's label approved, or stop a pool's `/state` | Fixed |
+| M-8 | Medium | Fees in a token listed since the deploy were valued at its pool's opening price and whole vault balance: a creator could make a worthless token pay for the relayer's rent | Fixed |
+| L-8 | Low | Pools listed since the deploy had no lookup-table entries: their legacy private add / remove and a 16-bin public add no longer fit a transaction | Fixed |
 | I-1..I-8 | Info | Trust in the postman, screening, deposit-record collisions, rent, lookup table, ed25519, context coverage, Groth16 and arithmetic | Notes |
 
 ---
@@ -227,6 +229,40 @@ writes the `Program <id> invoke` / `success` lines), and `V.events` only events 
 trade index (relayer/activity.js) and the app's own trade read (engine/sol-entry.js) keep only `Swapped` events from the
 bin program's own frame (display figures; `a Swapped look-alike logged by another program is ignored`, tests/activity.js).
 
+## M-8: A pool's creator set the price of its token for the relayer's fee floor
+
+Since permissionless pools, a fee may be paid in a token the deployment does not price; the relayer valued it at its pool's
+active-bin price (whatever the creator opened the pool at) whenever the priced side's vault held $1,000, at half that price.
+The vault balance counts liquidity at any bin: a creator could open TOKEN/USDC at 1,000 USDC, park $1,000 of USDC hundreds of
+bins lower, and have every private action priced at ~$500 per TOKEN, so a few atoms of a worthless token paid for the
+relayer's rent (up to ~0.26 SOL for a shielded add opening two new bin-array chunks), as often as they liked, then withdraw
+the USDC. Users' funds were never at risk; the relayer's SOL was.
+
+**Fix (relayer/relayer.js `_valueDiscovered`, relayer/fees.js `_derivedLimit`).** A listed-since token is valued by what
+selling it into the pool would return: only the priced side's liquidity within `DISCOVERED_BAND` (5%) of the active bin
+counts (at least `DISCOVERED_MIN_DEPTH_USD`, $1,000), at that band's average price (never above spot), cut to
+`DISCOVERED_HAIRCUT` (0.5), the lowest seen over `DISCOVERED_TWAP_MS` (30 min). A creator can still pull their liquidity
+after a fee is accepted, so what such fees may cover is capped: `DISCOVERED_MAX_COST_SOL` per request (0.03: no new bin
+array, share account or LpAcc), `DISCOVERED_BUDGET_SOL` per token (0.5) and `DISCOVERED_BUDGET_TOTAL_SOL` (2) per 24 h; past
+that the fee must come from a listed token (the engine puts a listed token's leg first, so it pays for the action).
+**Regression tests** (tests/new-pools.js): the fake-priced pool is refused, the band price and its 30-minute low, the
+per-request cap (a fresh-chunk add quoted in the new token is refused, in USDC accepted), both budgets.
+
+## L-8: Pools listed since the deploy had no lookup-table entries
+
+Every account of a pool listed after the deploy went into its transactions in full (32 bytes instead of a 1-byte index).
+Measured (tests/new-pools.js): a legacy `private_add` of 15 bins with two legs 1,246 bytes and a legacy `private_remove` of 15
+bins over the limit (the app refused or split them), a 16-bin public add 1,254 bytes (it failed); the shielded actions still
+fit but close to the limit (a two-leg zap add 1,083, a two-route swap 1,150).
+
+**Fix (relayer/luts.js, engine/sol-entry.js, sdk `usableLut`).** The relayer keeps its own tables (its authority, its rent)
+holding each listed and seeded pool's accounts, derived from the pool account itself and existing on chain, never named by a
+request; capped per pool (24), per hour (200) and in tables (4, about 0.23 SOL of rent at most, recoverable by closing them),
+found again after a restart (`POOL_LOOKUP_TABLES` or a chain scan; none made otherwise). `/info` serves them as
+`poolLookupTables`; the engine compiles against them too (a table's entries never change once added, so it can only shorten a
+transaction, not redirect it). Addresses added in the current slot wait for the next (`usableLut`). A public add halves a
+mint that does not fit. With the table: 1,125 / 1,199 / 1,102 / 869 / 781 bytes.
+
 ## L-7: The relayer's HTTP API was unbounded
 
 Only POSTs were rate-limited. Reads were not, and `GET /pools` read every pool from the chain on each request (about 166 RPC
@@ -264,7 +300,8 @@ two outputs into one pool in the same slot make the second fail (the relayer can
 stay on chain; the relayer pays for them and its fee floor (M-1) now covers it.
 
 **I-5 Lookup table.** The relayer's address lookup table stays under the deployer's authority (it cannot be transferred). Once
-the relayer works, `npm run handover -- --freeze-lut` freezes it.
+the relayer works, `npm run handover -- --freeze-lut` freezes it. The relayer's own tables for pools listed since (L-8) stay
+under the relayer's key: it only ever extends them, within its caps.
 
 **I-6 ed25519 introspection (checked, sound).** `check_ed25519` loads the instruction at `current_index - 1` from the
 instructions sysvar (address-checked), requires the ed25519 program, exactly one signature, all offsets pointing into that same

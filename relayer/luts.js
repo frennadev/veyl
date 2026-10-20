@@ -27,10 +27,10 @@ const b58 = (k) => new PublicKey(k).toBase58();
 module.exports = (Base) => class Luts extends Base {
   /// This relayer's tables: POOL_LOOKUP_TABLES (comma separated) when set, else every table on chain whose authority is
   /// this wallet (not the deployment's). null when the chain cannot be asked: then no table is made (see above).
-  async _loadPoolLuts() { if (this.poolLuts) return this.poolLuts; const dep = new Set([this.dep.lookupTable, ...(this.dep.lookupTables || [])].filter(Boolean).map(b58));
+  async _loadPoolLuts() { if (this.poolLuts) return this.poolLuts; if (this._lutLoadFail && Date.now() - this._lutLoadFail < 600_000) return null; /* a refused scan is retried every 10 min */ const dep = new Set([this.dep.lookupTable, ...(this.dep.lookupTables || [])].filter(Boolean).map(b58));
     let keys; if (process.env.POOL_LOOKUP_TABLES) keys = process.env.POOL_LOOKUP_TABLES.split(',').map((x) => x.trim()).filter(Boolean).map(b58);
     else { try { const rows = await this.conn.getProgramAccounts(AddressLookupTableProgram.programId, { commitment: 'confirmed', dataSlice: { offset: 0, length: 0 }, filters: [{ memcmp: { offset: 21, bytes: '2' /* Some(authority): byte 1 */ } }, { memcmp: { offset: 22, bytes: this.wallet.publicKey.toBase58() } }] });
-      keys = rows.map((r) => r.pubkey.toBase58()); } catch (e) { console.error('pool lookup tables: cannot list this wallet\'s tables (' + String(e.message).slice(0, 80) + '); set POOL_LOOKUP_TABLES'); return null; } }
+      keys = rows.map((r) => r.pubkey.toBase58()); } catch (e) { this._lutLoadFail = Date.now(); console.error('pool lookup tables: cannot list this wallet\'s tables (' + String(e.message).slice(0, 80) + '); set POOL_LOOKUP_TABLES'); return null; } }
     const out = []; for (const k of keys.filter((x) => !dep.has(x))) { const t = (await this.conn.getAddressLookupTable(new PublicKey(k))).value;
       if (t && t.isActive() && t.state.authority && t.state.authority.equals(this.wallet.publicKey)) out.push(new PublicKey(k)); }
     this.poolLuts = out.sort((a, b) => a.toBase58().localeCompare(b.toBase58())); this._useLuts(); return this.poolLuts; }

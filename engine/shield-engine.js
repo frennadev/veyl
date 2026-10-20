@@ -267,7 +267,9 @@ export function installShield(Engine, PrivacyError) {
     const ids = []; for (let b = 0; b < K; b++) ids.push(wlo + b); const bins = await this.V.bins(pk, [...new Set([...ids.map(chunkOf), chunkOf(st.active)])]);
     const ex = Z.planExact(st.bp, bins, ids, w.X, w.Y); if (ex.shares.every((s) => s === 0n)) throw new Error('These amounts are too small for the bins they go to.');
     const lpq = { core: { binPool: b58(pk), lo: wlo } }; const syms = [...(ex.needX > 0n ? [[pool.x, ax]] : []), ...(ex.needY > 0n ? [[pool.y, ay]] : [])];
-    // the first leg pays the relayer for the whole action (posting every proof + the LP instruction), the others for their own post
+    // the first leg pays the relayer for the whole action (posting every proof + the LP instruction), the others for their own post;
+    // a listed token goes first (a relayer caps what fees in a token listed since the deploy may cover: relayer/fees.js)
+    syms.sort((a, b) => (this.tok(a[0]).listed === false) - (this.tok(b[0]).listed === false));
     const legs = []; for (const [i, [sym, amount]] of syms.entries()) legs.push({ sym, amount, fee: i === 0 ? await this.shieldFee('shieldLp', sym, { ...lpq, legs: syms.length }) : await this.shieldFee('transact', sym) });
     const { r } = await this._lp(pool, wlo, ex.shares, { legs, maxCharge: [ax / 100n + 1n, ay / 100n + 1n], hint: { hintX: ex.hintX, hintY: ex.hintY } });
     this.store.data.shield.meta[b58(pk) + ':' + wlo] = { shape: o.shape || 'spot', at: Date.now() }; this.store.save();
