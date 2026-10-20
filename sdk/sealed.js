@@ -66,13 +66,17 @@ function claimInput({ tree, sk, swap, assetOut, num, den, fee = 0n, out, ext }) 
 
 // ------------------------------------------------------------------------------------------------ settlement maths (= settle_batch)
 /// What a batch clears at: totals [X sold, Y sold], the active bin's 128.128 price (Y per X), and a quote function for the
-/// net swap (xForY, amountIn) -> amountOut (the bin pool's exact twin, or the program's simulation).
-async function clearing({ totals, price, quote }) {
-  const [ta, tb] = totals.map(BigInt); price = BigInt(price); const valueA = (ta * price) >> 128n;
+/// net swap (xForY, amountIn) -> amountOut (the bin pool's exact twin, or the program's simulation; it pays the 0.2% protocol
+/// fee on the net part itself). The matched part pays it here: protocolFeeOf(matched value) comes off what each side
+/// receives (X sellers: fee on matchedY, in Y; Y sellers: fee on matchedX, in X), rounded up. `feeBps` = the pool's
+/// protocol_fee_bps. protocolFee = [in X, in Y], what settle_batch pays into the bin pool.
+async function clearing({ totals, price, quote, feeBps = V_.PROTOCOL_FEE_BPS }) {
+  const [ta, tb] = totals.map(BigInt); price = BigInt(price); const valueA = (ta * price) >> 128n; let r;
   if (valueA >= tb) { let matchedX = (tb * Q128) / price; if (matchedX > ta) matchedX = ta; const net = ta - matchedX; const out = net > 0n ? BigInt(await quote(true, net)) : 0n;
-    return { xForY: true, netIn: net, netOut: out, num: [tb + out, matchedX], den: [ta, tb], matched: [matchedX, tb] }; }
-  const matchedY = valueA; const net = tb - matchedY; const out = BigInt(await quote(false, net));
-  return { xForY: false, netIn: net, netOut: out, num: [matchedY, ta + out], den: [ta, tb], matched: [ta, matchedY] };
+    r = { xForY: true, netIn: net, netOut: out, recv: [tb + out, matchedX], matched: [matchedX, tb] }; }
+  else { const matchedY = valueA; const net = tb - matchedY; const out = BigInt(await quote(false, net)); r = { xForY: false, netIn: net, netOut: out, recv: [matchedY, ta + out], matched: [ta, matchedY] }; }
+  const protocolFee = r.matched.map((m) => V_.protocolFeeOf(m, feeBps));
+  return { xForY: r.xForY, netIn: r.netIn, netOut: r.netOut, num: [r.recv[0] - protocolFee[1], r.recv[1] - protocolFee[0]], den: [ta, tb], matched: r.matched, protocolFee };
 }
 const claimOut = (amount, num, den, fee = 0n) => (BigInt(den) === 0n ? 0n : (BigInt(amount) * BigInt(num)) / BigInt(den) - BigInt(fee));
 

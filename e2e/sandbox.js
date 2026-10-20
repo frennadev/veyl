@@ -46,7 +46,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
 
     // the app shell: sidebar, top bar, the pools table, rows -> pool page
     const kp = await pg.textContent('#kpis'); check('top bar: no simulated TVL, positions or fees', !/TVL|Your positions|Fees earned/.test(kp), kp);
-    check('sidebar: one flat list and one Docs link', /SwapPoolsSealedswapsPortfolioPrivacyActivityDocs/.test((await pg.textContent('#side')).replace(/\s+/g, '').replace('Collapse', '')));
+    check('sidebar: one flat list (Create pool once the engine lists pools) and one Docs link', /SwapPoolsSealedswaps(Createpool)?PortfolioPrivacyActivityDocs/.test((await pg.textContent('#side')).replace(/\s+/g, '').replace('Collapse', '')));
     check('pools toolbar: just search (no interval, sort, columns, filters or category chips in the way)', await pg.isVisible('#poolQ') && !(await pg.isVisible('#poolSort')) && !(await pg.isVisible('#colBtn')) && !(await pg.isVisible('#tokChips')));
     const rowsOrder = () => pg.$$eval('#poolRows tr[data-pool]', (r) => r.map((x) => x.dataset.pool));
     await pg.click('#poolHead th[data-sort="liq"]'); await pg.waitForTimeout(300);

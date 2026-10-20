@@ -434,25 +434,43 @@ pub fn settle_batch<'info>(ctx: Context<'_, '_, 'info, 'info, SettleBatch<'info>
         let id = ctx.accounts.bin_pool.load()?.active_id;
         require!((id as i64 - b.active_at_close as i64).unsigned_abs() <= s.max_drift as u64, EntryError::PriceDrift);
         (b.totals[0], b.totals[1], b.seq) };
-    let (price, active) = { let p = ctx.accounts.bin_pool.load()?; (veyl_bin::price_of(&p.base_price, &p.step_q, p.active_id)?, p.active_id) };
+    let (price, active, bps) = { let p = ctx.accounts.bin_pool.load()?; (veyl_bin::price_of(&p.base_price, &p.step_q, p.active_id)?, p.active_id, p.protocol_fee_bps) };
     let q128 = U512::one() << 128;
-    let value_a = (U512::from(ta) * price) >> 128; // what all of X sold is worth in Y at this price
+    let value_a = (U512::from(ta) * price) >> 128; /* what all of X sold is worth in Y at this price */
     let a = &ctx.accounts; let bump = a.entry.signer_bump;
-    let (x_for_y, net_in, out, num, den);
+    let (x_for_y, net_in, out, matched_x, matched_y);
     if value_a >= U512::from(tb) {
-        let matched_x = ((U512::from(tb) * q128) / price).low_u64().min(ta); let net = ta - matched_x;
+        let mx = ((U512::from(tb) * q128) / price).low_u64().min(ta); let net = ta - mx;
         let o = if net > 0 { net_swap(a, ctx.remaining_accounts, true, net, bump)? } else { 0 };
-        x_for_y = true; net_in = net; out = o; num = [tb.checked_add(o).ok_or(EntryError::AmountMismatch)?, matched_x]; den = [ta, tb];
+        x_for_y = true; net_in = net; out = o; matched_x = mx; matched_y = tb;
     } else {
-        let matched_y = value_a.low_u64(); let net = tb - matched_y;
+        let my = value_a.low_u64(); let net = tb - my;
         let o = net_swap(a, ctx.remaining_accounts, false, net, bump)?;
-        x_for_y = false; net_in = net; out = o; num = [matched_y, ta.checked_add(o).ok_or(EntryError::AmountMismatch)?]; den = [ta, tb];
+        x_for_y = false; net_in = net; out = o; matched_x = ta; matched_y = my;
     }
+    // The matched part pays the protocol fee too (the net part paid it in its swap): only totals are known, so the fee on
+    // each side's matched value comes off what that side receives (X sellers get Y: fee on matched_y, in Y; Y sellers get
+    // X: fee on matched_x, in X), rounded up, out of the shielded vaults into the bin pool's protocol balance.
+    let fee_x = veyl_bin::protocol_fee_of(matched_x, bps); let fee_y = veyl_bin::protocol_fee_of(matched_y, bps);
+    let (recv_y, recv_x) = if x_for_y { (tb.checked_add(out), Some(matched_x)) } else { (Some(matched_y), ta.checked_add(out)) };
+    let num = [recv_y.and_then(|v| v.checked_sub(fee_y)).ok_or(EntryError::AmountMismatch)?, recv_x.and_then(|v| v.checked_sub(fee_x)).ok_or(EntryError::AmountMismatch)?];
+    let den = [ta, tb];
+    if fee_x > 0 || fee_y > 0 { pay_matched_fee(a, fee_x, fee_y, bump)?; }
     let mut b = ctx.accounts.batch.load_mut()?;
     b.state = SETTLED; b.settled_slot = now; b.x_for_y = x_for_y as u8; b.net_in = net_in; b.net_out = out; b.num = num; b.den = den; b.settle_id = active;
     let pb = price.to_big_endian();
-    emit!(BatchSettled { bin_pool: b.bin_pool, seq, totals: [ta, tb], count: b.count, x_for_y, net_in, net_out: out, active_id: active, price: pb[32..].try_into().unwrap(), num, den });
+    emit!(BatchSettled { bin_pool: b.bin_pool, seq, totals: [ta, tb], count: b.count, x_for_y, net_in, net_out: out, active_id: active, price: pb[32..].try_into().unwrap(), num, den, protocol_fee: [fee_x, fee_y] });
     Ok(())
+}
+/// The protocol fee on a batch's matched part: out of the shielded vaults, through the entry vaults, into the bin pool.
+fn pay_matched_fee<'info>(a: &SettleBatch<'info>, fee_x: u64, fee_y: u64, bump: u8) -> Result<()> {
+    let seeds = signer_seeds(bump); let sg: &[&[u8]] = &[b"signer", &seeds[0]]; let sgs = [sg];
+    for (amt, mint, sv, ev, tp) in [(fee_x, &a.mint_x, &a.shield_vault_x, &a.entry_vault_x, &a.token_program_x), (fee_y, &a.mint_y, &a.shield_vault_y, &a.entry_vault_y, &a.token_program_y)] {
+        if amt == 0 { continue; }
+        veyl_pool::cpi::shield_pay(CpiContext::new_with_signer(a.veyl_pool.to_account_info(), veyl_pool::cpi::accounts::ShieldPay { processor: a.signer.to_account_info(), shield: a.shield.to_account_info(), mint: mint.to_account_info(), vault: sv.to_account_info(), to: ev.to_account_info(), token_program: tp.to_account_info() }, &sgs), amt)?; }
+    let accs = veyl_bin::cpi::accounts::MintLiquidity { from: a.signer.to_account_info(), pool: a.bin_pool.to_account_info(), mint_x: a.mint_x.to_account_info(), mint_y: a.mint_y.to_account_info(), vault_x: a.bin_vault_x.to_account_info(), vault_y: a.bin_vault_y.to_account_info(),
+        from_x: a.entry_vault_x.to_account_info(), from_y: a.entry_vault_y.to_account_info(), token_program_x: a.token_program_x.to_account_info(), token_program_y: a.token_program_y.to_account_info() };
+    veyl_bin::cpi::pay_protocol_fee(CpiContext::new_with_signer(a.veyl_bin.to_account_info(), accs, &sgs), fee_x, fee_y)
 }
 /// The batch's one swap: `amount` of the excess token out of the shielded vault, through the bin pool, the output back in.
 fn net_swap<'info>(a: &SettleBatch<'info>, rem: &'info [AccountInfo<'info>], x_for_y: bool, amount: u64, bump: u8) -> Result<u64> {
@@ -674,5 +692,5 @@ pub struct ClaimSwap<'info> {
 #[event] pub struct SharePosted { pub batch: Pubkey, pub member: u8 }
 #[event] pub struct ShareVerified { pub bin_pool: Pubkey, pub seq: u64, pub member: u8 }
 #[event] pub struct TotalVerified { pub bin_pool: Pubkey, pub seq: u64, pub direction: u8, pub total: u64 }
-#[event] pub struct BatchSettled { pub bin_pool: Pubkey, pub seq: u64, pub totals: [u64; 2], pub count: [u32; 2], pub x_for_y: bool, pub net_in: u64, pub net_out: u64, pub active_id: i32, pub price: [u8; 32], pub num: [u64; 2], pub den: [u64; 2] }
+#[event] pub struct BatchSettled { pub bin_pool: Pubkey, pub seq: u64, pub totals: [u64; 2], pub count: [u32; 2], pub x_for_y: bool, pub net_in: u64, pub net_out: u64, pub active_id: i32, pub price: [u8; 32], pub num: [u64; 2], pub den: [u64; 2], pub protocol_fee: [u64; 2] }
 #[event] pub struct SealedClaimed { pub bin_pool: Pubkey, pub seq: u64, pub direction: u8, pub refund: bool }

@@ -28,6 +28,8 @@ const VERSION = require('../package.json').version;
 /// The node's X25519 key for DKG shares, derived from its Solana key (one secret to keep).
 const boxKeyOf = (kp) => nacl.box.keyPair.fromSecretKey(Uint8Array.from(crypto.createHash('sha256').update(Buffer.concat([Buffer.from('veyl-committee-box'), Buffer.from(kp.secretKey.subarray(0, 32))])).digest()));
 
+/// A dropped connection to the RPC (a connect timeout, ECONNRESET) is retried a few times: resending a signed transaction is safe.
+const retryFetch = async (url, init) => { for (let i = 0; ; i++) { try { return await fetch(url, init); } catch (e) { if (i >= 3) throw e; await new Promise((r) => setTimeout(r, 500 * 2 ** i)); } } };
 class Node {
   /// depLoader: () => the deployment (deploy.<network>.json) or null; read again until it exists (a local deployment is
   /// written after the committee's key generation, since it registers the key).
@@ -38,7 +40,7 @@ class Node {
     this.share = this._read('share.json'); this.transcript = this._read('transcript.json');
     if (this.share) this.status.dkg = 'done';
   }
-  _chain() { if (this.V) return true; const dep = this.depLoader(); if (!dep) return false; this.dep = dep; this.conn = new Connection(this.rpc || dep.rpc, 'confirmed');
+  _chain() { if (this.V) return true; const dep = this.depLoader(); if (!dep) return false; this.dep = dep; this.conn = new Connection(this.rpc || dep.rpc, { commitment: 'confirmed', fetch: retryFetch });
     this.V = new S.Veyl({ connection: this.conn, programs: dep.programs, payer: this.key }); this.V.lookupTable = dep.lookupTable ? new PublicKey(dep.lookupTable) : null; return true; }
   _read(f) { try { return JSON.parse(fs.readFileSync(path.join(this.dir, f), 'utf8')); } catch { return null; } }
   _write(f, o, mode = 0o600) { fs.writeFileSync(path.join(this.dir, f), JSON.stringify(o, null, 1), { mode }); }
@@ -99,6 +101,8 @@ module.exports = { Node, boxKeyOf, keyFromEnv };
 if (require.main === module) {
   const env = process.env; const key = keyFromEnv(env); if (!key) { console.error('Set NODE_SECRET_KEY (or NODE_KEY=<keypair file>): this member\'s node key.'); process.exit(1); }
   if (process.argv[2] === 'keys') { console.log(JSON.stringify({ node: key.publicKey.toBase58(), boxKey: Buffer.from(boxKeyOf(key).publicKey).toString('base64') })); process.exit(0); }
+  // a failed RPC call outside the tick's try/catch (a dropped connection, ECONNRESET) is logged; it must not stop the node
+  process.on('unhandledRejection', (e) => console.error('unhandled', (e && e.message) || e));
   const config = env.COMMITTEE_JSON ? JSON.parse(env.COMMITTEE_JSON) : JSON.parse(fs.readFileSync(env.COMMITTEE_CONFIG, 'utf8'));
   const node = new Node({ config, key, stateDir: env.STATE_DIR || path.join(process.cwd(), 'committee-state-' + config.index), depLoader: () => deployFromEnv(env), rpc: env.RPC_URL || null, settle: env.SETTLE !== '0', close: env.CLOSE !== '0', bits: Number(env.BSGS_BITS || J.TOTAL_BITS) });
   const port = Number(env.PORT || 8863); const srv = node.serve(port);

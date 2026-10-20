@@ -51,6 +51,8 @@ export function makeSandbox(Engine, PrivacyError, Store) {
       V.batch = async (pool, seq) => ch.batch(pool, seq);
       V.claimTerms = async (pool, seq, d) => ch.claimTerms(pool, seq, d);
       V.nonce = async () => 0n;
+      V.factory = async () => { const f = ch.factory; return { ...f, tiers: f.tiers.map((t) => ({ ...t })) }; };
+      V.bond = async (pool) => { const b = ch.bonds.get(b58(pool)); return b ? { ...b } : null; };
       this.conn = { getSlot: async () => ch.slot(), getBalance: async () => 0, getSignaturesForAddress: async () => [] };
       ch.listeners.add((e) => { this._dirty = true; this._emit(e); });
     }
@@ -59,6 +61,7 @@ export function makeSandbox(Engine, PrivacyError, Store) {
       this._fresh = !ok; if (!ok) { this._dirty = true; this.store.data.shield = { orders: [], pending: [], meta: {} }; this.store.data.positions = []; this.store.data.orders = []; this.store.data.activity = []; this.store.save(); this.shieldInit(); }
       const sb = this.store.data.sandbox || (this.store.data.sandbox = {}); if (!sb.wallet) { sb.wallet = Keypair.generate().publicKey.toBase58(); sb.createdAt = Date.now(); this.store.save(); }
       this.pk = new PublicKey(sb.wallet); this.account = sb.wallet; this.wallet = { sandbox: true };
+      for (const P of this.chain.pools.values()) if (P.cfg.user) this._userRow(P);
       this.friend = new Z.ShieldWallet(Buffer.from(sha256.arrayBuffer('veyl-sandbox:mara')), { mints: {}, pools: [] }); }
     /// Ready to use: live market prices fetched (Pyth, then Jupiter; a few seconds at most), and on a first visit the play
     /// world seeded at those prices along the real last 24 hours. Without a market, fallback prices and a quiet note.
@@ -176,12 +179,32 @@ export function makeSandbox(Engine, PrivacyError, Store) {
       const st = await this.sealedState(pool); this.chain.hold(pool.address, st.seq);
       try { return await super.sealedSwap(pool, o); } finally { this.chain.holds.delete(b58(pool.address) + ':' + st.seq); } }
 
+    // ------------------------------------------------------------------------------------------ pools anyone lists (pools-engine.js hooks)
+    _userRow(P) { const row = { id: P.id, x: P.x, y: P.y, bs: P.cfg.binStep, base: P.cfg.baseFee / 10000, binStep: P.cfg.binStep, baseFee: P.cfg.baseFee, address: P.address, mintX: b58(P.p.mintX), mintY: b58(P.p.mintY), discovered: true };
+      const i = this.cfg.binPools.findIndex((b) => b.address === P.address); if (i >= 0) this.cfg.binPools[i] = { ...this.cfg.binPools[i], ...row }; else this.cfg.binPools.push(row); if (this.zw) this.zw.addPool({ address: P.address, mintX: row.mintX, mintY: row.mintY, x: P.x, y: P.y }); return row; }
+    async _readMint(m) { const t = this.chain.sym(m); return t ? { program: 'spl', decimals: t.decimals, initialized: true, supply: 0n, mintAuthority: null, freezeAuthority: null, extensions: [], metadata: null } : null; }
+    async _discover() { return Promise.all([...this.chain.pools.keys()].map((a) => this.V.binPool(a))); }
+    async _bonds(addrs) { return addrs.map((a) => { const b = this.chain.bonds.get(b58(a)); return b ? { ...b } : null; }); }
+    async _poolKeys() { return [...this.chain.pools.keys()]; }
+    /// The demo pools keep their config order (not canonical), so their addresses come from (x, y) as listed: look both ways.
+    async poolFor(mintA, mintB, tierId) { const t = this.chain.factory.tiers[Number(tierId)]; if (!t) return null; let a, b; try { a = new PublicKey(mintA); b = new PublicKey(mintB); } catch { return null; } if (a.equals(b)) return null;
+      for (const [p, q] of [[a, b], [b, a]]) { const addr = this.V.binPoolPda(p, q, t.binStep).toBase58(); if (this.chain.pools.has(addr)) return addr; } return null; }
+    async _createPoolExec({ x, y, tier, basePrice, bond }) { const ch = this.chain; const sx = ch.sym(x).sym, sy = ch.sym(y).sym;
+      if (await this.poolFor(x, y, tier.index)) throw new Engine.PoolError('POOL_EXISTS', 'This pool already exists.');
+      if (ch.bal(this.pk, 'SOL') < bond) throw new Engine.PoolError('BOND_LOW', 'Creating this pool takes the ' + Number(bond) / 1e9 + ' SOL bond (refundable after the lock). Top up from the account menu.');
+      this.log('Confirm in your wallet'); this.log('Sending…'); let P; try { P = ch.createUserPool(this.pk, sx, sy, tier.index, basePrice); } catch (e) { throw /exists/.test(e.message) ? new Engine.PoolError('POOL_EXISTS', 'This pool already exists.') : e; }
+      this._userRow(P); this._dirty = true;
+      const tx = ch.tx('create_pool', [{ name: 'PoolCreated', pool: new PublicKey(P.address), binStep: tier.binStep, baseFee: tier.baseFee, tier: tier.index, creator: this.pk, bond }], this._pub('create', [['Create pool', sx + '–' + sy + ' at ' + S.tierLabel(tier.binStep, tier.baseFee)], ['Bond', fmtA(ch, 'SOL', bond) + ', refundable after ' + Number(ch.factory.bondLock) / 86400 + ' days']], [['Nothing', 'listing a pool is public: the pair, the tier, the price and who paid the bond']]));
+      this.lastTx = tx; return { tx }; }
+    async _releaseBondExec(pool) { const ch = this.chain; this.log('Confirm in your wallet'); this.log('Sending…'); const a = ch.releaseBond(this.pk, pool); this._dirty = true;
+      const tx = ch.tx('release_bond', [{ name: 'BondReleased', pool, creator: this.pk, amount: a }], this._pub('bond', [['Bond released', fmtA(ch, 'SOL', a) + ' back to the wallet']])); this.lastTx = tx; return { tx }; }
+
     // ------------------------------------------------------------------------------------------ pools
     async poolState(addr, span = 35) { const ch = this.chain; const P = ch.pool(addr); const bp = await this.V.binPool(addr); const c = this.poolCfg(addr); const a = bp.activeId; const now = Math.floor(Date.now() / 1000);
       const bins = {}; for (let i = a - span; i <= a + span; i++) { const x = P.bins.get(i); bins[i] = x ? { x: x.x, y: x.y, shares: x.shares, askX: x.askX || 0n, bidY: x.bidY || 0n } : { x: 0n, y: 0n, shares: 0n, askX: 0n, bidY: 0n }; }
       const rewards = bp.rewards.map((r, i) => (r.initialized ? { index: i, sym: this.symOf(r.mint) || null, mint: r.mint.toBase58(), live: Number(r.end) > now && r.rate > 0n, end: Number(r.end), ratePerSec: r.rate >> 64n } : null)).filter(Boolean);
       return { address: b58(addr), x: c.x, y: c.y, binStep: bp.binStep, baseFee: bp.baseFee, fee: Number(ch.feeNow(P)), active: a, price: priceOf(bp.basePrice, bp.binStep, a), bp, bins,
-        reserves: { x: P.vault.x - bp.protocolFeeX, y: P.vault.y - bp.protocolFeeY }, totalFees: { x: bp.totalFeeX, y: bp.totalFeeY }, protocolShare: bp.protocolShare, rewards, seeded: bp.seeded }; }
+        reserves: { x: P.vault.x - bp.protocolFeeX, y: P.vault.y - bp.protocolFeeY }, totalFees: { x: bp.totalFeeX, y: bp.totalFeeY }, protocolShare: 0, protocolFeeBps: bp.protocolFeeBps, tier: this._poolTier(bp), status: await this.poolStatus(addr, bp), rewards, seeded: bp.seeded }; }
     /// Live stats from the sandbox state: 24h volume and fees, liquidity, all in the quote token and in play dollars.
     /// Live stats from the sandbox state over the last `secs` (default 24h), in play dollars: volume, fees (all and to LPs), APR
     /// (LP fees over the window, annualised, over liquidity), fees / liquidity, 24h price change, age, depth near the price, Score.

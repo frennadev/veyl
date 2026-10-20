@@ -41,7 +41,7 @@ const freshBin = (id) => ({ id, x: 0n, y: 0n, shares: 0n, feeGx: 0n, feeGy: 0n, 
 const hasX = (b) => b.x > 0n || b.askX > 0n; const hasY = (b) => b.y > 0n || b.bidY > 0n;
 
 export class SandboxChain {
-  /// tokens: [{ sym, decimals, price }]; pools: [{ id, x, y, binStep, baseFee, vfc, price, protocolShareBps }]
+  /// tokens: [{ sym, decimals, price }]; pools: [{ id, x, y, binStep, baseFee, vfc, price }]
   constructor({ tokens, pools, verify }) {
     this.verifyProof = verify; // async (circuit, p) -> { ok, ms }
     this.programs = { pool: keyFrom('program:pool'), bin: keyFrom('program:bin'), entry: keyFrom('program:entry') };
@@ -53,6 +53,10 @@ export class SandboxChain {
     this.shield = { leaves: [], tree: new Z.Tree([]), roots: [], ciphertexts: new Map(), receipts: [], nullified: new Set(), vault: {}, pending: [] };
     this.sealed = new Map(); this.committee = null; this.seq = 0; this.events = new Map(); this.log = []; this.t0 = Date.now(); this.holds = new Map();
     this.listeners = new Set();
+    // the factory (veyl_bin): the default fee tiers, a 1 SOL listing bond locked 30 days, the 0.2% protocol fee; bonds by pool
+    this.factory = { authority: keyFrom('factory'), treasury: keyFrom('treasury'), bondLamports: 1_000_000_000n, bondLock: 30n * 86_400n, protocolFeeBps: S.PROTOCOL_FEE_BPS,
+      tiers: S.DEFAULT_FEE_TIERS.map((t, i) => ({ index: i, binStep: t.binStep, baseFee: t.baseFee, vfc: BigInt(t.vfc), enabled: true })) };
+    this.bonds = new Map();
   }
   // ---------------------------------------------------------------------------------------------- bookkeeping
   sym(mint) { const m = b58(mint); return Object.values(this.tokens).find((t) => t.mint === m); }
@@ -67,15 +71,28 @@ export class SandboxChain {
 
   // ---------------------------------------------------------------------------------------------- pools (veyl_bin)
   createPool(c, price = c.price) {
-    const X = this.tokens[c.x], Y = this.tokens[c.y]; const address = this.V.binPoolPda(new PublicKey(X.mint), new PublicKey(Y.mint), c.binStep);
+    const X = this.tokens[c.x], Y = this.tokens[c.y]; const address = this.V.binPoolPda(new PublicKey(X.mint), new PublicKey(Y.mint), c.binStep); const tier = this.factory.tiers.find((t) => t.binStep === c.binStep);
     const bp = { address, factory: this.V.factoryPda(), mintX: new PublicKey(X.mint), mintY: new PublicKey(Y.mint), vaultX: keyFrom('vault:x:' + c.id), vaultY: keyFrom('vault:y:' + c.id), tokenProgramX: TOKEN_PROGRAM, tokenProgramY: TOKEN_PROGRAM,
       basePrice: priceQ(price, X.decimals, Y.decimals), stepQ: stepQ(c.binStep), variableFeeControl: BigInt(c.vfc), volAcc: 0n, volRef: 0n, lastSwapAt: 0n, activeId: 0, lowestId: 0, highestId: 0, idRef: 0, baseFee: c.baseFee, binStep: c.binStep, seeded: false,
-      protocolShare: c.protocolShareBps ?? 1000, protocolFeeX: 0n, protocolFeeY: 0n, totalFeeX: 0n, totalFeeY: 0n, bitmapX: Array(BITMAP_WORDS).fill(0n), bitmapY: Array(BITMAP_WORDS).fill(0n),
+      protocolFeeBps: this.factory.protocolFeeBps, delisted: false, feeTier: tier ? tier.index : 0, protocolShare: 0, protocolFeeX: 0n, protocolFeeY: 0n, totalFeeX: 0n, totalFeeY: 0n, bitmapX: Array(BITMAP_WORDS).fill(0n), bitmapY: Array(BITMAP_WORDS).fill(0n),
       rewards: [0, 1].map(() => ({ mint: PublicKey.default, vault: PublicKey.default, funder: PublicKey.default, tokenProgram: TOKEN_PROGRAM, rate: 0n, duration: 0n, end: 0n, lastUpdate: 0n, ineligible: 0n, initialized: false })) };
     const P = { id: c.id, x: c.x, y: c.y, cfg: c, address: address.toBase58(), p: bp, bins: new Map(), shares: new Map(), vault: { x: 0n, y: 0n }, rewardVault: [0n, 0n], buckets: [], createdAt: nowS() };
     this.pools.set(P.address, P); return P;
   }
   pool(addr) { const P = this.pools.get(b58(addr)); need(P, 'Unknown pool.'); return P; }
+  /// = create_pool by anyone: a canonical pair (mint_x < mint_y) at an enabled tier, the creator's bond into the pool's Bond
+  /// (the factory authority pays none). The pool opens empty at `basePrice` (128.128, bin 0).
+  createUserPool(creator, symX, symY, tierIndex, basePrice) { const t = this.factory.tiers[tierIndex]; need(t && t.enabled, 'That fee tier is not open for new pools.');
+    const X = this.tokens[symX], Y = this.tokens[symY]; need(X && Y && symX !== symY, 'Unknown token.'); need(Buffer.compare(new PublicKey(X.mint).toBuffer(), new PublicKey(Y.mint).toBuffer()) < 0, 'The mints must be in canonical order.');
+    const address = this.V.binPoolPda(new PublicKey(X.mint), new PublicKey(Y.mint), t.binStep).toBase58(); need(!this.pools.has(address), 'This pool already exists.'); need(big(basePrice) > 0n, 'Bad price.');
+    const bond = b58(creator) === b58(this.factory.authority) ? 0n : this.factory.bondLamports; if (bond > 0n) this.debit(creator, 'SOL', bond);
+    const c = { id: symX.toLowerCase() + '-' + symY.toLowerCase() + '-' + t.binStep, x: symX, y: symY, binStep: t.binStep, baseFee: t.baseFee, vfc: Number(t.vfc), user: true };
+    const P = this.createPool(c, 1); P.p.basePrice = big(basePrice); P.p.feeTier = tierIndex; const now = nowS(); P.createdAt = now;
+    this.bonds.set(address, { pool: new PublicKey(address), creator: new PublicKey(creator), amount: bond, createdAt: BigInt(now), unlockAt: BigInt(now) + this.factory.bondLock });
+    return P; }
+  /// = release_bond: the creator takes the bond back once its lock is over (not on a delisted pool).
+  releaseBond(creator, pool) { const k = b58(pool); const b = this.bonds.get(k); need(b, 'This pool has no bond left to release.'); need(b58(b.creator) === b58(creator), 'Only the creator can release the bond.');
+    need(!this.pool(k).p.delisted, 'This pool is delisted.'); need(BigInt(nowS()) >= b.unlockAt, 'The bond is still locked.'); if (b.amount > 0n) this.credit(creator, 'SOL', b.amount); this.bonds.delete(k); return b.amount; }
   bin(P, id) { let b = P.bins.get(id); if (!b) { b = freshBin(id); P.bins.set(id, b); } return b; }
   shareKey(P, owner, auth, chunk) { return b58(owner) + '|' + b58(auth) + '|' + chunk; }
   shareAcc(P, owner, auth, chunk, create = true) { const k = this.shareKey(P, owner, auth, chunk); let a = P.shares.get(k); if (!a && create) { a = emptyShareAccount(P.p.address, new PublicKey(owner), new PublicKey(auth), chunk); P.shares.set(k, a); } return a || null; }
@@ -360,10 +377,12 @@ export class SandboxChain {
     const sym = [P.x, P.y]; const cl = await SE.clearing({ totals, price, quote: async (xForY, amt) => { const r = this.swapInner(P, xForY, amt); return r.out; } });
     // the net swap: the excess side's tokens leave the shielded vault into the pool, the output comes back
     if (cl.netIn > 0n) { const inS = cl.xForY ? 0 : 1; this.vaultS(sym[inS], -cl.netIn); this.vaultS(sym[1 - inS], cl.netOut); }
-    Object.assign(b, { state: 'settled', num: cl.num, den: cl.den, netIn: cl.netIn, netOut: cl.netOut, xForY: cl.xForY, settledAt: Date.now() });
+    /* the matched part's 0.2% (pay_protocol_fee): shielded vault -> pool vault, booked as protocol fees */
+    const pf = cl.protocolFee || [0n, 0n]; for (const [i, k] of [[0, 'X'], [1, 'Y']]) { if (pf[i] > 0n) { this.vaultS(sym[i], -pf[i]); P.vault[k.toLowerCase()] += pf[i]; P.p['protocolFee' + k] += pf[i]; } }
+    Object.assign(b, { state: 'settled', num: cl.num, den: cl.den, protocolFee: cl.protocolFee || [0n, 0n], netIn: cl.netIn, netOut: cl.netOut, xForY: cl.xForY, settledAt: Date.now() });
     // bots' outputs at the clearing ratio (their notes are not simulated)
     for (const x of b.bots) { const out = SE.claimOut(BigInt(x.amount), b.num[x.d], b.den[x.d]); if (out > 0n) { this.vaultS(sym[1 - x.d], -out); this.credit(x.bot, sym[1 - x.d], out); } }
-    this.tx('settle_batch', [{ name: 'BatchSettled', seq: b.seq, totals, num: cl.num, den: cl.den }], { pub: [['Committee', '2 of 3 shares, each with a Chaum–Pedersen proof, verified'], ['Totals', fmtA(this, P.x, totals[0]) + ' and ' + fmtA(this, P.y, totals[1]) + ' sold'], ['Net swap', cl.netIn > 0n ? fmtA(this, sym[cl.xForY ? 0 : 1], cl.netIn) + ' → ' + fmtA(this, sym[cl.xForY ? 1 : 0], cl.netOut) + ' through the pool' : 'none: the sides matched'], ['Clearing price', 'the active bin\'s, for every seller']], hidden: [['Each seller\'s amount', 'only the totals were decrypted']] });
+    this.tx('settle_batch', [{ name: 'BatchSettled', seq: b.seq, totals, num: cl.num, den: cl.den, protocolFee: pf }], { pub: [['Committee', '2 of 3 shares, each with a Chaum–Pedersen proof, verified'], ['Totals', fmtA(this, P.x, totals[0]) + ' and ' + fmtA(this, P.y, totals[1]) + ' sold'], ['Net swap', cl.netIn > 0n ? fmtA(this, sym[cl.xForY ? 0 : 1], cl.netIn) + ' → ' + fmtA(this, sym[cl.xForY ? 1 : 0], cl.netOut) + ' through the pool' : 'none: the sides matched'], ['Clearing price', 'the active bin\'s, for every seller']], hidden: [['Each seller\'s amount', 'only the totals were decrypted']] });
     this.emit({ type: 'sealed', pool: s.pool }); }
   refundBots(P, b) { for (const x of b.bots) { const sym = x.d === 0 ? P.x : P.y; this.vaultS(sym, -BigInt(x.amount)); this.credit(x.bot, sym, BigInt(x.amount)); } }
   claimTerms(pool, seq, direction) { const s = this.sealed.get(b58(pool)); const b = s && s.batches.get(Number(seq)); if (!b) return null; const P = this.pool(pool); const d = Number(direction);
@@ -408,7 +427,7 @@ export class SandboxChain {
     try { this.mint(P, mm, keyFrom('mm-owner:' + c.id), mm, ids.filter((_, i) => keep[i]), xs.filter((_, i) => keep[i]), ys.filter((_, i) => keep[i])); } catch { /* a bin too small: skip */ } }
   /// The market maker keeps liquidity where the price is heading: when the target bin is near or past the edge of the
   /// liquidity, a single-sided curve goes in ahead of the price (X above it, Y below it), so bots can trade the price there.
-  mmTick(P, now = nowS()) { const c = P.cfg; const t = this.targetOf(P, now); if (t === null) return; const a = P.p.activeId; const gap = t - a; if (Math.abs(gap) < 4) return;
+  mmTick(P, now = nowS()) { const c = P.cfg; if (c.user) return; const t = this.targetOf(P, now); if (t === null) return; const a = P.p.activeId; const gap = t - a; if (Math.abs(gap) < 4) return;
     const ahead = (from, to) => { let v = 0; for (let id = from; from <= to ? id <= to : id >= to; id += from <= to ? 1 : -1) { const b = P.bins.get(id); if (b && (gap > 0 ? b.x > 0n : b.y > 0n)) v++; } return v; };
     const edge = gap > 0 ? a + Math.abs(gap) + 4 : a - Math.abs(gap) - 4; if (ahead(a + Math.sign(gap), edge) >= Math.abs(gap)) return;
     const mm = keyFrom('mm:' + c.id); const span = Math.abs(gap) + 12; const ids = []; for (let k = 1; k <= span; k++) ids.push(a + Math.sign(gap) * k); ids.sort((x, y) => x - y);
@@ -444,7 +463,7 @@ export class SandboxChain {
     return this.tx('faucet', [], { pub: [['Faucet', 'demo funds to your wallet ' + short(b58(owner))], ['Shielded receipts', sh.join(' and ') + ' as notes to one-time keys']], hidden: [['Which receipts are yours', 'one-time keys are not linked to your wallet']] }); }
   /// Bots: public swaps. Each pool trades toward its real market price (history, then live) with some noise, sized by
   /// what lies between the active bin and the target; without a market price, toward a slowly wandering target.
-  botTrade(quiet = false, at = nowS(), pick = null, noisy = true) { const pools = [...this.pools.values()]; const P = pick || pools[Math.floor(Math.random() * pools.length)]; const c = P.cfg;
+  botTrade(quiet = false, at = nowS(), pick = null, noisy = true) { const pools = [...this.pools.values()].filter((q) => !q.cfg.user); if (pick && pick.cfg.user) return; const P = pick || pools[Math.floor(Math.random() * pools.length)]; const c = P.cfg;
     let target = this.targetOf(P, at); const real = target !== null;
     if (!real) { if (Math.random() < 0.3) P.target += Math.round((Math.random() - 0.5) * (c.wander || 6)); const ref = this.refBin(P); const band = Math.min(c.wander || 6, Math.max(2, Math.round(100 / c.binStep))); // about 1% either side at most
       P.target = Math.max(P.p.activeId - 12, Math.min(P.p.activeId + 12, P.target)); if (ref !== null) P.target = Math.max(ref - band, Math.min(ref + band, P.target)); target = P.target; }
@@ -457,7 +476,7 @@ export class SandboxChain {
     const amt = BigInt(Math.max(1, Math.round(human * 10 ** T.decimals))); const bot = keyFrom('bot:' + Math.floor(Math.random() * 7)); if (this.bal(bot, sym) < amt) this.credit(bot, sym, amt * 20n);
     try { const r = this.swapRoute(bot, sym, xForY ? P.y : P.x, [{ pool: P.address, xForY }], amt, 0n, at); if (!quiet) this.tx('swap', [], { pub: [['Swap by a bot', fmtA(this, sym, amt) + ' → ' + fmtA(this, xForY ? P.y : P.x, r.out)], ['Toward', real ? 'the market price' : 'a random walk (market price unavailable)'], ['Signer', short(b58(bot))]], hidden: [] }); } catch { /* not enough liquidity that way: skip */ } }
   /// Trade each pool to its market price now (after seeding or a long absence): a few sized swaps and the market maker.
-  catchUp() { for (const P of this.pools.values()) for (let i = 0; i < 40; i++) { const t = this.targetOf(P); if (t === null || Math.abs(t - P.p.activeId) <= 1) break; this.mmTick(P); this.botTrade(true, nowS(), P, false); } }
+  catchUp() { for (const P of this.pools.values()) if (!P.cfg.user) for (let i = 0; i < 40; i++) { const t = this.targetOf(P); if (t === null || Math.abs(t - P.p.activeId) <= 1) break; this.mmTick(P); this.botTrade(true, nowS(), P, false); } }
   fmtN(sym, v) { return Number(BigInt(v)) / 10 ** this.tokens[sym].decimals; }
   /// Bots seal small swaps into each open batch so it reaches the k floor on both sides and settles.
   botSealTick() { for (const s of this.sealed.values()) { const b = s.batches.get(s.seq); if (!b || b.state !== 'open') continue; const P = this.pool(s.pool); const left = b.endSlot - this.slot();
@@ -466,15 +485,15 @@ export class SandboxChain {
         let amt = BigInt(Math.round(human * 10 ** T.decimals)); if (amt < s.minIn[d]) amt = s.minIn[d]; this.botSeal(P, d, amt); } } }
   humanPrice(P, id = P.p.activeId) { const q = Number(priceOf(P.p.basePrice, P.p.binStep, id)) / 2 ** 128; return q * 10 ** (this.tokens[P.x].decimals - this.tokens[P.y].decimals); }
   // ---------------------------------------------------------------------------------------------- persistence
-  toJSON() { const pools = [...this.pools.values()].map((P) => ({ id: P.id, p: P.p, bins: [...P.bins.values()], shares: [...P.shares.entries()], vault: P.vault, rewardVault: P.rewardVault, buckets: P.buckets, createdAt: P.createdAt, target: P.target || 0 }));
+  toJSON() { const pools = [...this.pools.values()].map((P) => ({ id: P.id, cfg: P.cfg.user ? P.cfg : undefined, p: P.p, bins: [...P.bins.values()], shares: [...P.shares.entries()], vault: P.vault, rewardVault: P.rewardVault, buckets: P.buckets, createdAt: P.createdAt, target: P.target || 0 }));
     const sealed = [...this.sealed.values()].map((s) => ({ ...s, batches: [...s.batches.values()].filter((b) => b.seq >= s.seq - 12) }));
     return { v: 6, usd: this.usd, anchored: this.anchored, seq: this.seq, t0: this.t0, balances: [...this.balances.entries()], pools, lpacc: [...this.lpacc.entries()], shield: { leaves: this.shield.tree.leaves, roots: this.shield.roots, ciphertexts: [...this.shield.ciphertexts.entries()], receipts: this.shield.receipts, nullified: [...this.shield.nullified], vault: this.shield.vault, pending: this.shield.pending },
-      sealed, committee: this.committee, log: this.log.slice(0, 120) }; }
+      sealed, committee: this.committee, log: this.log.slice(0, 120), bonds: [...this.bonds.entries()] }; }
   load(o) { need(o && o.v === 6, 'Old sandbox state.'); this.usd = o.usd || {}; this.anchored = o.anchored; this.seq = o.seq; this.t0 = o.t0; this.balances = new Map(o.balances);
-    for (const x of o.pools) { const c = this.poolCfg.find((q) => q.id === x.id); if (!c) continue; const P = this.createPool(c, 1); P.p = x.p; P.bins = new Map(x.bins.map((b) => [b.id, b])); P.shares = new Map(x.shares); P.vault = x.vault; P.rewardVault = x.rewardVault; P.buckets = x.buckets || []; P.createdAt = x.createdAt || nowS(); P.target = x.target || 0; }
+    for (const x of o.pools) { const c = this.poolCfg.find((q) => q.id === x.id) || (x.cfg && x.cfg.user ? x.cfg : null); if (!c) continue; const P = this.createPool(c, 1); P.p = { protocolFeeBps: this.factory.protocolFeeBps, delisted: false, feeTier: P.p.feeTier, ...x.p, protocolShare: 0 }; P.bins = new Map(x.bins.map((b) => [b.id, b])); P.shares = new Map(x.shares); P.vault = x.vault; P.rewardVault = x.rewardVault; P.buckets = x.buckets || []; P.createdAt = x.createdAt || nowS(); P.target = x.target || 0; }
     this.lpacc = new Map(o.lpacc); this.shield.tree = new Z.Tree(o.shield.leaves.map(BigInt)); this.shield.roots = o.shield.roots; this.shield.ciphertexts = new Map(o.shield.ciphertexts); this.shield.receipts = o.shield.receipts;
     this.shield.nullified = new Set(o.shield.nullified); this.shield.vault = o.shield.vault; this.shield.pending = o.shield.pending; this.committee = o.committee;
-    for (const s of o.sealed) this.sealed.set(s.pool, { ...s, batches: new Map(s.batches.map((b) => [b.seq, b])) }); this.log = o.log || []; }
+    for (const s of o.sealed) this.sealed.set(s.pool, { ...s, batches: new Map(s.batches.map((b) => [b.seq, b])) }); this.log = o.log || []; this.bonds = new Map(o.bonds || []); }
 }
 // ---------------------------------------------------------------------------------------------- serialisation (BigInt, PublicKey, Uint8Array)
 export const ser = (o) => JSON.stringify(o, function (k, v) { const raw = this[k];

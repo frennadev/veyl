@@ -17,7 +17,7 @@ export const POOLS = [
   { id: 'sol-usdt', x: 'SOL', y: 'USDT', binStep: 10, baseFee: 500, vfc: 10000, span: 50, liqUsd: 9000, botUsd: 180, wander: 6, category: 'majors' },
   { id: 'usdt-usdc', x: 'USDT', y: 'USDC', binStep: 1, baseFee: 100, vfc: 10000, span: 20, liqUsd: 40000, botUsd: 400, wander: 3, category: 'stables',
     sealed: SEALED(1_000_000n, 1_000_000n), sealBotUsd: 8 },
-  { id: 'jup-sol', x: 'JUP', y: 'SOL', binStep: 20, baseFee: 2000, vfc: 2500, span: 50, liqUsd: 12000, botUsd: 150, wander: 8, category: 'volatile' },
+  { id: 'jup-sol', x: 'JUP', y: 'SOL', binStep: 20, baseFee: 2500, vfc: 2500, span: 50, liqUsd: 12000, botUsd: 150, wander: 8, category: 'volatile' },
   { id: 'bonk-sol', x: 'BONK', y: 'SOL', binStep: 50, baseFee: 5000, vfc: 2500, span: 40, liqUsd: 9000, botUsd: 120, wander: 12, category: 'volatile' },
 ];
 /// Flat relayer fees in the Sandbox (atoms): what the relayer would charge to post a proof and submit.

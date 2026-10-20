@@ -10,7 +10,7 @@
 //   PRIORITY_FEE_MICROLAMPORTS                optional compute-unit price for the program deploy transactions.
 //
 // Order: preflight -> the three programs (skipped when the on-chain bytes are identical) -> private pools -> factory ->
-// bin pools -> entry + vaults -> relayer fee accounts -> lookup table -> deploy.<network>.json -> site/veyl.config.js ->
+// fee tiers (config feeTiers), listing bond + treasury (config bond / treasury) -> bin pools -> entry + vaults -> relayer fee accounts -> lookup table -> deploy.<network>.json -> site/veyl.config.js ->
 // Phase 3: the batch committee (from its DKG transcript: COMMITTEE_TRANSCRIPT or committee/transcript.<network>.json) and
 // the sealed pools of config "sealed" (skipped, with a note, while there is no transcript).
 // Re-running skips everything that is already there and says so. --dry-run builds nothing on chain and prints the plan + cost.
@@ -65,7 +65,7 @@ async function plan({ cfg, network, rpc, deployerPk, programDir, tokens, binPool
   // accounts created by the initialisation (rent kept) + ~5000 lamports per transaction
   const acct = async (label, bytes, n = 1) => { const r = (await rent(bytes)) * n + 5000 * n; lamports += r; breakdown.push([label, `${n} x rent(${bytes}) + fees = ${fmtSol(r)}`]); };
   const nt = tokens.length, nb = binPools.length;
-  await acct('private pools', SIZES.pool, nt); await acct('factory', SIZES.factory); await acct('bin pools', SIZES.binPool, nb);
+  await acct('private pools', SIZES.pool, nt); await acct('factory', SIZES.factory); await acct('bin pools', SIZES.binPool, nb); await acct('bin pool bonds', SIZES.bond, nb);
   await acct('bin pool vaults', SIZES.tokenAccount, nb * 2); await acct('entry', SIZES.entry); await acct('entry vaults', SIZES.tokenAccount, nt);
   await acct('pool vaults', SIZES.tokenAccount, nt); await acct('relayer fee accounts', SIZES.tokenAccount, nt);
   if (!existing || !existing.lookupTable) for (let n = 9 + nt * 6 + nb * 9; n > 0; n -= 256) await acct('lookup table', 56 + 32 * Math.min(256, n));
@@ -95,6 +95,18 @@ async function deploySealed({ cfg, network, rpc, keyFile, dep, log = console.log
   for (const id of sealedPools(cfg)) { const b = dep.binPools.find((x) => x.id === id); const have = !!(await V.sealed(new PublicKey(b.address)));
     if (!have) await V.send([V.initSealedPoolIx(payer.publicKey, new PublicKey(b.address), sealedParams(cfg, dep, id))]); log((have ? 'skipped' : 'created') + ' sealed pool ' + id + (have ? ' (already there)' : '')); }
   return { committee: reg.transcript.toString('hex'), sealed: sealedPools(cfg) };
+}
+
+/// Config feeTiers / bond / treasury in program units: { feeTiers, bond: { lamports, lockSeconds }, treasury } or { error }.
+/// Missing values fall back to the SDK's tier list, the program's bond (1 SOL, 30 days) and the deployer as treasury.
+function factoryTerms(cfg) {
+  const { FEE_TIERS } = require('./lib.js'); const feeTiers = cfg.feeTiers || FEE_TIERS; const steps = new Set();
+  for (const t of feeTiers) { if (!(Number.isInteger(t.binStep) && t.binStep > 0 && t.binStep <= 500 && Number.isInteger(t.baseFee) && t.baseFee >= 0 && t.baseFee <= 100_000 && Number.isInteger(t.vfc) && t.vfc >= 0)) return { error: 'config feeTiers: ' + JSON.stringify(t) + ' needs binStep 1..500, baseFee 0..100000 pips, vfc >= 0' };
+    if (steps.has(t.binStep)) return { error: 'config feeTiers: bin step ' + t.binStep + ' twice (one tier per bin step)' }; steps.add(t.binStep); }
+  if (feeTiers.length > 16) return { error: 'config feeTiers: at most 16 tiers' };
+  let bond = null; if (cfg.bond) { const sol = Number(cfg.bond.sol), days = Number(cfg.bond.lockDays); if (!(sol >= 0 && days >= 0 && days <= 365)) return { error: 'config bond needs sol >= 0 and lockDays 0..365' }; bond = { lamports: BigInt(Math.round(sol * 1e9)), lockSeconds: BigInt(Math.round(days * 86_400)) }; }
+  const treasury = cfg.treasury && !N.isVerify(cfg.treasury) ? cfg.treasury : null;
+  return { feeTiers, bond, treasury };
 }
 
 function selectTokens(cfg) {
@@ -158,8 +170,8 @@ async function main() {
   if (network === 'mainnet' && (!postman || !relayer)) { console.error('Mainnet needs the postman and relayer public keys (config/mainnet.json or POSTMAN_PUBKEY / RELAYER_PUBKEY).'); process.exit(1); }
   const mints = Object.fromEntries(Object.entries(cfg.mints || {}).filter(([, v]) => v && !N.isVerify(v)));
   const { deployAll } = require('./lib.js');
-  if (cfg.protocolShareBps !== undefined && !(Number(cfg.protocolShareBps) >= 0 && Number(cfg.protocolShareBps) <= 2500)) { console.error('config protocolShareBps must be 0..2500 (bps of each swap fee)'); process.exit(1); }
-  const { dep } = await deployAll({ rpc, payerFile: key.file, network, deploy: false, programs, mints, postman, relayer, tokens, binPools, existing, protocolShareBps: cfg.protocolShareBps, publicRpc: N.isVerify(cfg.rpc) ? null : cfg.rpc, log: (m) => console.log(m) }); // deploy.<network>.json is committed: the public RPC, never an RPC_URL with an API key
+  const fx = factoryTerms(cfg); if (fx.error) { console.error(fx.error); process.exit(1); }
+  const { dep } = await deployAll({ rpc, payerFile: key.file, network, deploy: false, programs, mints, postman, relayer, tokens, binPools, existing, feeTiers: fx.feeTiers, bond: fx.bond, treasury: fx.treasury, publicRpc: N.isVerify(cfg.rpc) ? null : cfg.rpc, log: (m) => console.log(m) }); // deploy.<network>.json is committed: the public RPC, never an RPC_URL with an API key
   // deploy.<network>.json is written by deployAll; then the site's runtime config from it
   const { makeConfig } = require('./make-config.js');
   const relayerUrl = process.env.RELAYER_URL || (N.isVerify(cfg.relayerUrl) ? undefined : cfg.relayerUrl);
@@ -173,5 +185,5 @@ async function main() {
   if (network === 'mainnet') console.log(`Then move every role off the deployer key: npm run handover -- --network mainnet --to <multisig> --dry-run, then without --dry-run (preflight flags what is left).`);
 }
 
-module.exports = { plan, selectTokens, deploySealed, sealedPools, sealedParams };
+module.exports = { plan, selectTokens, factoryTerms, deploySealed, sealedPools, sealedParams };
 if (require.main === module) main().then(() => process.exit(0), (e) => { console.error(e && e.message ? e.message : e); process.exit(1); });

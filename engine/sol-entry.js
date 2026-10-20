@@ -11,6 +11,7 @@ const Z = require('../sdk/shield.js');
 import { walletList, onWallets, waitForWallet, setChain } from './wallets.js';
 import { installShield } from './shield-engine.js';
 import { installSealed } from './sealed-engine.js';
+import { installPools, PoolError } from './pools-engine.js';
 import { Market, parsePyth, parseJupiter, parseCandles, ORIGINS as MARKET_ORIGINS } from './market.js';
 import { Markets, SOURCES as MARKET_SOURCES, ORIGINS as MARKETS_ORIGINS, mergeRows } from './markets.js';
 
@@ -77,8 +78,7 @@ export class Engine {
     if (typeof window !== 'undefined') window.veylEngine = this; // the page's engine, for the console and the browser test
   }
   log(m) { try { this.onLog(m); } catch {} }
-  tok(sym) { const t = this.tokens[sym]; if (!t) throw new Error('unknown token ' + sym); return t; }
-  symOf(mint) { return Object.keys(this.tokens).find((s) => this.tokens[s].mint === b58(mint)); }
+  // tok(symbol | mint), tokKey, symOf, tokLabel: pools-engine.js (every call that takes a token also takes its mint)
   unit(sym, v) { const d = this.tok(sym).decimals; const [i, f = ''] = String(v).split('.'); return BigInt(i || '0') * 10n ** BigInt(d) + BigInt((f + '0'.repeat(d)).slice(0, d) || '0'); }
   fmt(sym, v) { return Number(BigInt(v)) / 10 ** this.tok(sym).decimals; }
   async ping() { return this.conn.getSlot('confirmed'); }
@@ -250,16 +250,24 @@ export class Engine {
   /// Direct pool, or two hops through a hub; picks the best quote (computed on this device from the bin arrays). Every pool
   /// a path needs is read once, all in parallel, then each path is simulated locally (same result as V.quoteLocal per hop,
   /// without re-reading a pool for every path: with dozens of pools over a remote RPC that took tens of seconds).
+  /// -> { path: [{ pool, xForY, out, name, feePips (the pool's base fee), volatilityPips (its variable fee now) }], out, fee,
+  /// lpFee, protocolFee }: lpFee and protocolFee (the fixed 0.2% of each hop's input) in atoms of the input token (a second
+  /// hop's converted at the first hop's rate); `fee` = their sum per hop in each hop's own token, as before.
   async quoteRoute(symIn, symOut, amountIn) {
     const pools = this.cfg.binPools; const paths = [];
-    const hopsFor = (a, b) => pools.filter((p) => (p.x === a && p.y === b) || (p.x === b && p.y === a)).map((p) => ({ pool: p.address, xForY: p.x === a, out: p.x === a ? p.y : p.x, name: p.x + '–' + p.y }));
+    const hopsFor = (a, b) => pools.filter((p) => (p.x === a && p.y === b) || (p.x === b && p.y === a)).map((p) => ({ pool: p.address, xForY: p.x === a, out: p.x === a ? p.y : p.x, name: this.tokLabel(p.x) + '–' + this.tokLabel(p.y) }));
     for (const h of hopsFor(symIn, symOut)) paths.push([h]);
     for (const h1 of pools.flatMap((p) => hopsFor(symIn, p.x === symIn ? p.y : p.x)).filter((h) => h.out !== symOut)) for (const h2 of hopsFor(h1.out, symOut)) paths.push([h1, h2]);
     const state = new Map(); for (const h of paths.flat()) { const k = h.pool + (h.xForY ? ':x' : ':y'); if (!state.has(k)) state.set(k, (async () => { const pool = new PublicKey(h.pool); const p = await this.V.binPool(pool); return { p, bins: await this.V.bins(pool, S.chunksForSwap(p, h.xForY, S.SWAP_ARRAYS)) }; })().catch(() => null)); }
     const loaded = new Map(await Promise.all([...state].map(async ([k, v]) => [k, await v])));
-    let best = null;
-    for (const path of paths) { let amt = amountIn, ok = true, fee = 0n; for (const h of path) { const s = loaded.get(h.pool + (h.xForY ? ':x' : ':y')); try { if (!s) throw new Error('pool unavailable'); const q = S.simulateSwap(s.p, s.bins, h.xForY, amt); amt = q.out; fee += q.fee; } catch { ok = false; break; } }
-      if (ok && amt > 0n && (!best || amt > best.out)) best = { path, out: amt, fee }; }
+    let best = null; const now = Math.floor(Date.now() / 1000); amountIn = BigInt(amountIn);
+    for (const path of paths) { let amt = amountIn, ok = true, fee = 0n, lpFee = 0n, protocolFee = 0n, rate = null; const hops = [];
+      for (const h of path) { const s = loaded.get(h.pool + (h.xForY ? ':x' : ':y'));
+        try { if (!s) throw new Error('pool unavailable'); const q = S.simulateSwap(s.p, s.bins, h.xForY, amt, now); const pr = S.protocolFeeOf(amt, s.p.protocolFeeBps === undefined ? S.PROTOCOL_FEE_BPS : s.p.protocolFeeBps);
+          const toIn = (v) => (rate ? (v * rate[0]) / rate[1] : v); lpFee += toIn(q.lpFee); protocolFee += toIn(pr); if (!rate) rate = [amt, q.out > 0n ? q.out : 1n]; else rate = [rate[0] * amt, rate[1] * (q.out > 0n ? q.out : 1n)];
+          const { ref, iref } = S.refsOf(s.p, now); const cur = Number(S.feeOf(s.p, S.accOf(ref, iref, s.p.activeId)));
+          hops.push({ ...h, feePips: Number(s.p.baseFee), volatilityPips: Math.max(0, cur - Number(s.p.baseFee)) }); amt = q.out; fee += q.fee; } catch { ok = false; break; } }
+      if (ok && amt > 0n && (!best || amt > best.out)) best = { path: hops, out: amt, fee, lpFee, protocolFee }; }
     return best;
   }
   async swap(symIn, symOut, amountIn, { slippageBps = 100 } = {}) {
@@ -288,8 +296,9 @@ export class Engine {
     for (let i = a - span; i <= a + span; i++) { const x = m.get(i); bins[i] = x ? { x: x.x, y: x.y, shares: x.shares, askX: x.askX || 0n, bidY: x.bidY || 0n } : { x: 0n, y: 0n, shares: 0n, askX: 0n, bidY: 0n }; }
     let vx = 0n, vy = 0n; try { vx = BigInt((await this.conn.getTokenAccountBalance(bp.vaultX)).value.amount); vy = BigInt((await this.conn.getTokenAccountBalance(bp.vaultY)).value.amount); } catch {}
     const rewards = bp.rewards.map((r, i) => (r.initialized ? { index: i, sym: this.symOf(r.mint) || null, mint: r.mint.toBase58(), live: Number(r.end) > now && r.rate > 0n, end: Number(r.end), ratePerSec: r.rate >> 64n } : null)).filter(Boolean);
+    if (!this._fac) { try { await this._factory(); } catch { /* tier labels from the bin step */ } }
     return { address: b58(addr), x: c.x, y: c.y, binStep: bp.binStep, baseFee: bp.baseFee, fee, active: a, price: priceOf(bp.basePrice, bp.binStep, a), bp, bins,
-      reserves: { x: vx - bp.protocolFeeX, y: vy - bp.protocolFeeY }, totalFees: { x: bp.totalFeeX, y: bp.totalFeeY }, protocolShare: bp.protocolShare, rewards, seeded: bp.seeded }; }
+      reserves: { x: vx - bp.protocolFeeX, y: vy - bp.protocolFeeY }, totalFees: { x: bp.totalFeeX, y: bp.totalFeeY }, protocolShare: 0, protocolFeeBps: bp.protocolFeeBps, tier: this._poolTier(bp), status: await this.poolStatus(addr, bp), rewards, seeded: bp.seeded }; }
   async poolInfo(pool) { const s = await this.poolState(pool.address, 30); return { active: s.active, fee: s.fee, price: s.price, bins: s.bins, seeded: s.seeded }; }
   /// Human price (Y per X) of bin `id`, and the bin nearest a human price.
   humanPrice(state, id) { const q = Number(priceOf(state.bp.basePrice, state.bp.binStep, id)) / 2 ** 128; return q * 10 ** (this.tok(state.x).decimals - this.tok(state.y).decimals); }
@@ -394,7 +403,7 @@ export class Engine {
     return this._savePos({ id: 'p' + Date.now(), kind: 'private', pool: addr, x: pool.x, y: pool.y, owner: owner.publicKey.toBase58(), key: Buffer.from(owner.secretKey).toString('base64'), ids, lo: o.lo, hi: o.hi, shape, zap: true, createdAt: Date.now(), tx: r.txHash }); }
   async planZapPreview(pool, o) { const st = await this.poolState(pool.address, 1); const ids = []; for (let i = o.lo; i <= o.hi; i++) ids.push(i); const shape = o.shape === 'bidask' ? 'bidAsk' : o.shape || 'spot';
     const sym = o.xIn ? pool.x : pool.y; const p = await this.V.planZap(new PublicKey(pool.address), { xIn: !!o.xIn, amountIn: this.unit(sym, o.amount), ids, ...shapeWeights(ids, st.active, shape), slippageBps: 200 });
-    return { swapIn: this.fmt(sym, p.swapAmount), swapOut: this.fmt(o.xIn ? pool.y : pool.x, p.swapOut), activeAfter: p.activeAfter, bins: p.amountsX.filter((x, i) => x > 0n || p.amountsY[i] > 0n).length }; }
+    return { swapIn: this.fmt(sym, p.swapAmount), swapOut: this.fmt(o.xIn ? pool.y : pool.x, p.swapOut), activeAfter: p.activeAfter, bins: p.amountsX.filter((x, i) => x > 0n || p.amountsY[i] > 0n).length, lpFee: p.lpFee, protocolFee: p.protocolFee }; } // fees: atoms of the token zapped in (its swapped part)
 
   // ---- notes paid out by a signed private action: the ones the chain did not create (a zero amount) are dropped
   _outNote(sym, key) { const s = newNote(); return { pool: this.tok(sym).pool, sym, nullifier: s.nullifier, secret: s.secret, precommitment: s.precommitment, refundKey: key, createdAt: Date.now() }; }
@@ -543,6 +552,7 @@ export class Engine {
 // ------------------------------------------------------------- Phase 2: every private action spends shielded notes
 installShield(Engine, PrivacyError);
 installSealed(Engine);
+installPools(Engine);
 { const P = Engine.prototype;
   /// The Phase 1 paths stay for what this device already holds: one-time-key positions and orders, and legacy notes (which
   /// move into the shielded pool with `migrate`). New private actions all go through the shielded pool.
@@ -629,7 +639,8 @@ const NETWORK_TIP = { id: 'network', text: 'The relayer sees your IP address whe
   };
 }
 Engine.CROWD_MIN = CROWD_MIN;
-export { PrivacyError, BackupRequiredError, H, merklePath, PublicKey, Keypair, Veyl, Store };
+Engine.acceptMints(Engine.prototype); // after the safety rails: they wrap deposit / shieldDeposit, and their logs key by symbol
+export { PrivacyError, BackupRequiredError, PoolError, H, merklePath, PublicKey, Keypair, Veyl, Store };
 export const Shield = Z;
 export { Market, parsePyth, parseJupiter, parseCandles, MARKET_ORIGINS, Markets, MARKET_SOURCES, MARKETS_ORIGINS, mergeRows };
 export const SDK = { shapeWeights, sideWeights, distribute, priceOf, chunkOf };
@@ -637,3 +648,4 @@ export const SDK = { shapeWeights, sideWeights, distribute, priceOf, chunkOf };
 // ------------------------------------------------------------- Sandbox: the same engine on an in-browser chain (play money)
 import { makeSandbox } from './sandbox-engine.js';
 export const Sandbox = makeSandbox(Engine, PrivacyError, Store);
+Engine.acceptMints(Sandbox.prototype);

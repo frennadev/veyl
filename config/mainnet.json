@@ -18,7 +18,61 @@
     "sol-usdt",
     "usdt-usdc"
   ],
-  "protocolShareBps": 1000,
+  "feeTiers": [
+    {
+      "binStep": 1,
+      "baseFee": 100,
+      "vfc": 10000,
+      "label": "Stable 0.01%"
+    },
+    {
+      "binStep": 5,
+      "baseFee": 500,
+      "vfc": 10000,
+      "label": "Stable 0.05%"
+    },
+    {
+      "binStep": 10,
+      "baseFee": 500,
+      "vfc": 10000,
+      "label": "Major 0.05%"
+    },
+    {
+      "binStep": 20,
+      "baseFee": 2500,
+      "vfc": 10000,
+      "label": "Major 0.25%"
+    },
+    {
+      "binStep": 30,
+      "baseFee": 3000,
+      "vfc": 4500,
+      "label": "Major 0.30%"
+    },
+    {
+      "binStep": 50,
+      "baseFee": 5000,
+      "vfc": 1600,
+      "label": "Volatile 0.5%"
+    },
+    {
+      "binStep": 80,
+      "baseFee": 10000,
+      "vfc": 625,
+      "label": "Volatile 1%"
+    },
+    {
+      "binStep": 100,
+      "baseFee": 20000,
+      "vfc": 400,
+      "label": "Volatile 2%"
+    }
+  ],
+  "bond": {
+    "sol": 1,
+    "lockDays": 30
+  },
+  "treasury": "VERIFY: multisig (e.g. Squads vault) that receives forfeited listing bonds",
   "mints": {
     "SOL": "So11111111111111111111111111111111111111112",
     "USDC": "VERIFY: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (Circle USDC, SPL Token program)",

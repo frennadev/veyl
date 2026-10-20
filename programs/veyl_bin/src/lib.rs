@@ -11,11 +11,17 @@
 //!  - Bitmaps: every bin array keeps one bit per bin per side ("has X to sell", "has Y to sell") and the pool keeps one bit
 //!    per bin array per side (2,048 arrays, bins -61,440..61,439). A swap jumps straight to the next bin holding the token
 //!    it buys, so empty ranges cost nothing; MAX_STEPS bounds the number of bins actually traded against.
-//!  - Fees (Meteora-style): a swap fee is no longer folded into the bin's reserves. `protocol_share` (default 10%, max 25%)
-//!    is accounted to the pool's protocol balance; the rest is split between the bin's market-making liquidity (fee growth
-//!    per share, per token, claimed with `claim_fees`) and its limit-order liquidity (paid into the order's filled amount),
-//!    pro rata to what each sold. Shares of `MIN_LIQUIDITY` (locked forever) are excluded from the per-share division, so
-//!    every fee atom ends up claimable or protocol, minus floor rounding that stays in the vault.
+//!  - Fees (Meteora-style): a swap fee is no longer folded into the bin's reserves. Every swap first pays the protocol
+//!    fee, a fixed `protocol_fee_bps` (0.2%, copied from the factory when the pool is created, never changed) of the input
+//!    amount, rounded up, accounted to the pool's protocol balance. The rest trades through the bins and pays the pool's LP
+//!    fee, which goes 100% to liquidity: split between the bin's market-making liquidity (fee growth per share, per token,
+//!    claimed with `claim_fees`) and its limit-order liquidity (paid into the order's filled amount), pro rata to what each
+//!    sold. Shares of `MIN_LIQUIDITY` (locked forever) are excluded from the per-share division (a fee with no provider to
+//!    pay goes to the protocol), so every fee atom ends up claimable or protocol, minus floor rounding left in the vault.
+//!  - Listing (permissionless): anyone creates a pool for a canonical pair (mint_x < mint_y) at one of the factory's fee
+//!    tiers (bin step + base fee + variable fee control; one pool per pair per tier, fixed forever), paying a refundable
+//!    bond (`Bond` PDA, `release_bond` after the lock). The factory authority may delist a pool (`delist_pool`): its bond
+//!    goes to the treasury, new liquidity is refused, exits (burn, claims, withdrawals) and swaps keep working.
 //!  - Limit orders: single-sided liquidity in one bin away from the active bin, kept apart from market-making liquidity.
 //!    When the price crosses the bin the order converts at the bin's price (plus its fee share) and stays converted.
 //!  - Farm rewards: up to two reward mints per pool, emitted at a per-second rate to the active bin's shares.
@@ -54,8 +60,12 @@ pub const MAX_BIN_ID: i32 = (MIN_CHUNK + CHUNKS as i32) * BINS_PER_ARRAY - 1;
 /// account size (a position spans as many share accounts as it needs).
 pub const MAX_IDS: usize = 70;
 pub const BPS: u128 = 10_000;
-pub const DEFAULT_PROTOCOL_SHARE: u16 = 1_000; // 10% of every swap fee
-pub const MAX_PROTOCOL_SHARE: u16 = 2_500; // 25%
+/// Protocol fee: bps of every swap's input, on top of the LP fee (0.2%). Fixed: set in the factory at init, copied into each pool.
+pub const PROTOCOL_FEE_BPS: u16 = 20;
+pub const MAX_TIERS: usize = 16;
+pub const DEFAULT_BOND_LAMPORTS: u64 = 1_000_000_000; // 1 SOL until the factory authority sets it
+pub const DEFAULT_BOND_LOCK: i64 = 30 * 86_400;
+pub const MAX_BOND_LOCK: i64 = 365 * 86_400;
 pub const NUM_REWARDS: usize = 2;
 pub const MAX_REWARD_DURATION: u64 = 31_536_000; // one year
 
@@ -103,6 +113,9 @@ pub fn chunk_of(id: i32) -> i32 { id.div_euclid(BINS_PER_ARRAY) }
 pub fn slot_of(id: i32) -> usize { id.rem_euclid(BINS_PER_ARRAY) as usize }
 fn add64(a: u64, b: u64) -> Result<u64> { a.checked_add(b).ok_or_else(|| error!(BinError::Overflow)) }
 fn sub64(a: u64, b: u64) -> Result<u64> { a.checked_sub(b).ok_or_else(|| error!(BinError::Overflow)) }
+/// ceil(amount * bps / 10_000): the protocol fee a swap of `amount` pays (taken from the input before it trades). veyl_entry
+/// uses the same function for the matched (netted) part of a sealed batch, paid with `pay_protocol_fee`.
+pub fn protocol_fee_of(amount: u64, bps: u16) -> u64 { ((amount as u128 * bps as u128 + BPS - 1) / BPS) as u64 }
 /// floor(v * bps / 10_000): what a caller-chosen share (bps) of an amount is.
 pub fn bps_of(v: u64, bps: u16) -> u64 { ((v as u128 * bps as u128) / BPS) as u64 }
 /// Claimable amount for `shares` between a checkpoint and the current growth (Q64.64 per share, wrapping accumulators).
@@ -131,11 +144,38 @@ pub fn distribute(total: u64, weights: &[u16]) -> Result<Vec<u64>> {
 pub mod veyl_bin {
     use super::*;
 
-    /// The factory: whoever holds its authority may create (list) pools and set up farm rewards; its fee authority sets
-    /// the protocol share and withdraws protocol fees. EVM: VeylFactory(owner). Only the program's upgrade authority may
-    /// create it (REVIEW.md H-1). Both roles start with the creator; `npm run handover` moves them to a multisig.
+    /// The factory: its authority manages the fee tiers, the listing bond, delisting and farm rewards; its fee authority
+    /// sets the treasury and withdraws protocol fees. EVM: VeylFactory(owner). Only the program's upgrade authority may
+    /// create it (REVIEW.md H-1). Both roles start with the creator (also the first treasury); `npm run handover` moves
+    /// them to a multisig. Starts with no tier (nobody can list until `add_fee_tier`), a 1 SOL bond and a 30-day lock.
     pub fn init_factory(ctx: Context<InitFactory>) -> Result<()> {
-        let f = &mut ctx.accounts.factory; f.authority = ctx.accounts.authority.key(); f.fee_authority = ctx.accounts.authority.key(); f.bump = ctx.bumps.factory; Ok(())
+        let f = &mut ctx.accounts.factory; f.authority = ctx.accounts.authority.key(); f.fee_authority = ctx.accounts.authority.key(); f.bump = ctx.bumps.factory;
+        f.treasury = ctx.accounts.authority.key(); f.bond_lamports = DEFAULT_BOND_LAMPORTS; f.bond_lock = DEFAULT_BOND_LOCK; f.protocol_fee_bps = PROTOCOL_FEE_BPS; Ok(())
+    }
+    /// Approve a fee tier (factory authority). Each tier has its own bin step (the pool address includes it: one pool per
+    /// pair per tier). Tiers are never removed or changed, only disabled for new pools; existing pools keep their fees.
+    pub fn add_fee_tier(ctx: Context<FactoryAuthority>, bin_step: u16, base_fee: u32, variable_fee_control: u64) -> Result<()> {
+        let f = &mut ctx.accounts.factory; let n = f.num_tiers as usize;
+        require!(n < MAX_TIERS && bin_step > 0 && bin_step <= 500 && (base_fee as u128) <= MAX_FEE, BinError::BadParams);
+        require!(!f.tiers[..n].iter().any(|t| t.bin_step == bin_step), BinError::BadParams);
+        f.tiers[n] = FeeTier { bin_step, base_fee, variable_fee_control, enabled: 1 }; f.num_tiers += 1;
+        emit!(FeeTierAdded { index: n as u8, bin_step, base_fee, variable_fee_control }); Ok(())
+    }
+    /// Enable / disable a tier for new pools (factory authority). Pools already created at it are not affected.
+    pub fn set_fee_tier_enabled(ctx: Context<FactoryAuthority>, index: u8, enabled: bool) -> Result<()> {
+        let f = &mut ctx.accounts.factory; require!((index as usize) < f.num_tiers as usize, BinError::BadTier);
+        f.tiers[index as usize].enabled = enabled as u8; emit!(FeeTierSet { index, enabled }); Ok(())
+    }
+    /// The listing bond (lamports) and how long it stays locked (seconds), for pools created from now on (factory authority).
+    pub fn set_bond(ctx: Context<FactoryAuthority>, lamports: u64, lock_seconds: i64) -> Result<()> {
+        require!((0..=MAX_BOND_LOCK).contains(&lock_seconds), BinError::BadParams);
+        let f = &mut ctx.accounts.factory; f.bond_lamports = lamports; f.bond_lock = lock_seconds;
+        emit!(BondSet { lamports, lock_seconds }); Ok(())
+    }
+    /// Where forfeited bonds go (fee authority).
+    pub fn set_treasury(ctx: Context<FeeAuthority>, treasury: Pubkey) -> Result<()> {
+        require!(treasury != Pubkey::default(), BinError::BadParams);
+        ctx.accounts.factory.treasury = treasury; emit!(TreasurySet { treasury }); Ok(())
     }
     pub fn propose_factory_authority(ctx: Context<FactoryAuthority>, next: Pubkey) -> Result<()> { ctx.accounts.factory.pending_authority = next; Ok(()) }
     pub fn accept_factory_authority(ctx: Context<AcceptFactoryAuthority>) -> Result<()> {
@@ -150,19 +190,54 @@ pub mod veyl_bin {
         emit!(FeeAuthoritySet { fee_authority: f.fee_authority }); Ok(())
     }
 
-    /// EVM: VeylFactory.createPool. `base_price` is the 128.128 price at bin 0, as 32 big-endian bytes.
-    pub fn create_pool(ctx: Context<CreatePool>, bin_step: u16, base_fee: u32, variable_fee_control: u64, base_price: [u8; 32], active_id: i32) -> Result<()> {
-        require!(ctx.accounts.mint_x.key() != ctx.accounts.mint_y.key() && bin_step > 0 && bin_step <= 500 && (base_fee as u128) <= MAX_FEE && from_be32(&base_price) != U512::zero(), BinError::BadParams);
-        require!((MIN_BIN_ID..=MAX_BIN_ID).contains(&active_id), BinError::BadParams);
-        let mut p = ctx.accounts.pool.load_init()?;
-        p.factory = ctx.accounts.factory.key(); p.mint_x = ctx.accounts.mint_x.key(); p.mint_y = ctx.accounts.mint_y.key();
-        p.vault_x = ctx.accounts.vault_x.key(); p.vault_y = ctx.accounts.vault_y.key();
-        p.token_program_x = ctx.accounts.token_program_x.key(); p.token_program_y = ctx.accounts.token_program_y.key();
-        p.bin_step = bin_step; p.base_fee = base_fee; p.variable_fee_control = variable_fee_control; p.base_price = base_price;
-        p.step_q = be32(q() + (q() * u(bin_step as u128)) / u(10_000))?; // (1 + binStep/1e4) in 128.128
-        p.active_id = active_id; p.id_ref = active_id; p.bump = ctx.bumps.pool; p.protocol_share = DEFAULT_PROTOCOL_SHARE;
-        emit!(PoolCreated { pool: ctx.accounts.pool.key(), mint_x: p.mint_x, mint_y: p.mint_y, bin_step, base_fee });
+    /// List a pool (anyone). The pair must be canonical (mint_x < mint_y, by bytes: A/B and B/A cannot both exist), both
+    /// mints SPL Token or Token-2022 without a transfer-altering extension (`check_mint`), and `tier` an enabled factory
+    /// tier, which fixes the pool's bin step and fees forever. The creator pays the factory's bond into the pool's `Bond`
+    /// PDA (reclaimed with `release_bond` after the lock); the factory authority lists with a zero bond (the curated
+    /// pools of the deploy). `base_price` is the 128.128 price at bin 0, as 32 big-endian bytes. EVM: VeylFactory.createPool.
+    pub fn create_pool(ctx: Context<CreatePool>, tier: u8, base_price: [u8; 32], active_id: i32) -> Result<()> {
+        let f = &ctx.accounts.factory; let t = f.tier(tier)?;
+        require!(ctx.accounts.mint_x.key() < ctx.accounts.mint_y.key(), BinError::MintOrder);
+        require!(from_be32(&base_price) != U512::zero() && (MIN_BIN_ID..=MAX_BIN_ID).contains(&active_id), BinError::BadParams);
+        check_mint(&ctx.accounts.mint_x.to_account_info())?; check_mint(&ctx.accounts.mint_y.to_account_info())?;
+        {
+            let mut p = ctx.accounts.pool.load_init()?;
+            p.factory = f.key(); p.mint_x = ctx.accounts.mint_x.key(); p.mint_y = ctx.accounts.mint_y.key();
+            p.vault_x = ctx.accounts.vault_x.key(); p.vault_y = ctx.accounts.vault_y.key();
+            p.token_program_x = ctx.accounts.token_program_x.key(); p.token_program_y = ctx.accounts.token_program_y.key();
+            p.bin_step = t.bin_step; p.base_fee = t.base_fee; p.variable_fee_control = t.variable_fee_control; p.base_price = base_price;
+            p.step_q = be32(q() + (q() * u(t.bin_step as u128)) / u(10_000))?; /* (1 + binStep/1e4) in 128.128 */
+            p.active_id = active_id; p.id_ref = active_id; p.bump = ctx.bumps.pool; p.protocol_fee_bps = f.protocol_fee_bps; p.fee_tier = tier;
+        }
+        let now = Clock::get()?.unix_timestamp; let creator = ctx.accounts.creator.key();
+        let amount = if creator == f.authority { 0 } else { f.bond_lamports };
+        let unlock_at = now.saturating_add(f.bond_lock);
+        { let b = &mut ctx.accounts.bond; b.pool = ctx.accounts.pool.key(); b.creator = creator; b.amount = amount; b.created_at = now; b.unlock_at = unlock_at; b.bump = ctx.bumps.bond; }
+        if amount > 0 {
+            anchor_lang::system_program::transfer(CpiContext::new(ctx.accounts.system_program.to_account_info(), anchor_lang::system_program::Transfer { from: ctx.accounts.creator.to_account_info(), to: ctx.accounts.bond.to_account_info() }), amount)?;
+        }
+        emit!(PoolCreated { pool: ctx.accounts.pool.key(), mint_x: ctx.accounts.mint_x.key(), mint_y: ctx.accounts.mint_y.key(), bin_step: t.bin_step, base_fee: t.base_fee, tier, creator, bond: amount, unlock_at });
         Ok(())
+    }
+    /// The creator takes the bond back (with the bond account's rent) once its lock has passed, unless the pool was delisted.
+    pub fn release_bond(ctx: Context<ReleaseBond>) -> Result<()> {
+        require!(ctx.accounts.pool.load()?.delisted == 0, BinError::Delisted);
+        require!(Clock::get()?.unix_timestamp >= ctx.accounts.bond.unlock_at, BinError::BondLocked);
+        emit!(BondReleased { pool: ctx.accounts.pool.key(), creator: ctx.accounts.creator.key(), amount: ctx.accounts.bond.amount }); Ok(())
+    }
+    /// Delist a pool (factory authority): its bond account (bond + rent), if not released yet, goes to the treasury. A
+    /// delisted pool refuses new liquidity (mint, mint_exact, swap_and_add, limit orders, re-adds of a rebalance); burns,
+    /// fee / reward claims, limit-order withdrawals and swaps keep working, so LPs can always exit at a sane price.
+    pub fn delist_pool(ctx: Context<DelistPool>) -> Result<()> {
+        { let mut p = ctx.accounts.pool.load_mut()?; require!(p.delisted == 0, BinError::Delisted); p.delisted = 1; }
+        let bi = ctx.accounts.bond.to_account_info(); let mut forfeited = 0u64;
+        if bi.owner == &crate::ID && !bi.data_is_empty() {
+            forfeited = Bond::try_deserialize(&mut &bi.try_borrow_data()?[..])?.amount;
+            let t = ctx.accounts.treasury.to_account_info(); let all = bi.lamports();
+            **t.try_borrow_mut_lamports()? = t.lamports().checked_add(all).ok_or(BinError::Overflow)?; **bi.try_borrow_mut_lamports()? = 0;
+            bi.assign(&anchor_lang::system_program::ID); bi.resize(0)?;
+        }
+        emit!(PoolDelisted { pool: ctx.accounts.pool.key(), forfeited }); Ok(())
     }
 
     /// Storage for 60 bins (rent paid by whoever needs them first).
@@ -184,7 +259,7 @@ pub mod veyl_bin {
         require!(now <= deadline, BinError::Expired);
         let n = ids.len();
         require!(n > 0 && n <= MAX_IDS && amounts_x.len() == n && amounts_y.len() == n && (min_shares.is_empty() || min_shares.len() == n), BinError::BadParams);
-        let pool_key = ctx.accounts.pool.key();
+        let pool_key = ctx.accounts.pool.key(); listed(&ctx.accounts.pool)?;
         let acc = find_accounts(ctx.remaining_accounts, &pool_key, Some((owner, authority)))?;
         let active = ctx.accounts.pool.load()?.active_id;
         if ids.contains(&active) { update_active(&ctx.accounts.pool, &acc, &pool_key, now, true)?; }
@@ -283,7 +358,7 @@ pub mod veyl_bin {
         let now = Clock::get()?.unix_timestamp;
         require!(now <= deadline, BinError::Expired);
         require!(amount > 0 && (MIN_BIN_ID..=MAX_BIN_ID).contains(&id), BinError::BadParams);
-        let pool_key = ctx.accounts.pool.key();
+        let pool_key = ctx.accounts.pool.key(); listed(&ctx.accounts.pool)?;
         let (active, base_price, step_q) = { let p = ctx.accounts.pool.load()?; (p.active_id, p.base_price, p.step_q) };
         require!((is_ask && id > active) || (!is_ask && id < active), BinError::WrongSide);
         let acc = find_accounts(ctx.remaining_accounts, &pool_key, Some((owner, authority)))?;
@@ -347,6 +422,7 @@ pub mod veyl_bin {
         let n = ids.len();
         require!(!burn_ids.is_empty() && burn_ids.len() <= MAX_IDS && burn_shares.len() == burn_ids.len() && n <= MAX_IDS && weights_x.len() == n && weights_y.len() == n && (min_shares.is_empty() || min_shares.len() == n) && (withhold_bps as u128) <= BPS, BinError::BadParams);
         let pool_key = ctx.accounts.pool.key(); let authority = ctx.accounts.authority.key();
+        if n > 0 { listed(&ctx.accounts.pool)?; }
         let acc = find_accounts(ctx.remaining_accounts, &pool_key, Some((owner, authority)))?;
         let active = ctx.accounts.pool.load()?.active_id;
         if burn_ids.contains(&active) || ids.contains(&active) { update_active(&ctx.accounts.pool, &acc, &pool_key, now, true)?; }
@@ -373,7 +449,7 @@ pub mod veyl_bin {
         require!(now <= deadline, BinError::Expired);
         let n = ids.len();
         require!(n > 0 && n <= MAX_IDS && weights_x.len() == n && weights_y.len() == n && (min_shares.is_empty() || min_shares.len() == n) && amount_in > 0 && swap_amount <= amount_in, BinError::BadParams);
-        let pool_key = ctx.accounts.pool.key();
+        let pool_key = ctx.accounts.pool.key(); listed(&ctx.accounts.pool)?;
         let acc = find_accounts(ctx.remaining_accounts, &pool_key, Some((owner, authority)))?;
         if x_in { pull(&ctx.accounts.token_program_x, &ctx.accounts.from_x, &ctx.accounts.mint_x, &ctx.accounts.vault_x, &ctx.accounts.from, amount_in)?; }
         else { pull(&ctx.accounts.token_program_y, &ctx.accounts.from_y, &ctx.accounts.mint_y, &ctx.accounts.vault_y, &ctx.accounts.from, amount_in)?; }
@@ -410,7 +486,7 @@ pub mod veyl_bin {
         require!(now <= deadline, BinError::Expired);
         let n = ids.len();
         require!(n > 0 && n <= MAX_IDS && shares.len() == n && hint_x.len() == n && hint_y.len() == n, BinError::BadParams);
-        let pool_key = ctx.accounts.pool.key();
+        let pool_key = ctx.accounts.pool.key(); listed(&ctx.accounts.pool)?;
         let acc = find_accounts(ctx.remaining_accounts, &pool_key, Some((owner, authority)))?;
         let active = ctx.accounts.pool.load()?.active_id;
         if ids.contains(&active) { update_active(&ctx.accounts.pool, &acc, &pool_key, now, true)?; }
@@ -479,11 +555,13 @@ pub mod veyl_bin {
 
     // ---------------------------------------------------------------------------------------- protocol fee
 
-    /// Share of every swap fee that goes to the protocol (bps of the fee; at most 25%). Fee authority only.
-    pub fn set_protocol_share(ctx: Context<SetProtocolShare>, bps: u16) -> Result<()> {
-        require!(bps <= MAX_PROTOCOL_SHARE, BinError::BadParams);
-        ctx.accounts.pool.load_mut()?.protocol_share = bps;
-        emit!(ProtocolShareSet { pool: ctx.accounts.pool.key(), bps }); Ok(())
+    /// Pay protocol fees into the pool (anyone; accounted to its protocol balance like a swap's). veyl_entry pays the
+    /// 0.2% of the matched part of a sealed batch with it (the netted excess pays it in its swap).
+    pub fn pay_protocol_fee(ctx: Context<MintLiquidity>, amount_x: u64, amount_y: u64) -> Result<()> {
+        { let mut p = ctx.accounts.pool.load_mut()?; p.protocol_fee_x = add64(p.protocol_fee_x, amount_x)?; p.protocol_fee_y = add64(p.protocol_fee_y, amount_y)?; }
+        if amount_x > 0 { pull(&ctx.accounts.token_program_x, &ctx.accounts.from_x, &ctx.accounts.mint_x, &ctx.accounts.vault_x, &ctx.accounts.from, amount_x)?; }
+        if amount_y > 0 { pull(&ctx.accounts.token_program_y, &ctx.accounts.from_y, &ctx.accounts.mint_y, &ctx.accounts.vault_y, &ctx.accounts.from, amount_y)?; }
+        emit!(ProtocolFeePaid { pool: ctx.accounts.pool.key(), sender: ctx.accounts.from.key(), amount_x, amount_y }); Ok(())
     }
     /// Withdraw accrued protocol fees (at most what is accounted). Fee authority only.
     pub fn withdraw_protocol_fee(ctx: Context<WithdrawProtocolFee>, amount_x: u64, amount_y: u64) -> Result<()> {
@@ -585,13 +663,16 @@ fn next_bin(p: &BinPool, arrays: &[Found<BinArray>], from: i32, x_for_y: bool) -
     }
 }
 
-/// `_simulate`: trade from the active bin, bin by bin, until `amount_in` is used up. Per bin the formula is the EVM's;
-/// the fee taken in each bin is then split: protocol share, then market makers vs limit orders pro rata to what each sold.
+/// `_simulate`: the protocol fee (`protocol_fee_of(amount_in)`, rounded up) comes off the input first; the rest trades from
+/// the active bin, bin by bin, until it is used up. Per bin the formula is the EVM's; the LP fee taken in each bin is split
+/// between market makers and limit orders pro rata to what each sold. `fee` = LP fee + protocol fee (what the trader paid),
+/// `protocol_fee` = the protocol fee + any LP fee that had no provider to pay.
 pub fn simulate(p: &BinPool, arrays: &[Found<BinArray>], x_for_y: bool, amount_in: u64, now: i64) -> Result<SwapResult> {
     require!(p.seeded == 1, BinError::InsufficientLiquidity);
     let (vol_ref, id_ref) = p.refs(now);
-    let mut r = SwapResult { out: 0, fee: 0, protocol_fee: 0, end_id: p.active_id, vol_acc: 0, vol_ref, id_ref, touched: Vec::new() };
-    let mut left = amount_in as u128; let mut id = p.active_id; let mut step = 0usize; let mut prices = Prices::new(&p.base_price, &p.step_q);
+    let proto_in = protocol_fee_of(amount_in, p.protocol_fee_bps);
+    let mut r = SwapResult { out: 0, fee: proto_in, protocol_fee: proto_in, end_id: p.active_id, vol_acc: 0, vol_ref, id_ref, touched: Vec::new() };
+    let mut left = (amount_in - proto_in) as u128; let mut id = p.active_id; let mut step = 0usize; let mut prices = Prices::new(&p.base_price, &p.step_q);
     while left > 0 {
         id = next_bin(p, arrays, id, x_for_y)?.ok_or(BinError::InsufficientLiquidity)?;
         require!(step < MAX_STEPS, BinError::TooManySteps); step += 1;
@@ -613,9 +694,8 @@ pub fn simulate(p: &BinPool, arrays: &[Found<BinArray>], x_for_y: bool, amount_i
             let g_ = if x_for_y { mul_div(u(net), price, q())? } else { mul_div(u(net), q(), price)? };
             let g_ = to_u128(g_)?; got = if g_ > avail { avail } else { g_ };
         }
-        // split the bin's trade: protocol share of the fee, then market makers vs limit orders pro rata to what each sold
-        let proto = fee_amt * p.protocol_share as u128 / BPS;
-        let lp_fee = fee_amt - proto;
+        // split the bin's trade (and its LP fee) between market makers and limit orders pro rata to what each sold
+        let lp_fee = fee_amt;
         let net = used - fee_amt;
         let lo_got = got * lo_avail / avail; let mm_got = got - lo_got;
         let (lo_in, lo_fee) = if got == 0 { (0, 0) } else { (net * lo_got / got, lp_fee * lo_got / got) };
@@ -635,7 +715,7 @@ pub fn simulate(p: &BinPool, arrays: &[Found<BinArray>], x_for_y: bool, amount_i
             b.ask_x = ck(b.ask_x as u128 - lo_got)?; b.ask_filled_y = ck(b.ask_filled_y as u128 + lo_in + lo_fee)?;
         }
         r.touched.push((id, b));
-        r.out = add64(r.out, ck(got)?)?; r.fee = add64(r.fee, ck(fee_amt)?)?; r.protocol_fee = add64(r.protocol_fee, ck(proto + proto_extra)?)?;
+        r.out = add64(r.out, ck(got)?)?; r.fee = add64(r.fee, ck(fee_amt)?)?; r.protocol_fee = add64(r.protocol_fee, ck(proto_extra)?)?;
         left -= used;
         if left > 0 { id = if x_for_y { id.checked_sub(1).ok_or(BinError::Overflow)? } else { id.checked_add(1).ok_or(BinError::Overflow)? }; }
     }
@@ -781,6 +861,24 @@ fn pay_xy<'info>(pool: &AccountLoader<'info, BinPool>, tpx: &Interface<'info, To
     Ok(())
 }
 
+/// New liquidity is refused once a pool is delisted.
+fn listed(pool: &AccountLoader<BinPool>) -> Result<()> { require!(pool.load()?.delisted == 0, BinError::Delisted); Ok(()) }
+/// Classic SPL Token mints are accepted as they are (a freeze authority included: USDC / USDT have one). Token-2022 mints
+/// only with extensions that cannot alter a transfer or a balance: metadata / group pointers and data. Everything else is
+/// refused, among them TransferFeeConfig, TransferHook, PermanentDelegate, DefaultAccountState, InterestBearingConfig,
+/// NonTransferable, MintCloseAuthority and the confidential-transfer extensions (and any extension this build does not know).
+fn check_mint(m: &AccountInfo) -> Result<()> {
+    use anchor_spl::token_2022::spl_token_2022::{extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions}, state::Mint as Mint22};
+    if m.owner == &anchor_spl::token::ID { return Ok(()); }
+    require_keys_eq!(*m.owner, anchor_spl::token_2022::ID, BinError::BadMint);
+    let data = m.try_borrow_data()?;
+    let st = StateWithExtensions::<Mint22>::unpack(&data).map_err(|_| error!(BinError::BadMint))?;
+    for e in st.get_extension_types().map_err(|_| error!(BinError::BadMint))? {
+        require!(matches!(e, ExtensionType::MetadataPointer | ExtensionType::TokenMetadata | ExtensionType::GroupPointer | ExtensionType::TokenGroup | ExtensionType::GroupMemberPointer | ExtensionType::TokenGroupMember), BinError::BadMint);
+    }
+    Ok(())
+}
+
 pub struct Found<'info, T: ZeroCopy + Owner> { pub chunk: i32, pub key: Pubkey, pub loader: AccountLoader<'info, T> }
 pub struct Accs<'info> { pub arrays: Vec<Found<'info, BinArray>>, pub shares: Vec<Found<'info, ShareAccount>>, pub empties: Vec<Pubkey> }
 fn find<'a, 'info>(arrays: &'a [Found<'info, BinArray>], chunk: i32) -> Result<&'a Found<'info, BinArray>> { arrays.iter().find(|a| a.chunk == chunk).ok_or_else(|| error!(BinError::MissingBinArray)) }
@@ -819,8 +917,26 @@ fn find_accounts<'info>(infos: &'info [AccountInfo<'info>], pool: &Pubkey, share
 // ------------------------------------------------------------------------------------------------ state
 
 #[account]
-pub struct Factory { pub authority: Pubkey, pub pending_authority: Pubkey, pub bump: u8, pub fee_authority: Pubkey, pub pending_fee_authority: Pubkey }
-impl Factory { pub const SIZE: usize = 8 + 32 * 4 + 1; }
+pub struct Factory {
+    pub authority: Pubkey, pub pending_authority: Pubkey, pub bump: u8, pub fee_authority: Pubkey, pub pending_fee_authority: Pubkey,
+    pub treasury: Pubkey,                       // receives forfeited bonds
+    pub bond_lamports: u64, pub bond_lock: i64, // for pools created from now on
+    pub protocol_fee_bps: u16,                  // PROTOCOL_FEE_BPS, copied into every new pool
+    pub num_tiers: u8, pub tiers: [FeeTier; MAX_TIERS],
+}
+impl Factory {
+    pub const SIZE: usize = 8 + 32 * 4 + 1 + 32 + 8 + 8 + 2 + 1 + FeeTier::SIZE * MAX_TIERS;
+    /// The bin step of tier `i` (0 when there is no such tier: no pool PDA is ever derived from it).
+    pub fn step_of(&self, i: u8) -> u16 { if (i as usize) < self.num_tiers as usize { self.tiers[i as usize].bin_step } else { 0 } }
+    pub fn tier(&self, i: u8) -> Result<FeeTier> { require!((i as usize) < self.num_tiers as usize && self.tiers[i as usize].enabled == 1, BinError::BadTier); Ok(self.tiers[i as usize]) }
+}
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct FeeTier { pub bin_step: u16, pub base_fee: u32, pub variable_fee_control: u64, pub enabled: u8 }
+impl FeeTier { pub const SIZE: usize = 2 + 4 + 8 + 1; }
+/// The listing bond of a pool (["bond", pool]): lamports held for the creator until `unlock_at`; closed on release or delisting.
+#[account]
+pub struct Bond { pub pool: Pubkey, pub creator: Pubkey, pub amount: u64, pub created_at: i64, pub unlock_at: i64, pub bump: u8 }
+impl Bond { pub const SIZE: usize = 8 + 32 * 2 + 8 * 3 + 1; }
 
 #[zero_copy]
 #[repr(C)]
@@ -842,7 +958,7 @@ pub struct BinPool {
     pub active_id: i32, pub lowest_id: i32, pub highest_id: i32, pub id_ref: i32,
     pub base_fee: u32, pub bin_step: u16, pub seeded: u8, pub bump: u8,
     // Phase 1
-    pub protocol_share: u16, pub _pad: [u8; 6],
+    pub protocol_fee_bps: u16, pub delisted: u8, pub fee_tier: u8, pub _pad: [u8; 4], // protocol fee (bps of swap input, fixed), delisted flag, factory tier index
     pub protocol_fee_x: u64, pub protocol_fee_y: u64, // accounted in the vaults; the fee authority's to withdraw
     pub total_fee_x: u64, pub total_fee_y: u64,       // lifetime swap fees (analytics)
     pub bitmap_x: [u64; BITMAP_WORDS], pub bitmap_y: [u64; BITMAP_WORDS], // per bin array: holds X / Y to sell
@@ -964,16 +1080,17 @@ pub struct FeeAuthority<'info> { pub fee_authority: Signer<'info>, #[account(mut
 #[derive(Accounts)]
 pub struct AcceptFactoryAuthority<'info> { pub next: Signer<'info>, #[account(mut, seeds = [b"factory"], bump = factory.bump)] pub factory: Account<'info, Factory> }
 #[derive(Accounts)]
-#[instruction(bin_step: u16)]
+#[instruction(tier: u8)]
 pub struct CreatePool<'info> {
-    #[account(mut)] pub authority: Signer<'info>,
-    #[account(seeds = [b"factory"], bump = factory.bump, has_one = authority @ BinError::NotAuthority)] pub factory: Account<'info, Factory>,
-    pub mint_x: InterfaceAccount<'info, Mint>,
-    pub mint_y: InterfaceAccount<'info, Mint>,
-    #[account(init, payer = authority, space = BinPool::SIZE, seeds = [b"bin", mint_x.key().as_ref(), mint_y.key().as_ref(), &bin_step.to_le_bytes()], bump)] pub pool: AccountLoader<'info, BinPool>,
+    #[account(mut)] pub creator: Signer<'info>,
+    #[account(seeds = [b"factory"], bump = factory.bump)] pub factory: Box<Account<'info, Factory>>,
+    pub mint_x: Box<InterfaceAccount<'info, Mint>>,
+    pub mint_y: Box<InterfaceAccount<'info, Mint>>,
+    #[account(init, payer = creator, space = BinPool::SIZE, seeds = [b"bin", mint_x.key().as_ref(), mint_y.key().as_ref(), &factory.step_of(tier).to_le_bytes()], bump)] pub pool: AccountLoader<'info, BinPool>,
+    #[account(init, payer = creator, space = Bond::SIZE, seeds = [b"bond", pool.key().as_ref()], bump)] pub bond: Box<Account<'info, Bond>>,
     /// init_if_needed: the vaults' addresses are known in advance and anyone may create them first (REVIEW.md M-3).
-    #[account(init_if_needed, payer = authority, associated_token::mint = mint_x, associated_token::authority = pool, associated_token::token_program = token_program_x)] pub vault_x: InterfaceAccount<'info, TokenAccount>,
-    #[account(init_if_needed, payer = authority, associated_token::mint = mint_y, associated_token::authority = pool, associated_token::token_program = token_program_y)] pub vault_y: InterfaceAccount<'info, TokenAccount>,
+    #[account(init_if_needed, payer = creator, associated_token::mint = mint_x, associated_token::authority = pool, associated_token::token_program = token_program_x)] pub vault_x: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(init_if_needed, payer = creator, associated_token::mint = mint_y, associated_token::authority = pool, associated_token::token_program = token_program_y)] pub vault_y: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program_x: Interface<'info, TokenInterface>,
     pub token_program_y: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
@@ -1049,10 +1166,20 @@ pub struct ClaimReward<'info> {
     #[account(address = pool.load()?.rewards.get(index as usize).map(|r| r.token_program).unwrap_or_default() @ BinError::WrongTokenProgram)] pub token_program: Interface<'info, TokenInterface>,
 }
 #[derive(Accounts)]
-pub struct SetProtocolShare<'info> {
-    pub fee_authority: Signer<'info>,
-    #[account(seeds = [b"factory"], bump = factory.bump, has_one = fee_authority @ BinError::NotAuthority)] pub factory: Account<'info, Factory>,
+pub struct ReleaseBond<'info> {
+    #[account(mut)] pub creator: Signer<'info>,
+    pub pool: AccountLoader<'info, BinPool>,
+    #[account(mut, seeds = [b"bond", pool.key().as_ref()], bump = bond.bump, has_one = creator @ BinError::NotAuthority, close = creator)] pub bond: Account<'info, Bond>,
+}
+#[derive(Accounts)]
+pub struct DelistPool<'info> {
+    pub authority: Signer<'info>,
+    #[account(seeds = [b"factory"], bump = factory.bump, has_one = authority @ BinError::NotAuthority, has_one = treasury @ BinError::NotAuthority)] pub factory: Box<Account<'info, Factory>>,
     #[account(mut, constraint = pool.load()?.factory == factory.key() @ BinError::WrongPool)] pub pool: AccountLoader<'info, BinPool>,
+    /// CHECK: the pool's bond PDA (seeds checked); closed to the treasury when it still exists (not released yet).
+    #[account(mut, seeds = [b"bond", pool.key().as_ref()], bump)] pub bond: UncheckedAccount<'info>,
+    /// CHECK: the factory's treasury (has_one).
+    #[account(mut)] pub treasury: UncheckedAccount<'info>,
 }
 #[derive(Accounts)]
 pub struct WithdrawProtocolFee<'info> {
@@ -1106,7 +1233,14 @@ pub struct WithdrawIneligible<'info> {
 
 // ------------------------------------------------------------------------------------------------ events / errors
 
-#[event] pub struct PoolCreated { pub pool: Pubkey, pub mint_x: Pubkey, pub mint_y: Pubkey, pub bin_step: u16, pub base_fee: u32 }
+#[event] pub struct PoolCreated { pub pool: Pubkey, pub mint_x: Pubkey, pub mint_y: Pubkey, pub bin_step: u16, pub base_fee: u32, pub tier: u8, pub creator: Pubkey, pub bond: u64, pub unlock_at: i64 }
+#[event] pub struct FeeTierAdded { pub index: u8, pub bin_step: u16, pub base_fee: u32, pub variable_fee_control: u64 }
+#[event] pub struct FeeTierSet { pub index: u8, pub enabled: bool }
+#[event] pub struct BondSet { pub lamports: u64, pub lock_seconds: i64 }
+#[event] pub struct TreasurySet { pub treasury: Pubkey }
+#[event] pub struct BondReleased { pub pool: Pubkey, pub creator: Pubkey, pub amount: u64 }
+#[event] pub struct PoolDelisted { pub pool: Pubkey, pub forfeited: u64 }
+#[event] pub struct ProtocolFeePaid { pub pool: Pubkey, pub sender: Pubkey, pub amount_x: u64, pub amount_y: u64 }
 #[event] pub struct Minted { pub pool: Pubkey, pub sender: Pubkey, pub owner: Pubkey, pub ids: Vec<i32>, pub amounts_x: Vec<u64>, pub amounts_y: Vec<u64>, pub shares: Vec<u128> }
 #[event] pub struct Burned { pub pool: Pubkey, pub authority: Pubkey, pub owner: Pubkey, pub ids: Vec<i32>, pub shares: Vec<u128>, pub amount_x: u64, pub amount_y: u64 }
 #[event] pub struct Swapped { pub pool: Pubkey, pub sender: Pubkey, pub to: Pubkey, pub x_for_y: bool, pub amount_in: u64, pub amount_out: u64, pub fee: u64, pub active_id: i32, pub protocol_fee: u64 }
@@ -1117,7 +1251,6 @@ pub struct WithdrawIneligible<'info> {
 #[event] pub struct Rebalanced { pub pool: Pubkey, pub authority: Pubkey, pub owner: Pubkey, pub burned_x: u64, pub burned_y: u64, pub withheld_x: u64, pub withheld_y: u64, pub readded_x: u64, pub readded_y: u64, pub ids: Vec<i32>, pub shares: Vec<u128> }
 #[event] pub struct MintedExact { pub pool: Pubkey, pub sender: Pubkey, pub owner: Pubkey, pub ids: Vec<i32>, pub shares: Vec<u128>, pub amount_x: u64, pub amount_y: u64 }
 #[event] pub struct ZapAdded { pub pool: Pubkey, pub sender: Pubkey, pub owner: Pubkey, pub x_in: bool, pub amount_in: u64, pub swap_amount: u64, pub swap_out: u64, pub ids: Vec<i32>, pub shares: Vec<u128> }
-#[event] pub struct ProtocolShareSet { pub pool: Pubkey, pub bps: u16 }
 #[event] pub struct ProtocolFeeWithdrawn { pub pool: Pubkey, pub to_x: Pubkey, pub to_y: Pubkey, pub amount_x: u64, pub amount_y: u64 }
 #[event] pub struct FeeAuthoritySet { pub fee_authority: Pubkey }
 #[event] pub struct RewardInitialized { pub pool: Pubkey, pub index: u8, pub mint: Pubkey, pub funder: Pubkey, pub duration: u64 }
@@ -1146,4 +1279,9 @@ pub enum BinError {
     #[msg("share account does not match")] WrongShareAccount,
     #[msg("more than the accounted protocol fees")] NotEnoughFees,
     #[msg("bitmap and bins disagree")] BitmapMismatch,
+    #[msg("mints must be in canonical order (mint_x < mint_y)")] MintOrder,
+    #[msg("not an approved (enabled) fee tier")] BadTier,
+    #[msg("mint not allowed (Token-2022 extension)")] BadMint,
+    #[msg("pool is delisted")] Delisted,
+    #[msg("bond is still locked")] BondLocked,
 }

@@ -152,13 +152,16 @@ module.exports = async function phase3(C) {
   check('P3 settlement before both totals are verified would be refused; both now verified', (await V.batch(POOL, 0n)).totalsOk === 3);
   const p0 = await V.binPool(POOL); const price = S.priceOf(p0.basePrice, p0.binStep, p0.activeId);
   const twin = await SE.clearing({ totals, price, quote: async (xForY, a) => (await V.quoteLocal(POOL, xForY, a)).out });
-  const vs = [await vault(SOL), await vault(USDC)];
+  const vs = [await vault(SOL), await vault(USDC)]; const pf0 = await V.protocolFees(POOL);
   sig = await V.sendV0([await V.settleBatchIx(payer.publicKey, POOL, 0n)], [], 1_400_000); await cuOf(conn, sig, 'settle_batch (net swap)'); await logsOf(conn, sig, 'settle_batch (net swap)');
   const set = await evOf(sig, 'BatchSettled'); b0 = await V.batch(POOL, 0n);
   check('P3 settle (anyone): the directions net at the active bin\'s price, ONE swap of the excess through the bins; ratios == the JS twin\'s', b0.state === 'settled' && set.xForY === twin.xForY && set.netIn === twin.netIn && set.netOut === twin.netOut && set.num.every((x, k) => x === twin.num[k]) && set.den.every((x, k) => x === twin.den[k]),
     `net ${set.xForY ? 'X->Y' : 'Y->X'} ${set.netIn} -> ${set.netOut}, CU ${CU['settle_batch (net swap)']}`);
-  const [inV, outV] = set.xForY ? [0, 1] : [1, 0];
-  check('P3 the vaults moved by exactly the net swap: the excess token out, the other one in (the matched part never leaves the shielded pool)', (await vault(set.xForY ? SOL : USDC)) === vs[inV] - set.netIn && (await vault(set.xForY ? USDC : SOL)) === vs[outV] + set.netOut);
+  const dv = set.xForY ? [-set.netIn, set.netOut] : [set.netOut, -set.netIn]; const pfm = twin.protocolFee; const pf1 = await V.protocolFees(POOL);
+  check('P3 the vaults moved by exactly the net swap and the matched part\'s 0.2% protocol fee: the excess token out, the other one in, the fee to the bin pool (the matched tokens never leave the shielded pool)', (await vault(SOL)) === vs[0] + dv[0] - pfm[0] && (await vault(USDC)) === vs[1] + dv[1] - pfm[1], `protocol fee on the matched part ${pfm[0]} lamports + ${pfm[1]} USDC atoms`);
+  { const netFee = S.protocolFeeOf(set.netIn, pf0.bps);
+    check('P3 every sealed seller pays the 0.2% protocol fee: the net swap pays it on its input, the matched part on each side\'s matched value (rounded up), all accounted to the bin pool; the clearing ratios shrink by exactly that',
+      pf1.x - pf0.x - pfm[0] >= (set.xForY ? netFee : 0n) && pf1.y - pf0.y - pfm[1] >= (set.xForY ? 0n : netFee) && (set.xForY ? pf1.y - pf0.y === pfm[1] : pf1.x - pf0.x === pfm[0]) && pfm.every((f, k) => f === S.protocolFeeOf(twin.matched[k], pf0.bps) && (twin.matched[k] === 0n || f > 0n))); }
   check('P3 public per batch: totals, net swap, clearing ratios, participant counts; settle_batch twice is refused', set.totals[0] === totals[0] && set.count[0] === 3 && set.count[1] === 3 && await refused(V.sendV0([await V.settleBatchIx(payer.publicKey, POOL, 0n)], [], 1_400_000), /BatchNotClosed/));
   mark('batch 0 settled');
 
@@ -182,8 +185,8 @@ module.exports = async function phase3(C) {
     check('P3 double claim refused: the same claim again (its swap commitment\'s nullifier is published)', await refused(R.sendV0([await V.claimSwapIx(me, { binPool: POOL, seq: 0n, direction: 0, mintOut: USDC, ext: x.claimReq.ext, pubs: x.claimPr.pubs, poster: me })], [], 600_000), /AlreadySpent|already in use|0x0/));
     await R.send([V.cancelProofIx(me, SE.KIND.CLAIM, x.claimPr.pubs, me)]); }
   { const dust = [0, 1].map((d) => b0.num[d] - claimed[d].reduce((a, c) => a + c, 0n));
-    const avail = set.xForY ? [totals[1] + set.netOut, totals[0] - set.netIn] : [b0.num[0], totals[0] + set.netOut];
-    check('P3 conservation per batch, per direction: sum of claims + rounding dust == net swap output + the opposite side\'s inputs (dust < 1 atom per claim, kept by the shielded pool)',
+    const pfm = twin.protocolFee; const avail = set.xForY ? [totals[1] + set.netOut - pfm[1], totals[0] - set.netIn - pfm[0]] : [totals[1] - set.netIn - pfm[1], totals[0] + set.netOut - pfm[0]];
+    check('P3 conservation per batch, per direction: sum of claims + rounding dust == net swap output + the opposite side\'s inputs - the matched part\'s protocol fee (dust < 1 atom per claim, kept by the shielded pool)',
       dust.every((x, d) => x >= 0n && x < 3n) && claimed[0].reduce((a, c) => a + c, 0n) + dust[0] === avail[0] && claimed[1].reduce((a, c) => a + c, 0n) + dust[1] === avail[1], `dust ${dust[0]} / ${dust[1]} atoms`); }
   mark('batch 0 claimed');
 

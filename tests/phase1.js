@@ -1,6 +1,6 @@
 // Phase 1 program features, against the same local validator and deployment as tests/run.js (called from there, before the
 // authority handover): bin bitmaps (sparse pools), Meteora-style fee accounting (fee growth per share, claimable fees,
-// protocol share), limit orders, rebalancing, zaps, farm rewards, and the private variant of each through the entry
+// the fixed 0.2% protocol fee), limit orders, rebalancing, zaps, farm rewards, and the private variant of each through the entry
 // program and the relayer service. Every check compares the chain with the JavaScript twin in sdk/veyl.js where there is
 // maths to compare, and the property tests replay seeded random sequences.
 'use strict';
@@ -23,7 +23,8 @@ module.exports = async function phase1(C) {
   const amt = async (addr) => BigInt((await conn.getTokenAccountBalance(addr)).value.amount);
   const evOf = async (sig, name) => (await V.events(sig)).find((e) => e.name === name);
   const evsOf = async (sig, name) => (await V.events(sig)).filter((e) => e.name === name);
-  const mkPool = async (binStep, baseFee = 500, vfc = 10_000) => { await V.send([await V.createPoolIx(payer.publicKey, SOL, USDT, binStep, baseFee, vfc, priceQ(150, 9, 6), 0)]); return V.binPoolPda(SOL, USDT, binStep); };
+  const mkPool = async (binStep, baseFee = 500, vfc = 10_000) => { let t = await V.tierIndex(binStep); if (t < 0) { await V.send([V.addFeeTierIx(payer.publicKey, binStep, baseFee, vfc)]); t = await V.tierIndex(binStep); }
+    await V.send([await V.createPoolIx(payer.publicKey, SOL, USDT, t, priceQ(150, 9, 6), 0)]); return V.binPoolPda(SOL, USDT, binStep); };
   const addLiq = async (kp, pool, ids, ax, ay, extra = {}) => { const pre = await V.ensureBinAccountsIxs(kp.publicKey, pool, ids, kp.publicKey, kp.publicKey); if (pre.length) await as(kp).send(pre, [], 400_000);
     return as(kp).send([await V.mintIx(kp.publicKey, pool, { ids, amountsX: ax, amountsY: ay, ...extra })], [], 1_400_000); };
   const range = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(i); return o; };
@@ -45,7 +46,7 @@ module.exports = async function phase1(C) {
   let sig, ev;
 
   // ======================================================================================== A. bitmap: sparse pools
-  console.log('  -- phase 1: bitmaps, fees, protocol share, limit orders, rebalance, zap, rewards, private variants');
+  console.log('  -- phase 1: bitmaps, fees, protocol fee, limit orders, rebalance, zap, rewards, private variants');
   const SP = await mkPool(7);
   // farm reward on a pool whose active bin is empty (its bin array does not even exist): all emission is ineligible
   check('rewards: only the factory authority sets up a reward slot', await refused(as(mallory).send([await V.initRewardIx(mallory.publicKey, SP, 0, USDT, 3600, mallory.publicKey)]), /NotAuthority|ConstraintHasOne/));
@@ -78,16 +79,16 @@ module.exports = async function phase1(C) {
   const CP = await mkPool(9); const cpIds = range(-3, 3);
   for (const [kp, k] of [[alice, 1n], [bob, 2n], [carol, 3n]]) await addLiq(kp, CP, cpIds, cpIds.map((i) => (i >= 0 ? (k * units(1, 9)) / 2n : 0n)), cpIds.map((i) => (i <= 0 ? k * units(75, 6) : 0n)));
   p = await V.binPool(CP);
-  check('B a new pool takes the default protocol share (10%) and accounts nothing yet', p.protocolShare === 1000 && p.protocolFeeX === 0n && p.protocolFeeY === 0n);
+  check('B a new pool takes the fixed 0.2% protocol fee and accounts nothing yet', p.protocolFeeBps === 20 && p.protocolFeeX === 0n && p.protocolFeeY === 0n);
   const vault0 = { x: await amt(p.vaultX), y: await amt(p.vaultY) };
-  let fees = { x: 0n, y: 0n }, proto = { x: 0n, y: 0n }, touches = 0n, allOk = true;
+  let fees = { x: 0n, y: 0n }, proto = { x: 0n, y: 0n }, exp = { x: 0n, y: 0n }, touches = 0n, allOk = true;
   { const rnd = prng(7);
     for (let i = 0; i < 14; i++) { const xForY = rnd() < 0.5; const a = xForY ? BigInt(Math.floor(rnd() * 0.9e9)) + 1000n : BigInt(Math.floor(rnd() * 130e6)) + 1000n;
       const s = await swapChecked([bob, carol, mallory][i % 3], CP, xForY, a, i === 0 ? 'swap (fee split, 1 bin)' : undefined); allOk = allOk && s.ok && !s.skipped;
-      if (s.ev) { if (xForY) { fees.x += s.ev.fee; proto.x += s.ev.protocolFee; } else { fees.y += s.ev.fee; proto.y += s.ev.protocolFee; } touches += BigInt(s.ql.touched.length); } } }
+      if (s.ev) { if (xForY) { fees.x += s.ev.fee; proto.x += s.ev.protocolFee; exp.x += S.protocolFeeOf(a); } else { fees.y += s.ev.fee; proto.y += s.ev.protocolFee; exp.y += S.protocolFeeOf(a); } touches += BigInt(s.ql.touched.length); } } }
   p = await V.binPool(CP);
   check('B property (seed 7, 14 random swaps): every swap == twin, including each touched bin\'s fee growth per share', allOk);
-  check('B fees are accounted, not folded into the reserves: protocol balance == the 10% share of every fee, lifetime totals == the fees', p.protocolFeeX === proto.x && p.protocolFeeY === proto.y && p.totalFeeX === fees.x && p.totalFeeY === fees.y && proto.x > 0n && proto.y > 0n && proto.x <= fees.x / 10n && proto.x >= fees.x / 10n - touches);
+  check('B fees are accounted, not folded into the reserves: protocol balance == 0.2% (rounded up) of every swap input, lifetime totals == the fees', p.protocolFeeX === proto.x && p.protocolFeeY === proto.y && p.totalFeeX === fees.x && p.totalFeeY === fees.y && proto.x > 0n && proto.y > 0n && proto.x === exp.x && proto.y === exp.y);
   // every LP claims what the SDK shows unclaimed
   const claimed = { x: 0n, y: 0n }; let exact = true; const per = [];
   for (const kp of [alice, bob, carol]) { const pos = await V.position(CP, kp.publicKey, kp.publicKey, cpIds);
@@ -105,13 +106,9 @@ module.exports = async function phase1(C) {
   await fund(conn, payer, SOL, payer.publicKey, 0n);
   { const ix = await V.claimFeesIx(mallory.publicKey, CP, { owner: alice.publicKey, ids: cpIds }); ix.keys.splice(ix.keys.length - 2, 2, ...V.binRemaining(CP, cpIds, alice.publicKey, alice.publicKey).slice(-2));
     check('B a stranger cannot claim alice\'s fees (her share accounts name her as authority)', await refused(as(mallory).send([ix], [], 600_000), /WrongShareAccount|MissingShareAccount/)); }
-  // protocol share and protocol fee withdrawal: fee authority only
-  check('B protocol share above 25% is refused', await refused(V.send([V.setProtocolShareIx(payer.publicKey, CP, 2501)]), /BadParams/));
-  check('B only the protocol fee authority sets the share', await refused(as(mallory).send([V.setProtocolShareIx(mallory.publicKey, CP, 0)]), /NotAuthority|ConstraintHasOne/));
-  sig = await V.send([V.setProtocolShareIx(payer.publicKey, CP, 2500)]); ev = await evOf(sig, 'ProtocolShareSet');
+  // protocol fee (fixed 0.2% of the input, on top of the LP fee) and its withdrawal: fee authority only
   r = await swapChecked(bob, CP, true, units(0.3, 9));
-  check('B at 25% the protocol takes a quarter of each bin\'s fee (twin == chain)', ev && ev.bps === 2500 && r.ok && r.ev.protocolFee >= r.ev.fee / 4n - BigInt(r.ql.touched.length) && r.ev.protocolFee <= r.ev.fee / 4n);
-  await V.send([V.setProtocolShareIx(payer.publicKey, CP, 1000)]);
+  check('B a swap pays exactly 0.2% of its input (rounded up) to the protocol, on top of the LP fee (twin == chain)', r.ok && r.ev.protocolFee === S.protocolFeeOf(units(0.3, 9)) && r.ev.fee > r.ev.protocolFee);
   p = await V.binPool(CP);
   check('B a stranger cannot withdraw protocol fees', await refused(as(mallory).send([await V.withdrawProtocolFeeIx(mallory.publicKey, CP, 1n, 0n, V.ata(SOL, mallory.publicKey), V.ata(USDT, mallory.publicKey))]), /NotAuthority|ConstraintHasOne/));
   check('B the fee authority cannot withdraw more than is accounted', await refused(V.send([await V.withdrawProtocolFeeIx(payer.publicKey, CP, p.protocolFeeX + 1n, 0n)]), /NotEnoughFees/));

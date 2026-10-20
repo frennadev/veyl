@@ -415,6 +415,10 @@ class ShieldWallet {
     this.assets = new Map(); for (const m of Object.keys(mints)) this.assets.set(String(assetOf(m)), { kind: NOTE.TOKEN, mint: m });
     for (const p of pools) { this.assets.set(String(assetOf(p.mintX)), { kind: NOTE.TOKEN, mint: String(p.mintX) }); this.assets.set(String(assetOf(p.mintY)), { kind: NOTE.TOKEN, mint: String(p.mintY) }); }
   }
+  /// A token (base58 mint -> { sym, decimals }) or a bin pool ({ address, mintX, mintY }) found after the wallet was made (a
+  /// pool listed since): its notes are named on the next scan.
+  addMint(mint, info = {}) { const m = new PublicKey(mint).toBase58(); if (!this.mints[m]) this.mints[m] = info; this.assets.set(String(assetOf(m)), { kind: NOTE.TOKEN, mint: m }); }
+  addPool(p) { if (this.poolOf(p.address)) return; this.pools.push(p); this.addMint(p.mintX); this.addMint(p.mintY); }
   get address() { return this.k.address; }
   /// The next one-time key (for a receipt: swap output, removal proceeds, order shares, leftovers).
   nextOneTime() { return oneTime(this.seed, this.ot++); }

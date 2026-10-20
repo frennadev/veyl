@@ -9,6 +9,7 @@
 import { Buffer } from 'buffer';
 import { PublicKey } from '@solana/web3.js';
 const SE = require('../sdk/sealed.js');
+const { protocolFeeOf } = require('../sdk/veyl.js');
 const J = require('../sdk/bjj.js');
 const B64 = (u) => Buffer.from(u).toString('base64');
 
@@ -37,10 +38,12 @@ export function installSealed(Engine) {
     const p = await this.proveIn('swap', req.input);
     const r = await this.submit({ kind: 'sealedSwap', binPool: pool.address, seq: String(seq), direction: dir, c1: B64(J.enc(req.c1)), c2: B64(J.enc(req.c2)), ext: { relayer: req.ext.relayer.toBase58(), fee: String(fee), encChange: B64(req.ext.encChange), encSwap: B64(req.ext.encSwap) }, p });
     const sh = this.store.data.shield; (sh.sealed = sh.sealed || []).push({ pool: pool.address, seq: String(seq), dir, amount: String(v), sym, fee: String(fee), tx: r.txHash, at: Date.now() }); this.store.save();
-    await this.shieldSync(); return { tx: r.txHash, seq, fee };
+    await this.shieldSync(); return { tx: r.txHash, seq, fee, protocolFee: protocolFeeOf(v) };
   };
   /// This account's sealed swaps (found on chain by scanning; claimed ones from this device's history), with what each can
-  /// do now: wait (open / sealed), claim (settled: the expected output at the batch's ratio), refund (failed).
+  /// do now: wait (open / sealed), claim (settled: the expected output at the batch's ratio), refund (failed). protocolFee:
+  /// the fixed 0.2% of what was sold, in its atoms (the matched part pays it at settlement, the net part in its swap; the
+  /// batch's ratio already has it out); lpFee: null (only the net part pays LPs, and no seller's share of it is known).
   P.mySealedSwaps = async function () {
     const zw = this.zw || this.shieldInit(); const out = []; const seen = new Set(); const terms = new Map(); const now = Date.now();
     for (const n of zw.notes.filter((x) => x.kind === 4)) { const key = String(n.commitment); if (seen.has(key)) continue; seen.add(key);
@@ -50,7 +53,7 @@ export function installSealed(Engine) {
       const state = n.spent ? (hist.claimed && hist.claimed.refund ? 'refunded' : 'claimed') : !b.batch ? 'unknown' : b.t ? (b.t.refund ? 'refund' : 'claim') : b.batch.state === 'open' ? 'waiting' : b.batch.state === 'closed' ? 'sealed' : b.batch.state;
       const outAmt = b.t && !b.t.refund ? (n.amount * b.t.num) / b.t.den : null;
       out.push({ id: key, pool: n.binPool, pair: pool.x + '–' + pool.y, x: pool.x, y: pool.y, seq: String(n.seq), dir: n.direction, sym, other, amount: n.amount, state, batchState: b.batch ? b.batch.state : null, count: b.batch ? b.batch.count : [0, 0], endSlot: b.batch ? String(b.batch.endSlot) : null,
-        expect: outAmt, ratio: b.t && !b.t.refund ? [b.t.num, b.t.den] : null, tx: hist.tx || null, claimTx: hist.claimed ? hist.claimed.tx : null, at: hist.at || now, note: n }); }
+        protocolFee: protocolFeeOf(n.amount), lpFee: null, expect: outAmt, ratio: b.t && !b.t.refund ? [b.t.num, b.t.den] : null, tx: hist.tx || null, claimTx: hist.claimed ? hist.claimed.tx : null, at: hist.at || now, note: n }); }
     return out.sort((a, b) => b.at - a.at);
   };
   /// Claim a settled sealed swap's output (or a failed one's refund) into a new hidden note.

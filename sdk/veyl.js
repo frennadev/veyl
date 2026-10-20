@@ -14,7 +14,7 @@ const ATA_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 const SYS = SystemProgram.programId;
 const BPF_UPGRADEABLE_LOADER = new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111');
 /// Account sizes (bytes, discriminator included) of what the programs create: for rent estimates (the relayer's fee floor).
-const SIZES = { spend: 250, depositRecord: 145, nonce: 48, shares: 6864, binArray: 9664, binPool: 1256, factory: 137, tokenAccount: 165, lpAcc: 1968, posted: 306, pending: 153 };
+const SIZES = { spend: 250, depositRecord: 145, nonce: 48, shares: 6864, binArray: 9664, binPool: 1256, factory: 428, bond: 97, tokenAccount: 165, lpAcc: 1968, posted: 306, pending: 153 };
 /// Rent-exempt minimum, the runtime's formula: (128 + bytes) x 3480 lamports/byte-year x 2 years.
 const rentOf = (bytes) => (128 + bytes) * 6960;
 const F = 21888242871839275222246405745257275088548364400416034343698204186575808495617n; // BN254 scalar field
@@ -22,7 +22,16 @@ const Q = 1n << 128n;
 const STATE_DEPTH = 32, ASP_DEPTH = 20; // = Withdraw(32, 20) in zk/circuits/withdraw.circom
 const ROOT_HISTORY = 192, ASP_HISTORY = 16, BINS_PER_ARRAY = 60;
 const CHUNKS = 2048, MIN_CHUNK = -1024, BITMAP_WORDS = 32, MIN_BIN_ID = -1024 * 60, MAX_BIN_ID = (2048 - 1024) * 60 - 1;
-const MAX_IDS = 70, BPS = 10_000n, DEFAULT_PROTOCOL_SHARE = 1_000, MAX_PROTOCOL_SHARE = 2_500, NUM_REWARDS = 2, SWAP_ARRAYS = 4;
+const MAX_IDS = 70, BPS = 10_000n, PROTOCOL_FEE_BPS = 20, MAX_TIERS = 16, NUM_REWARDS = 2, SWAP_ARRAYS = 4;
+/// Suggested fee tiers (Orca / Raydium-like; the deploy config owns the real list, `add_fee_tier` in this order). baseFee in
+/// pips (1e-6: 100 = 0.01%), one bin step per tier (the pool address includes it). vfc scaled ~1/binStep^2 above bin step 20
+/// so one bin of movement adds a similar variable fee in every tier.
+const DEFAULT_FEE_TIERS = [
+  { label: 'Stable 0.01%', binStep: 1, baseFee: 100, vfc: 10_000 }, { label: 'Stable 0.05%', binStep: 5, baseFee: 500, vfc: 10_000 },
+  { label: 'Major 0.05%', binStep: 10, baseFee: 500, vfc: 10_000 }, { label: 'Major 0.25%', binStep: 20, baseFee: 2_500, vfc: 10_000 },
+  { label: 'Major 0.30%', binStep: 30, baseFee: 3_000, vfc: 4_500 }, { label: 'Volatile 0.5%', binStep: 50, baseFee: 5_000, vfc: 1_600 },
+  { label: 'Volatile 1%', binStep: 80, baseFee: 10_000, vfc: 625 },
+  { label: 'Volatile 2%', binStep: 100, baseFee: 20_000, vfc: 400 }];
 const U128 = 1n << 128n, U64MAX = (1n << 64n) - 1n;
 const PIPS = 1_000_000n, MAX_FEE = 100_000n, FILTER_PERIOD = 30n, DECAY_PERIOD = 600n, REDUCTION_BPS = 5_000n, MAX_VOL_ACC = 350_000n, MAX_STEPS = 256, MIN_LIQUIDITY = 1_000n;
 const MAX_FEE_BPS = 100;
@@ -150,7 +159,14 @@ const EVENTS = {
   RagequitEvent: (r) => ({ pool: r.pk(), depositor: r.pk(), label: r.be32(), value: r.u64() }),
   AspRootUpdated: (r) => ({ pool: r.pk(), root: r.be32(), ipfsCid: r.str() }),
   PostmanUpdated: (r) => ({ pool: r.pk(), postman: r.pk() }),
-  PoolCreated: (r) => ({ pool: r.pk(), mintX: r.pk(), mintY: r.pk(), binStep: r.u16(), baseFee: r.u32() }),
+  PoolCreated: (r) => ({ pool: r.pk(), mintX: r.pk(), mintY: r.pk(), binStep: r.u16(), baseFee: r.u32(), tier: r.u8(), creator: r.pk(), bond: r.u64(), unlockAt: r.i64() }),
+  FeeTierAdded: (r) => ({ index: r.u8(), binStep: r.u16(), baseFee: r.u32(), vfc: r.u64() }),
+  FeeTierSet: (r) => ({ index: r.u8(), enabled: r.bool() }),
+  BondSet: (r) => ({ lamports: r.u64(), lockSeconds: r.i64() }),
+  TreasurySet: (r) => ({ treasury: r.pk() }),
+  BondReleased: (r) => ({ pool: r.pk(), creator: r.pk(), amount: r.u64() }),
+  PoolDelisted: (r) => ({ pool: r.pk(), forfeited: r.u64() }),
+  ProtocolFeePaid: (r) => ({ pool: r.pk(), sender: r.pk(), amountX: r.u64(), amountY: r.u64() }),
   Minted: (r) => ({ pool: r.pk(), sender: r.pk(), owner: r.pk(), ids: r.vec(() => r.i32()), amountsX: r.vec(() => r.u64()), amountsY: r.vec(() => r.u64()), shares: r.vec(() => r.u128()) }),
   Burned: (r) => ({ pool: r.pk(), authority: r.pk(), owner: r.pk(), ids: r.vec(() => r.i32()), shares: r.vec(() => r.u128()), amountX: r.u64(), amountY: r.u64() }),
   Swapped: (r) => ({ pool: r.pk(), sender: r.pk(), to: r.pk(), xForY: r.bool(), amountIn: r.u64(), amountOut: r.u64(), fee: r.u64(), activeId: r.i32(), protocolFee: r.u64() }),
@@ -160,7 +176,6 @@ const EVENTS = {
   LimitOrderWithdrawn: (r) => ({ pool: r.pk(), authority: r.pk(), owner: r.pk(), id: r.i32(), isAsk: r.bool(), shares: r.u128(), amountX: r.u64(), amountY: r.u64(), unfilledLeft: r.u64() }),
   Rebalanced: (r) => ({ pool: r.pk(), authority: r.pk(), owner: r.pk(), burnedX: r.u64(), burnedY: r.u64(), withheldX: r.u64(), withheldY: r.u64(), readdedX: r.u64(), readdedY: r.u64(), ids: r.vec(() => r.i32()), shares: r.vec(() => r.u128()) }),
   ZapAdded: (r) => ({ pool: r.pk(), sender: r.pk(), owner: r.pk(), xIn: r.bool(), amountIn: r.u64(), swapAmount: r.u64(), swapOut: r.u64(), ids: r.vec(() => r.i32()), shares: r.vec(() => r.u128()) }),
-  ProtocolShareSet: (r) => ({ pool: r.pk(), bps: r.u16() }),
   ProtocolFeeWithdrawn: (r) => ({ pool: r.pk(), toX: r.pk(), toY: r.pk(), amountX: r.u64(), amountY: r.u64() }),
   FeeAuthoritySet: (r) => ({ feeAuthority: r.pk() }),
   RewardInitialized: (r) => ({ pool: r.pk(), index: r.u8(), mint: r.pk(), funder: r.pk(), duration: r.u64() }),
@@ -207,7 +222,7 @@ const EVENTS = {
   SharePosted: (r) => ({ batch: r.pk(), member: r.u8() }),
   ShareVerified: (r) => ({ binPool: r.pk(), seq: r.u64(), member: r.u8() }),
   TotalVerified: (r) => ({ binPool: r.pk(), seq: r.u64(), direction: r.u8(), total: r.u64() }),
-  BatchSettled: (r) => ({ binPool: r.pk(), seq: r.u64(), totals: [r.u64(), r.u64()], count: [r.u32(), r.u32()], xForY: r.bool(), netIn: r.u64(), netOut: r.u64(), activeId: r.i32(), price: r.be32(), num: [r.u64(), r.u64()], den: [r.u64(), r.u64()] }),
+  BatchSettled: (r) => ({ binPool: r.pk(), seq: r.u64(), totals: [r.u64(), r.u64()], count: [r.u32(), r.u32()], xForY: r.bool(), netIn: r.u64(), netOut: r.u64(), activeId: r.i32(), price: r.be32(), num: [r.u64(), r.u64()], den: [r.u64(), r.u64()], protocolFee: r.o + 16 <= r.d.length ? [r.u64(), r.u64()] : null }),
   SealedClaimed: (r) => ({ binPool: r.pk(), seq: r.u64(), direction: r.u8(), refund: r.bool() }),
 };
 const EVENT_BY_DISC = Object.fromEntries(Object.keys(EVENTS).map((n) => [disc(n, 'event').toString('hex'), n]));
@@ -271,12 +286,14 @@ function nextBin(p, bins, from, xForY) {
   const c2 = nextChunk(p, ySide, c, down); if (c2 === null) return null;
   const r = scan(c2, down ? BINS_PER_ARRAY - 1 : 0); if (r === null) throw new Error('BitmapMismatch'); return r;
 }
+/// The protocol fee of a swap of `amount` (= veyl_bin `protocol_fee_of`): ceil(amount * bps / 10_000), off the input first.
+const protocolFeeOf = (amount, bps = PROTOCOL_FEE_BPS) => (BigInt(amount) * BigInt(bps) + BPS - 1n) / BPS;
 /// `_simulate` (exact twin of programs/veyl_bin `simulate`): `bins` = Map id -> bin (Veyl.bins). Throws like the program.
-/// Returns { out, fee, protocolFee, endId, volAcc, touched: [{ id, ...new bin state }] }.
+/// Returns { out, fee (LP + protocol), protocolFee (0.2% of the input + LP fee nobody could earn), lpFee, endId, volAcc, touched: [{ id, ...new bin state }] }.
 function simulateSwap(p, bins, xForY, amountIn, now = Math.floor(Date.now() / 1000)) {
   if (!p.seeded) throw new Error('InsufficientLiquidity');
-  const { ref, iref } = refsOf(p, now); let left = BigInt(amountIn); let id = p.activeId; let out = 0n, fee = 0n, protocolFee = 0n, volAcc = 0n; const touched = [];
-  const share = BigInt(p.protocolShare === undefined ? DEFAULT_PROTOCOL_SHARE : p.protocolShare);
+  const protoIn = protocolFeeOf(amountIn, p.protocolFeeBps === undefined ? PROTOCOL_FEE_BPS : p.protocolFeeBps);
+  const { ref, iref } = refsOf(p, now); let left = BigInt(amountIn) - protoIn; let id = p.activeId; let out = 0n, fee = protoIn, protocolFee = protoIn, volAcc = 0n; const touched = [];
   for (let step = 0; left > 0n; step++) {
     const nid = nextBin(p, bins, id, xForY); if (nid === null) throw new Error('InsufficientLiquidity'); id = nid;
     if (step === MAX_STEPS) throw new Error('TooManySteps');
@@ -290,17 +307,17 @@ function simulateSwap(p, bins, xForY, amountIn, now = Math.floor(Date.now() / 10
     let used, got, feeAmt;
     if (left >= maxIn) { used = maxIn; got = avail; feeAmt = feeMax; }
     else { used = left; feeAmt = mulDivCeil(left, f, PIPS); const net = left - feeAmt; got = xForY ? mulDiv(net, price, Q) : mulDiv(net, Q, price); if (got > avail) got = avail; }
-    const proto = (feeAmt * share) / BPS; const lpFee = feeAmt - proto; const net = used - feeAmt;
+    const lpFee = feeAmt; const net = used - feeAmt;
     const loGot = (got * loAvail) / avail; const mmGot = got - loGot;
     const loIn = got === 0n ? 0n : (net * loGot) / got, loFee = got === 0n ? 0n : (lpFee * loGot) / got; const mmIn = net - loIn, mmFee = lpFee - loFee;
     const eligible = b.shares > MIN_LIQUIDITY ? b.shares - MIN_LIQUIDITY : 0n; let protoExtra = 0n;
     if (mmFee > 0n) { if (eligible > 0n) { const add = (mmFee << 64n) / eligible; if (xForY) b.feeGx = (b.feeGx + add) % U128; else b.feeGy = (b.feeGy + add) % U128; } else protoExtra = mmFee; }
     if (xForY) { b.x += mmIn; b.y -= mmGot; b.bidY -= loGot; b.bidFilledX += loIn + loFee; } else { b.y += mmIn; b.x -= mmGot; b.askX -= loGot; b.askFilledY += loIn + loFee; }
     for (const v of [b.x, b.y, b.bidFilledX, b.askFilledY]) if (v > U64MAX) throw new Error('Overflow');
-    touched.push({ id, ...b, mmFee, loFee, proto: proto + protoExtra }); out += got; fee += feeAmt; protocolFee += proto + protoExtra; left -= used;
+    touched.push({ id, ...b, mmFee, loFee, proto: protoExtra }); out += got; fee += feeAmt; protocolFee += protoExtra; left -= used;
     if (left > 0n) id = xForY ? id - 1 : id + 1;
   }
-  return { out, fee, protocolFee, endId: id, volAcc, touched };
+  return { out, fee, protocolFee, lpFee: fee - protoIn, endId: id, volAcc, touched };
 }
 /// What `shares` of a position slot earned since its checkpoints (fees per token, rewards), Q64.64 growth, wrapping.
 const owedOf = (now, cp, shares) => ((((BigInt(now) - BigInt(cp)) % U128) + U128) % U128) * BigInt(shares) >> 64n;
@@ -341,10 +358,45 @@ function chunksForSwap(p, xForY, n = SWAP_ARRAYS) {
 // ------------------------------------------------------------------------------------------------ account layouts (programs/veyl_bin)
 function decodeBinPool(address, data) { const r = new Reader(data.subarray(8));
   const p = { address, factory: r.pk(), mintX: r.pk(), mintY: r.pk(), vaultX: r.pk(), vaultY: r.pk(), tokenProgramX: r.pk(), tokenProgramY: r.pk(), basePrice: r.be32(), stepQ: r.be32(), variableFeeControl: r.u64(), volAcc: r.u64(), volRef: r.u64(), lastSwapAt: r.i64(), activeId: r.i32(), lowestId: r.i32(), highestId: r.i32(), idRef: r.i32(), baseFee: r.u32(), binStep: r.u16(), seeded: r.u8() === 1, bump: r.u8() };
-  p.protocolShare = r.u16(); r.skip(6); p.protocolFeeX = r.u64(); p.protocolFeeY = r.u64(); p.totalFeeX = r.u64(); p.totalFeeY = r.u64();
+  p.protocolFeeBps = r.u16(); p.delisted = r.u8() === 1; p.feeTier = r.u8(); r.skip(4); p.protocolShare = 0; p.protocolFeeX = r.u64(); p.protocolFeeY = r.u64(); p.totalFeeX = r.u64(); p.totalFeeY = r.u64();
   p.bitmapX = []; for (let i = 0; i < BITMAP_WORDS; i++) p.bitmapX.push(r.u64()); p.bitmapY = []; for (let i = 0; i < BITMAP_WORDS; i++) p.bitmapY.push(r.u64());
   p.rewards = []; for (let i = 0; i < NUM_REWARDS; i++) { const x = { mint: r.pk(), vault: r.pk(), funder: r.pk(), tokenProgram: r.pk(), rate: r.u128(), duration: r.u64(), end: r.i64(), lastUpdate: r.i64(), ineligible: r.u64() }; x.initialized = !x.mint.equals(PublicKey.default); p.rewards.push(x); }
   return p; }
+/// The factory (Factory in programs/veyl_bin): roles, treasury, listing bond, protocol fee and fee tiers.
+function decodeFactory(data) { const r = new Reader(data.subarray(8));
+  const f = { authority: r.pk(), pendingAuthority: r.pk(), bump: r.u8(), feeAuthority: r.pk(), pendingFeeAuthority: r.pk(), treasury: r.pk(), bondLamports: r.u64(), bondLock: r.i64(), protocolFeeBps: r.u16() };
+  const n = r.u8(); f.tiers = []; for (let i = 0; i < MAX_TIERS; i++) { const t = { index: i, binStep: r.u16(), baseFee: r.u32(), vfc: r.u64(), enabled: r.u8() === 1 }; if (i < n) f.tiers.push(t); } return f; }
+function decodeBond(data) { const r = new Reader(data.subarray(8)); return { pool: r.pk(), creator: r.pk(), amount: r.u64(), createdAt: r.i64(), unlockAt: r.i64(), bump: r.u8() }; }
+/// The canonical order of a pair (veyl_bin requires mint_x < mint_y by bytes): [x, y, flipped].
+function canonicalPair(a, b) { a = new PublicKey(a); b = new PublicKey(b); const c = Buffer.compare(a.toBuffer(), b.toBuffer()); if (c === 0) throw new Error('same mint'); return c < 0 ? [a, b, false] : [b, a, true]; }
+/// Token-2022 mint extensions (ExtensionType numbers) and the ones veyl_bin's `check_mint` accepts: metadata / group
+/// pointers and data, which cannot alter a transfer or a balance. Every other extension (and any unknown one) is refused.
+const MINT_EXT = { 1: 'TransferFeeConfig', 3: 'MintCloseAuthority', 4: 'ConfidentialTransferMint', 6: 'DefaultAccountState', 9: 'NonTransferable', 10: 'InterestBearingConfig', 12: 'PermanentDelegate', 14: 'TransferHook',
+  16: 'ConfidentialTransferFeeConfig', 18: 'MetadataPointer', 19: 'TokenMetadata', 20: 'GroupPointer', 21: 'TokenGroup', 22: 'GroupMemberPointer', 23: 'TokenGroupMember', 24: 'ConfidentialMintBurn', 25: 'ScaledUiAmount', 26: 'Pausable', 28: 'PermissionedBurn' };
+const MINT_EXT_OK = new Set([18, 19, 20, 21, 22, 23]);
+/// A mint account ({ owner, data }) -> { program: 'spl' | 'token2022', decimals, initialized, supply, mintAuthority,
+/// freezeAuthority, extensions: [ExtensionType], metadata: { name, symbol, uri } | null (Token-2022 TokenMetadata) }; null
+/// when the account is not a mint of either token program.
+function parseMint(info) {
+  if (!info) return null; const owner = new PublicKey(info.owner); const d = Buffer.from(info.data);
+  const program = owner.equals(TOKEN_PROGRAM) ? 'spl' : owner.equals(TOKEN_2022) ? 'token2022' : null; if (!program || d.length < 82 || (program === 'spl' && d.length !== 82)) return null;
+  const opt32 = (o) => (d.readUInt32LE(o) === 1 ? new PublicKey(d.subarray(o + 4, o + 36)) : null);
+  const m = { program, mintAuthority: opt32(0), supply: d.readBigUInt64LE(36), decimals: d[44], initialized: d[45] === 1, freezeAuthority: opt32(46), extensions: [], metadata: null };
+  if (d.length > 82) { if (d.length < 166 || d[165] !== 1) return null; /* account type 1 = Mint, after the base padded to 165 bytes */
+    for (let o = 166; o + 4 <= d.length;) { const type = d.readUInt16LE(o), len = d.readUInt16LE(o + 2); if (type === 0) break; m.extensions.push(type);
+      if (type === 19) { try { const r = new Reader(d.subarray(o + 4, o + 4 + len)); r.skip(64); m.metadata = { name: r.str(), symbol: r.str(), uri: r.str() }; } catch { /* malformed: no metadata */ } }
+      o += 4 + len; } }
+  return m; }
+/// The extensions of a parsed mint that veyl_bin refuses ([] = the mint can be listed), as { type, name }.
+const refusedExtensions = (m) => (m && m.program === 'token2022' ? m.extensions.filter((t) => !MINT_EXT_OK.has(t)).map((t) => ({ type: t, name: MINT_EXT[t] || 'Extension' + t })) : []);
+/// 128.128 price of raw Y per raw X from a human price (Y per X) and the two decimals (= scripts/lib.js priceQ).
+const priceQ = (human, decX, decY) => { const scaled = Number(human) * 10 ** (decY - decX); const [i, f = ''] = scaled.toExponential(15).split('e'); const m = BigInt(Math.round(Number(i) * 1e15)); const e = Number(f) - 15; return e >= 0 ? m * 10n ** BigInt(e) * Q : (m * Q) / 10n ** BigInt(-e); };
+/// A tier's category by bin step (DEFAULT_FEE_TIERS' grouping): stable <= 5, major <= 30, volatile above.
+const tierCategory = (binStep) => (binStep <= 5 ? 'stable' : binStep <= 30 ? 'major' : 'volatile');
+/// A tier's label: DEFAULT_FEE_TIERS' when the bin step and fee match one, else category + fee ("Volatile 0.75%").
+function tierLabel(binStep, baseFee) { const d = DEFAULT_FEE_TIERS.find((t) => t.binStep === Number(binStep) && t.baseFee === Number(baseFee)); if (d) return d.label;
+  const c = tierCategory(Number(binStep)); return c[0].toUpperCase() + c.slice(1) + ' ' + +(Number(baseFee) / 1e4).toPrecision(3) + '%'; }
+const BIN_POOL_DISC = disc('BinPool', 'account');
 function decodeBin(r, id) { return { id, x: r.u64(), y: r.u64(), shares: r.u128(), feeGx: r.u128(), feeGy: r.u128(), rewardG: [r.u128(), r.u128()], askShares: r.u128(), askX: r.u64(), askFilledY: r.u64(), bidShares: r.u128(), bidY: r.u64(), bidFilledX: r.u64() }; }
 function decodeBinArray(data) { const r = new Reader(data.subarray(8)); const pool = r.pk(); const chunk = r.i32(); r.skip(4); const bitmapX = r.u64(), bitmapY = r.u64(); const bins = [];
   for (let i = 0; i < BINS_PER_ARRAY; i++) bins.push(decodeBin(r, chunk * BINS_PER_ARRAY + i)); return { pool, chunk, bitmapX, bitmapY, bins }; }
@@ -367,6 +419,7 @@ class Veyl {
   spendPda(pool, nullifierHash) { return this.pda([Buffer.from('null'), pk(pool), be32(nullifierHash)], this.programs.pool); }
   factoryPda() { return this.pda([Buffer.from('factory')], this.programs.bin); }
   binPoolPda(mintX, mintY, binStep) { return this.pda([Buffer.from('bin'), pk(mintX), pk(mintY), u16(binStep)], this.programs.bin); }
+  bondPda(pool) { return this.pda([Buffer.from('bond'), pk(pool)], this.programs.bin); }
   rewardVaultPda(pool, index) { return this.pda([Buffer.from('reward_vault'), pk(pool), u8(index)], this.programs.bin); }
   binArrayPda(pool, chunk) { return this.pda([Buffer.from('bins'), pk(pool), i32(chunk)], this.programs.bin); }
   sharesPda(pool, owner, authority, chunk) { return this.pda([Buffer.from('shares'), pk(pool), pk(owner), pk(authority), i32(chunk)], this.programs.bin); }
@@ -438,7 +491,21 @@ class Veyl {
   async spend(addr) { const a = await this.conn.getAccountInfo(new PublicKey(addr)); if (!a) return null; const r = new Reader(a.data.subarray(8));
     return { pool: r.pk(), poster: r.pk(), processor: r.pk(), status: r.u8(), nullifierHash: r.be32(), newCommitment: r.be32(), value: r.u64(), aspRoot: r.be32(), context: r.be32(), expiresAt: r.u64(), bump: r.u8() }; }
   async isSpent(pool, nullifierHash) { const s = await this.spend(this.spendPda(pool, nullifierHash)); return !!s && s.status === 2; }
-  async factory() { const a = await this.conn.getAccountInfo(this.factoryPda()); if (!a) return null; const r = new Reader(a.data.subarray(8)); return { authority: r.pk(), pendingAuthority: r.pk(), bump: r.u8(), feeAuthority: r.pk(), pendingFeeAuthority: r.pk() }; }
+  async factory() { const a = await this.conn.getAccountInfo(this.factoryPda()); if (!a) return null; return decodeFactory(a.data); }
+  /// A pool's listing bond (null once released or forfeited).
+  async bond(pool) { const a = await this.conn.getAccountInfo(this.bondPda(pool)); if (!a || !a.owner.equals(this.programs.bin)) return null; return decodeBond(a.data); }
+  /// Index of the factory tier with this bin step (and fees, when given), or -1.
+  /// Every bin pool of the program, decoded (getProgramAccounts: BinPool's discriminator and size). `keysOnly`: only the
+  /// addresses (a cheap count for "is there a new pool").
+  async binPools({ keysOnly = false } = {}) { const filters = [{ dataSize: SIZES.binPool }, { memcmp: { offset: 0, bytes: BIN_POOL_DISC.toString('base64'), encoding: 'base64' } }];
+    const rows = await this.conn.getProgramAccounts(this.programs.bin, { commitment: 'confirmed', filters, ...(keysOnly ? { dataSlice: { offset: 0, length: 0 } } : {}) });
+    return keysOnly ? rows.map((r) => r.pubkey) : rows.map((r) => decodeBinPool(r.pubkey, r.account.data)); }
+  /// Listing bonds of many pools in one read each 100 (null where released, forfeited or never made).
+  async bonds(pools) { const out = []; for (let i = 0; i < pools.length; i += 100) { const part = pools.slice(i, i + 100); const infos = await this.conn.getMultipleAccountsInfo(part.map((p) => this.bondPda(p)), 'confirmed');
+    infos.forEach((a) => out.push(a && a.owner.equals(this.programs.bin) && a.data.length >= SIZES.bond ? decodeBond(a.data) : null)); } return out; }
+  /// A mint, parsed (parseMint), or null.
+  async mint(mint) { return parseMint(await this.conn.getAccountInfo(new PublicKey(mint), 'confirmed')); }
+  async tierIndex(binStep, baseFee, vfc) { const f = await this.factory(); if (!f) return -1; const t = f.tiers.find((t) => t.binStep === Number(binStep) && (baseFee === undefined || t.baseFee === Number(baseFee)) && (vfc === undefined || t.vfc === BigInt(vfc))); return t ? t.index : -1; }
   /// A bin pool, decoded (BinPool in programs/veyl_bin), with its bitmaps (BigInt words) and reward slots.
   async binPool(pool) { const a = await this.conn.getAccountInfo(new PublicKey(pool)); if (!a) return null; return decodeBinPool(new PublicKey(pool), a.data); }
   /// The 60 bins of one array (null when the array does not exist), each with reserves, shares, fee / reward growth and limit orders.
@@ -476,7 +543,7 @@ class Veyl {
   /// What `shares` in bin `id` are worth right now (EVM valueOf).
   valueOf(bin, shares) { if (!bin || bin.shares === 0n) return { x: 0n, y: 0n }; return { x: mulDiv(bin.x, BigInt(shares), bin.shares), y: mulDiv(bin.y, BigInt(shares), bin.shares) }; }
   /// Withdrawable protocol fees of a pool (accounted in its vaults).
-  async protocolFees(pool) { const p = await this.binPool(pool); return { x: p.protocolFeeX, y: p.protocolFeeY, share: p.protocolShare }; }
+  async protocolFees(pool) { const p = await this.binPool(pool); return { x: p.protocolFeeX, y: p.protocolFeeY, bps: p.protocolFeeBps }; }
 
   // ---- veyl_pool instructions
   async initPoolIx(authority, mint, minDeposit, postman) { const tp = await this.tokenProgram(mint); const pool = this.poolPda(mint);
@@ -513,11 +580,21 @@ class Veyl {
   initFactoryIx(authority) { return new TransactionInstruction({ programId: this.programs.bin, data: disc('init_factory'), keys: [W(authority, true), R(this.programs.bin), R(this.programDataPda(this.programs.bin)), W(this.factoryPda()), R(SYS)] }); }
   proposeFactoryAuthorityIx(authority, next) { return new TransactionInstruction({ programId: this.programs.bin, data: Buffer.concat([disc('propose_factory_authority'), pk(next)]), keys: [R(authority, true), W(this.factoryPda())] }); }
   acceptFactoryAuthorityIx(next) { return new TransactionInstruction({ programId: this.programs.bin, data: disc('accept_factory_authority'), keys: [R(next, true), W(this.factoryPda())] }); }
-  /// create_pool(binStep bps, baseFee pips, variableFeeControl, basePrice 128.128, activeId)
-  async createPoolIx(authority, mintX, mintY, binStep, baseFee, variableFeeControl, basePrice, activeId = 0) {
+  /// create_pool(tier index, basePrice 128.128, activeId), signed by anyone (`creator` pays the factory's bond, the factory
+  /// authority none). mintX < mintY (canonicalPair); the tier's bin step is read from the factory (or pass `binStep`).
+  async createPoolIx(creator, mintX, mintY, tier, basePrice, activeId = 0, binStep) {
+    if (binStep === undefined) { const f = await this.factory(); const t = f && f.tiers[tier]; if (!t) throw new Error('no fee tier ' + tier); binStep = t.binStep; }
     const tpx = await this.tokenProgram(mintX), tpy = await this.tokenProgram(mintY); const pool = this.binPoolPda(mintX, mintY, binStep);
-    return new TransactionInstruction({ programId: this.programs.bin, data: Buffer.concat([disc('create_pool'), u16(binStep), u32(baseFee), u64(variableFeeControl), be32(basePrice), i32(activeId)]), keys: [
-      W(authority, true), R(this.factoryPda()), R(mintX), R(mintY), W(pool), W(this.ata(mintX, pool, tpx)), W(this.ata(mintY, pool, tpy)), R(tpx), R(tpy), R(ATA_PROGRAM), R(SYS)] }); }
+    return new TransactionInstruction({ programId: this.programs.bin, data: Buffer.concat([disc('create_pool'), u8(tier), be32(basePrice), i32(activeId)]), keys: [
+      W(creator, true), R(this.factoryPda()), R(mintX), R(mintY), W(pool), W(this.bondPda(pool)), W(this.ata(mintX, pool, tpx)), W(this.ata(mintY, pool, tpy)), R(tpx), R(tpy), R(ATA_PROGRAM), R(SYS)] }); }
+  addFeeTierIx(authority, binStep, baseFee, vfc) { return this.binIx('add_fee_tier', [u16(binStep), u32(baseFee), u64(vfc)], [R(authority, true), W(this.factoryPda())]); }
+  setFeeTierEnabledIx(authority, index, enabled) { return this.binIx('set_fee_tier_enabled', [u8(index), u8(enabled ? 1 : 0)], [R(authority, true), W(this.factoryPda())]); }
+  setBondIx(authority, lamports, lockSeconds) { return this.binIx('set_bond', [u64(lamports), i64(lockSeconds)], [R(authority, true), W(this.factoryPda())]); }
+  setTreasuryIx(feeAuthority, treasury) { return this.binIx('set_treasury', [pk(treasury)], [R(feeAuthority, true), W(this.factoryPda())]); }
+  releaseBondIx(creator, pool) { return this.binIx('release_bond', [], [W(creator, true), R(pool), W(this.bondPda(pool))]); }
+  async delistPoolIx(authority, pool) { const f = await this.factory(); return this.binIx('delist_pool', [], [R(authority, true), R(this.factoryPda()), W(pool), W(this.bondPda(pool)), W(f.treasury)]); }
+  /// Pay protocol fees into a pool (anyone; veyl_entry for the matched part of a sealed batch).
+  async payProtocolFeeIx(from, pool, amountX, amountY, { fromX, fromY } = {}) { const p = await this.binPool(pool); return this.binIx('pay_protocol_fee', [u64(amountX), u64(amountY)], this.mintKeys(from, pool, p, fromX, fromY)); }
   initBinArrayIx(payer, pool, chunk) { return new TransactionInstruction({ programId: this.programs.bin, data: Buffer.concat([disc('init_bin_array'), i32(chunk)]), keys: [W(payer, true), R(pool), W(this.binArrayPda(pool, chunk)), R(SYS)] }); }
   initSharesIx(payer, pool, owner, authority, chunk) { return new TransactionInstruction({ programId: this.programs.bin, data: Buffer.concat([disc('init_shares'), pk(owner), pk(authority), i32(chunk)]), keys: [W(payer, true), R(pool), W(this.sharesPda(pool, owner, authority, chunk)), R(SYS)] }); }
   /// Instructions creating any missing bin arrays / share accounts for `ids` (anyone may pay for them).
@@ -582,10 +659,9 @@ class Veyl {
     const bins = await this.bins(pool, [...new Set([...ids.map(chunkOf), ...swapBins.chunks])]); for (const t of sim.touched) bins.set(t.id, t);
     const r2 = refsOf(p2, now); const fee = feeOf(p2, accOf(r2.ref, r2.iref, p2.activeId));
     const shares = ids.map((id, i) => (ax[i] === 0n && ay[i] === 0n ? 0n : sharesForMint(p2, bins.get(id) || EMPTY_BIN, id, p2.activeId, ax[i], ay[i], fee)));
-    const cut = (v) => v - (v * BigInt(slippageBps)) / 10_000n;
-    return { swapAmount: swap, swapOut: sim.out, minSwapOut: cut(sim.out), activeAfter: sim.endId, amountsX: ax, amountsY: ay, expectedShares: shares, minShares: shares.map(cut) }; }
+    const cut = (v) => v - (v * BigInt(slippageBps)) / 10_000n; const protocolFee = swap > 0n ? protocolFeeOf(swap, p.protocolFeeBps === undefined ? PROTOCOL_FEE_BPS : p.protocolFeeBps) : 0n;
+    return { swapAmount: swap, swapOut: sim.out, minSwapOut: cut(sim.out), activeAfter: sim.endId, amountsX: ax, amountsY: ay, expectedShares: shares, minShares: shares.map(cut), lpFee: swap > 0n ? sim.lpFee : 0n, protocolFee }; }
   // protocol fee + rewards administration
-  setProtocolShareIx(feeAuthority, pool, bps) { return this.binIx('set_protocol_share', [u16(bps)], [R(feeAuthority, true), R(this.factoryPda()), W(pool)]); }
   async withdrawProtocolFeeIx(feeAuthority, pool, amountX, amountY, toX, toY) { const p = await this.binPool(pool);
     return this.binIx('withdraw_protocol_fee', [u64(amountX), u64(amountY)], [R(feeAuthority, true), R(this.factoryPda()), W(pool), R(p.mintX), R(p.mintY), W(p.vaultX), W(p.vaultY), W(toX || this.ata(p.mintX, feeAuthority, p.tokenProgramX)), W(toY || this.ata(p.mintY, feeAuthority, p.tokenProgramY)), R(p.tokenProgramX), R(p.tokenProgramY)]); }
   proposeFeeAuthorityIx(feeAuthority, next) { return this.binIx('propose_fee_authority', [pk(next)], [R(feeAuthority, true), W(this.factoryPda())]); }
@@ -685,7 +761,7 @@ class Veyl {
   }
 }
 module.exports = { W, R, encRoute, packProofN, strings, Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
-  CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, DEFAULT_PROTOCOL_SHARE, MAX_PROTOCOL_SHARE, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
+  CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, PROTOCOL_FEE_BPS, MAX_TIERS, DEFAULT_FEE_TIERS, protocolFeeOf, canonicalPair, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
   disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents, logEvents, EVENT_IX_TAG, parseEventData,
   mulDiv, mulDivCeil, stepQ, priceOf, feeOf, accOf, refsOf, simulateSwap, sharesForMint, chunkOf, slotOf, chunksForSwap, chunkBit, nextChunk, nextBin, liveChunks, owedOf, pendingRewardGrowth, distribute, sideWeights, shapeWeights, EMPTY_BIN,
-  decodeBinPool, decodeBinArray, decodeShareAccount };
+  decodeBinPool, decodeBinArray, decodeShareAccount, decodeFactory, decodeBond, MINT_EXT, MINT_EXT_OK, parseMint, refusedExtensions, priceQ, tierCategory, tierLabel, BIN_POOL_DISC };

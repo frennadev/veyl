@@ -5,6 +5,7 @@
 //   1. postman of every private pool -> --postman (default --to)      set_postman, while the deployer is still the pool authority
 //   2. pool authority of every private pool -> --to                   propose_authority (two-step: --to must accept)
 //   3. factory authority (veyl_bin) -> --to                           propose_factory_authority (two-step)
+//      treasury (veyl_bin, receives forfeited bonds) -> --to          set_treasury (immediate, while the deployer is fee authority)
 //      protocol fee authority (veyl_bin) -> --to                      propose_fee_authority (two-step)
 //      reward funder of every bin pool's reward slots -> --to         set_reward_funder (immediate)
 //      committee authority (veyl_entry, Phase 3) -> --to              propose_committee_authority (two-step)
@@ -33,6 +34,11 @@ async function handover({ rpc, dep, deployer, deployerFile, to, postman, dryRun 
     if (r.holder === postman.toBase58()) plan.push({ role: r.role, action: 'done' });
     else if (auth.holder !== me) plan.push({ role: r.role, action: `skip: the pool authority is ${auth.holder} (not the deployer)` });
     else plan.push({ role: r.role, action: `set_postman -> ${postman.toBase58()}`, ixs: [V.setPostmanIx(deployer.publicKey, r.target, postman)] });
+  }
+  for (const r of roles.filter((x) => x.kind === 'treasury')) { const fa = roles.find((x) => x.kind === 'fee');
+    if (r.holder === to.toBase58()) plan.push({ role: r.role, action: 'done' });
+    else if (!fa || fa.holder !== me) plan.push({ role: r.role, action: `skip: the protocol fee authority is ${fa ? fa.holder : 'missing'} (not the deployer)` });
+    else plan.push({ role: r.role, action: `set_treasury -> ${to.toBase58()}`, ixs: [V.setTreasuryIx(deployer.publicKey, to)] });
   }
   require('../sdk/sealed.js');
   for (const r of roles.filter((x) => x.kind === 'pool' || x.kind === 'factory' || x.kind === 'fee' || x.kind === 'committee')) {

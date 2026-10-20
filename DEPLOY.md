@@ -86,10 +86,11 @@ All of these allow browser calls (CORS `*`) as far as their docs say; `engine/ma
 | `pyth` | docs.pyth.network (Core API key) | first-party oracle prices instead of the Jupiter fallback |
 
 ## Fees, rewards, limit orders (Phase 1)
-- **Protocol fee.** Each bin pool sends `protocol_share` of every swap fee (bps of the fee; default **10%**, at most **25%**) to an
-  accounted protocol balance in its vaults; the rest goes to the bin's market makers (claimable per position) and limit orders
-  (paid into the filled amount). Set the share for every pool at deploy with `"protocolShareBps"` in `config/<network>.json`
-  (0..2500), or later with `set_protocol_share`. Only the factory's **protocol fee authority** may change it or withdraw: the
+- **Protocol fee.** A fixed **0.2%** (`protocol_fee_bps = 20`) of every swap's input, on top of the pool's LP fee, goes to an
+  accounted protocol balance in its vaults; LPs keep the whole LP fee (claimable per position) and limit orders are paid into
+  the filled amount. Sealed batches pay it on the matched part too (`pay_protocol_fee`). LP fees come from the factory's fee
+  tiers (`"feeTiers"` in `config/<network>.json`; a listed tier cannot be edited). Pools anyone lists post a refundable bond
+  (`"bond": { sol, lockDays }`); `"treasury"` receives delisted bonds. Only the factory's **protocol fee authority** may withdraw: the
   deployer at first; `npm run handover` proposes it to the multisig (two-step, the multisig accepts), like the factory
   authority. Withdraw from the multisig with the SDK: `V.protocolFees(pool)` then
   `V.withdrawProtocolFeeIx(feeAuthority, pool, amountX, amountY, toX, toY)` (capped at the accounted balance).

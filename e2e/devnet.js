@@ -32,6 +32,8 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
   const programs = Object.fromEntries(Object.entries(dep.programs).map(([k, v]) => [k, new PublicKey(v)]));
   const V = new Veyl({ connection: conn, programs, payer: deployer }); V.lookupTable = new PublicKey(dep.lookupTable); V.lookupExtra = (dep.lookupTables || []).map((k) => new PublicKey(k));
   const T = Object.fromEntries(Object.entries(dep.tokens).map(([sym, t]) => [sym, { ...t, sym, mint: new PublicKey(t.mint) }])); const SOL = T.SOL.mint, USDC = T.USDC.mint;
+  const REAL_SOL = SOL.toBase58() === 'So11111111111111111111111111111111111111112'; /* devnet on real wrapped SOL: SOL is wrapped, not minted */
+  const sz = (mock, real) => (REAL_SOL ? real : mock);
   const BPX = dep.binPools.find((b) => b.id === 'sol-usdc'); const POOL = new PublicKey(BPX.address);
   const user = Keypair.generate(); const sol = (k) => conn.getBalance(k.publicKey || k);
   const pay = async (to, lamports) => sendAndConfirmTransaction(conn, new Transaction().add(SystemProgram.transfer({ fromPubkey: deployer.publicKey, toPubkey: to, lamports })), [deployer], { commitment: 'confirmed' });
@@ -81,13 +83,13 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
     const until = async (fn, ms, step = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await sleep(step); } return false; };
     // each section reports on its own: a failure is recorded and the run goes on with the next one
     const ONLY = (process.env.ONLY || '').split(',').map((x) => x.trim()).filter(Boolean); // e.g. ONLY=deposits,swap,position (prerequisites included by hand)
-    const section = async (name, fn) => { if (ONLY.length && !ONLY.some((k) => name.startsWith(k))) { console.log('  (skipped: ' + name + ')'); return; } try { await fn(); } catch (e) { check(name + ': ran to the end', false, String(e.message).split('\n')[0].slice(0, 200)); await page.click('#doneBtn, #errClose', { timeout: 3000 }).catch(() => {}); await sleep(500); } };
+    const section = async (name, fn) => { if (ONLY.length && !ONLY.some((k) => name.startsWith(k))) { console.log('  (skipped: ' + name + ')'); return; } try { await fn(); } catch (e) { check(name + ': ran to the end', false, String(e.message).split('\n')[0].slice(0, 200) + (Array.isArray(e.logs) ? ' | ' + e.logs.slice(-4).join(' | ').slice(0, 400) : '')); await page.click('#doneBtn, #errClose', { timeout: 3000 }).catch(() => {}); await sleep(500); } };
 
     // test tokens from the relayer's faucet, through the account menu
     await page.click('#acctBtn'); await page.click('#acctPop [data-drip]');
     const dripped = await until(async () => (await V.tokenBalance(USDC, user.publicKey)) > 0n && (await sol(user)) > 0, 120000);
     const u0 = await V.tokenBalance(USDC, user.publicKey);
-    check('faucet (POST /drip): the wallet gets test USDC, SOL and the core basket, plus SOL for fees', dripped && u0 >= units(900, 6) && (await V.tokenBalance(SOL, user.publicKey)) >= units(4, 9), `${Number(u0) / 1e6} USDC, ${(await sol(user)) / 1e9} SOL for fees`);
+    check('faucet (POST /drip): the wallet gets test USDC, SOL and the core basket, plus SOL for fees', dripped && u0 >= units(900, 6) && (REAL_SOL ? (await sol(user)) >= 40_000_000 : (await V.tokenBalance(SOL, user.publicKey)) >= units(4, 9)), `${Number(u0) / 1e6} USDC, ${(await sol(user)) / 1e9} SOL for fees`);
     await page.click('#doneBtn, #errClose').catch(() => {}); await sleep(1000);
 
     await page.click('[data-go="home"]'); await sleep(1200);
@@ -139,9 +141,9 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
       zp = (await aggOf())[0]; const agg = zp && (await V.aggregateOf(POOL, zp.lo));
       check('shielded add on devnet: the shielded aggregate holds the note\'s shares; the position is owned by the shielded PDA', /Position added/.test(t) && zp && zp.shares.some((s) => s !== '0') && agg && zp.shares.every((s, i) => agg[i] >= BigInt(s)) && !!(await V.shareAccount(POOL, V.shieldOwner(), V.signerPda(), S.chunkOf(zp.lo))), t.slice(0, 140));
       // fees: public round trips through its bins (the deployer, with minted test tokens) until they are worth claiming
-      await fund(conn, deployer, USDC, deployer.publicKey, units(100000, 6)); await fund(conn, deployer, SOL, deployer.publicKey, units(1000, 9));
+      await fund(conn, deployer, USDC, deployer.publicKey, units(100000, 6)); await fund(conn, deployer, SOL, deployer.publicKey, units(sz(1000, 1.5), 9));
       const volume = async (n) => { for (let i = 0; i < n; i++) { const bp = await V.binPool(POOL); const xForY = bp.activeId > a0 + 1 || (bp.activeId >= a0 - 1 && i % 2 === 1); // sell SOL above, buy below
-        await V.send([await V.swapIx(deployer.publicKey, POOL, xForY, xForY ? units(10, 9) : units(1000, 6))], [], 1_400_000); await sleep(300); } };
+        await V.send([await V.swapIx(deployer.publicKey, POOL, xForY, xForY ? units(sz(10, 0.04), 9) : units(sz(1000, 4), 6))], [], 1_400_000); await sleep(300); } };
       // fees reach a claimable state at the next shielded action in these bins (a claim is proven against the growth recorded at
       // the last harvest; the program harvests after the proof): volume, then a small second shielded add here, then the claim
       await volume(30);
@@ -175,13 +177,13 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
       check('shielded limit order on devnet: a bid from hidden USDC notes, held by the shielded aggregate; an order note on this device', /Order placed/.test(t) && qo && !qo.isAsk && (await page.evaluate((o) => window.veylEngine.zw.orderNotes(o.pool, o.binId, o.isAsk).length, qo)) >= 1, t.slice(0, 120));
       // filled by a public swap down through its bin (the deployer), then the price is walked back up
       const a0 = (await V.binPool(POOL)).activeId;
-      { const pl = await V.binPool(POOL); const bins = await V.bins(POOL, S.chunksForSwap(pl, true)); let a = units(1, 9);
-        for (let k = 0; k < 200; k++) { let sim = null; try { sim = S.simulateSwap(pl, bins, true, a, Math.floor(Date.now() / 1000)); } catch {} if (sim && sim.endId < qo.binId) break; a += units(1, 9); }
+      { const pl = await V.binPool(POOL); const bins = await V.bins(POOL, S.chunksForSwap(pl, true)); let a = units(sz(1, 0.05), 9);
+        for (let k = 0; k < 200; k++) { let sim = null; try { sim = S.simulateSwap(pl, bins, true, a, Math.floor(Date.now() / 1000)); } catch {} if (sim && sim.endId < qo.binId) break; a += units(sz(1, 0.05), 9); }
         await fund(conn, deployer, SOL, deployer.publicKey, a); await V.send([await V.swapIx(deployer.publicKey, POOL, true, a)], [], 1_400_000); }
       const oi = await V.position(POOL, V.shieldOwner(), V.signerPda(), [qo.binId]);
       check('the shielded bid is filled on devnet by a public swap through its bin', oi.orders.some((o) => o.filled && o.filledX > 0n));
       await fund(conn, deployer, USDC, deployer.publicKey, units(20000, 6));
-      for (let i = 0; i < 40 && (await V.binPool(POOL)).activeId < a0; i++) await V.send([await V.swapIx(deployer.publicKey, POOL, false, units(400, 6))], [], 1_400_000);
+      for (let i = 0; i < 60 && (await V.binPool(POOL)).activeId < a0; i++) await V.send([await V.swapIx(deployer.publicKey, POOL, false, units(sz(400, 3), 6))], [], 1_400_000); /* small steps: real-SOL pools are seeded thin */
       // withdraw the order: its note is spent, the SOL it bought comes back as a shielded note
       await toPortfolio(); const solZ0 = await page.evaluate(() => String(window.veylEngine.shieldBalance('SOL')));
       await page.waitForSelector('#ordList [data-ow="' + qo.id + '"]', { timeout: 30000 }); await page.click('#ordList [data-ow="' + qo.id + '"]'); await sleep(400); await page.click('#oGo'); t = await finish();
@@ -217,16 +219,16 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
           await pg.goto(WEB + '/app.html', { waitUntil: 'domcontentloaded', timeout: 90000 }); await pg.waitForFunction(() => window.veylEngine && window.veylEngine.zw, null, { timeout: 60000 }); users.push({ ctx, pg, dir: i < 3 ? 0 : 1, addr: await pg.evaluate(() => window.veylEngine.veylAddress()) }); }
         // fund them privately: one deposit from Node (admitted by the relayer's publisher), then a hidden note to each user
         const fw = new Z.ShieldWallet(require('crypto').randomBytes(32), { mints, pools: [] });
-        await fund(conn, deployer, SOL, deployer.publicKey, units(12, 9)); await fund(conn, deployer, USDC, deployer.publicKey, units(2000, 6));
-        for (const [m, a] of [[SOL, units(10, 9)], [USDC, units(1900, 6)]]) { await scan(fw); const d = fw.deposit(m, a); const pr = await proveTransact(d.input);
+        await fund(conn, deployer, SOL, deployer.publicKey, units(sz(12, 0.6), 9)); await fund(conn, deployer, USDC, deployer.publicKey, units(2000, 6));
+        for (const [m, a] of [[SOL, units(sz(10, 0.5), 9)], [USDC, units(1900, 6)]]) { await scan(fw); const d = fw.deposit(m, a); const pr = await proveTransact(d.input);
           await V.send([V.postProofIx(deployer.publicKey, 1, pr.proof, pr.pubs)], [], 1_400_000); await V.send([await V.shieldDepositIx(deployer.publicKey, d.ext, pr.pubs)], [], 600_000);
           await until(async () => !(await V.readShield()).pending.some((x) => x.depositor.equals(deployer.publicKey)), 120000, 4000); }
         const R2 = new Veyl({ connection: conn, programs, payer: relayer }); R2.lookupTable = V.lookupTable; R2.lookupExtra = V.lookupExtra;
-        for (const u of users) { await scan(fw); const t2 = fw.spend({ mint: u.dir === 0 ? SOL : USDC, send: u.dir === 0 ? units(3, 9) : units(600, 6), to: u.addr, hideToken: true }); const pr = await proveTransact(t2.input);
+        for (const u of users) { await scan(fw); const t2 = fw.spend({ mint: u.dir === 0 ? SOL : USDC, send: u.dir === 0 ? units(sz(3, 0.15), 9) : units(600, 6), to: u.addr, hideToken: true }); const pr = await proveTransact(t2.input);
           await R2.send([V.postProofIx(relayer.publicKey, 1, pr.proof, pr.pubs)], [], 1_400_000); await R2.sendV0([await V.shieldTransactIx(relayer.publicKey, t2.ext, pr.pubs)], [], 600_000); }
         // six users seal into one batch from the pool page (3 sell SOL, 3 sell USDC), proofs in each page's Web Worker
         await setParams({ ...base, epochSlots: 1500n, settleTimeout: 1500n }); const st = await waitRoom(1200); const seq = st.batch.seq; // after funding: room for six
-        const sizes = [['0.8', '1.25', '0.4'], ['95', '210.5', '60']]; const SW = [];
+        const sizes = REAL_SOL ? [['0.04', '0.06', '0.02'], ['95', '210.5', '60']] : [['0.8', '1.25', '0.4'], ['95', '210.5', '60']]; const SW = [];
         for (const [k, u] of users.entries()) { const pg = u.pg; await pg.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }); await pg.waitForFunction(() => window.veylEngine && window.veylEngine.zw, null, { timeout: 60000 }); await openSeal(pg);
           const mode = await pg.evaluate(() => [...document.querySelectorAll('#swMode [data-m]')].map((b) => b.dataset.m + ':' + b.getAttribute('aria-pressed')).join('|'));
           if (k === 0) check('pool page on devnet: "Sealed" is the default swap mode while the pool has an open batch', /sealed:true/.test(mode), mode);
@@ -237,12 +239,12 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
         check('six users sealed swaps into one devnet batch from the browser (3 sell SOL, 3 sell USDC)', SW.every((x) => /Sealed into batch/.test(x)) && b.count[0] === 3 && b.count[1] === 3, `batch ${seq}: ${b.count.join(' + ')}`);
         { const rs = await conn.getSignaturesForAddress(relayer.publicKey, { limit: 60 }, 'confirmed'); let seen = 0, leaks = 0;
           for (const s2 of rs) { const t2 = await conn.getTransaction(s2.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); if (!t2 || !(t2.meta.logMessages || []).some((l) => /submit_swap|SubmitSwap/i.test(l))) continue; seen++;
-            const raw = Buffer.from(t2.transaction.message.serialize()).toString('hex'); for (const v of [units(0.8, 9), units(1.25, 9), units(0.4, 9), units(95, 6), units(210.5, 6), units(60, 6)]) if (raw.includes(S.u64(v).toString('hex'))) leaks++; }
+            const raw = Buffer.from(t2.transaction.message.serialize()).toString('hex'); for (const v of [...sizes[0].map((x) => units(Number(x), 9)), ...sizes[1].map((x) => units(Number(x), 6))]) if (raw.includes(S.u64(v).toString('hex'))) leaks++; }
           check('the relayer submitted the sealed swaps on devnet; no swap amount appears in any of its transactions', seen >= 6 && leaks === 0, `${seen} submit_swap transactions, ${leaks} amounts seen`); }
         // the epoch ends: the committee nodes close it, prove their partial decryptions on chain and settle it
         const tClose = Date.now(); for (let dl = Date.now() + 1500e3; b.state !== 'settled' && b.state !== 'failed' && Date.now() < dl;) { await sleep(5000); b = await V.batch(POOL, seq); }
         const hs2 = await Promise.all(peers.map(async (u) => { try { return await (await fetch(u + '/health')).json(); } catch { return {}; } }));
-        check('the committee settled the devnet batch: totals public, individual sizes never decrypted, one net swap', b.state === 'settled' && b.totals[0] === units(2.45, 9) && b.totals[1] === units(365.5, 6) && hs2.filter((h) => h.lastShare).length >= 2, `${b.state} ${Math.round((Date.now() - tClose) / 1000)} s after the last swap`);
+        check('the committee settled the devnet batch: totals public, individual sizes never decrypted, one net swap', b.state === 'settled' && b.totals[0] === sizes[0].reduce((t, x) => t + units(Number(x), 9), 0n) && b.totals[1] === sizes[1].reduce((t, x) => t + units(Number(x), 6), 0n) && hs2.filter((h) => h.lastShare).length >= 2, `${b.state} ${Math.round((Date.now() - tClose) / 1000)} s after the last swap`);
         // every user claims from the UI: exactly floor(amount x num / den) - the relayer's fee
         const feeQ = async (sym) => BigInt((await (await fetch(REL + '/fee', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'sealedClaim', mint: T[sym].mint.toBase58() }) })).json()).fee);
         const claims = [];
@@ -255,13 +257,13 @@ const DEVNET = () => { try { localStorage.setItem('veyl:mode', 'devnet'); } catc
         // a lone seller with no rollover left: the batch fails at close and the UI refunds it
         await setParams({ ...base, epochSlots: 150n, maxRollovers: 0 }); await waitRoom(60);
         { const u = users[1]; const pg = u.pg; await openSeal(pg); if (await pg.evaluate(() => !document.querySelector('#pswTkIn').textContent.includes('SOL'))) await pg.click('#pswFlip');
-          await pg.fill('#pswIn', '0.5'); await pg.waitForFunction(() => { const x = document.querySelector('#actGo'); return x && !x.disabled; }, null, { timeout: 90000 }); await pg.click('#actGo'); await finishOn(pg);
+          const lone = REAL_SOL ? '0.03' : '0.5'; await pg.fill('#pswIn', lone); await pg.waitForFunction(() => { const x = document.querySelector('#actGo'); return x && !x.disabled; }, null, { timeout: 90000 }); await pg.click('#actGo'); await finishOn(pg);
           const seq2 = (await V.sealedState(POOL)).batch.seq; for (let dl = Date.now() + 600e3; Date.now() < dl;) { const x = await V.batch(POOL, seq2); if (x.state === 'failed') break; await sleep(4000); }
           await pg.waitForFunction(() => /Refund/.test(document.querySelector('#pSeal').textContent) && document.querySelector('#pSeal [data-sc]'), null, { timeout: 60000 }).catch(() => {});
           const before = await pg.evaluate(() => String(window.veylEngine.shieldBalance('SOL'))); const fee = await feeQ('SOL'); await pg.click('#pSeal [data-sc]'); const tx = await finishOn(pg);
           await pg.waitForFunction((b0) => String(window.veylEngine.shieldBalance('SOL')) !== b0 || (window.veylEngine.shieldSync(), false), before, { timeout: 60000, polling: 2000 }).catch(() => {});
           const after = await pg.evaluate(() => String(window.veylEngine.shieldBalance('SOL')));
-          check('a lone seller on devnet (under the k-floor, no rollover left): the batch fails at close; the UI refunds the SOL as a hidden note (minus the relayer\'s fee)', /Refunded/.test(tx) && BigInt(after) - BigInt(before) === units(0.5, 9) - fee && (await V.batch(POOL, seq2)).state === 'failed', `got ${BigInt(after) - BigInt(before)} want ${units(0.5, 9) - fee} (fee ${fee}), batch ${(await V.batch(POOL, seq2)).state} · ` + tx.slice(0, 60)); }
+          check('a lone seller on devnet (under the k-floor, no rollover left): the batch fails at close; the UI refunds the SOL as a hidden note (minus the relayer\'s fee)', /Refunded/.test(tx) && BigInt(after) - BigInt(before) === units(Number(lone), 9) - fee && (await V.batch(POOL, seq2)).state === 'failed', `got ${BigInt(after) - BigInt(before)} want ${units(Number(lone), 9) - fee} (fee ${fee}), batch ${(await V.batch(POOL, seq2)).state} · ` + tx.slice(0, 60)); }
         check('no browser errors in the sealed users\' pages', userErrs.length === 0, userErrs.slice(0, 2).join(' | '));
       } finally { await setParams(base).catch((e) => console.log('    could not restore the sealed params:', e.message)); for (const u of users) await u.ctx.close().catch(() => {}); }
     });

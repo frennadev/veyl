@@ -8,13 +8,15 @@ const { TX_FEE, WORST, SHIELD_KINDS, PROOF_LEGS, deepBig } = require('./costs.js
 module.exports = (Base) => class Fees extends Base {
   // ---- the fee floor: the fee must at least pay back what the request costs the relayer (rent it never recovers + fees)
   /// Lamports -> atoms of `sym` at the configured prices (x feeCover, rounded up); 0n when a price is missing (no floor).
-  atomsFor(lamports, sym) { const sol = this.prices.SOL, px = this.prices[sym], t = this.dep.tokens[sym]; if (!sol || !px || !t) return 0n;
+  atomsFor(lamports, sym) { const sol = this.prices.SOL, px = this.prices[sym] || (this.derivedPrices && this.derivedPrices[sym]), t = this.dep.tokens[sym] || (this.extraTokens && this.extraTokens[sym]); if (!sol || !px || !t) return 0n;
     return BigInt(Math.ceil((lamports / 1e9) * (sol / px) * 10 ** t.decimals * this.feeCover)); }
   /// Per kind and token: the smallest fee in atoms that covers the worst case (what the app uses to pick feeBps).
   minFeeTable() { const out = {}; for (const [kind, lam] of Object.entries(WORST)) { out[kind] = {}; for (const sym of Object.keys(this.dep.tokens)) out[kind][sym] = this.atomsFor(lam, sym).toString(); } return out; }
   /// parts: [{ sym, atoms }] fees paid in each token; refuses unless together they cover `lamports`.
   _coverOrRefuse(lamports, parts) {
-    if (parts.some((x) => this.atomsFor(1e9, x.sym) === 0n)) return; // no price for one of the tokens: no floor
+    const all = parts; parts = parts.filter((x) => !this._unvalued(x.sym)); /* a discovered token without a price pays nothing toward the floor */
+    if (all.length && !parts.length) throw new Error('this relayer cannot value ' + [...new Set(all.map((x) => x.sym))].join(', ') + ' for its fee yet: no pool of it against a priced token is deep enough');
+    if (parts.some((x) => this.atomsFor(1e9, x.sym) === 0n)) return; // no price for one of the deployment's tokens: no floor
     const covered = parts.reduce((acc, x) => acc + Number(x.atoms) / Number(this.atomsFor(lamports, x.sym)), 0);
     if (covered + 1e-12 < 1) { const need = parts.map((x) => `${this.atomsFor(lamports, x.sym)} ${x.sym} atoms`).join(' or ');
       throw new Error(`fee too low for this relayer: it pays ${(lamports / 1e9).toFixed(6)} SOL for this request (rent + fees); the fee must be worth at least ${need}`); }
@@ -84,6 +86,8 @@ module.exports = (Base) => class Fees extends Base {
       if (req.core.claimFee) { add(mx, req.core.claimFee[0]); add(my, req.core.claimFee[1]); } add(mx, req.core.leftoverFee[0]); add(my, req.core.leftoverFee[1]); }
     return parts; }
   /// POST /fee for a Phase 2 kind: { kind, mint, ... } -> the flat fee (atoms of `mint`) that covers this relayer's cost.
-  async shieldFeeQuote(req) { const lam = await this.shieldCost(req.kind, req); const sym = this._symOfMint(req.mint); const atoms = this.atomsFor(lam, sym);
+  async shieldFeeQuote(req) { const sym = this._symOfMint(req.mint); if (this._unvalued(sym)) this._coverOrRefuse(0, [{ sym, atoms: 0n }]);
+    let lam = await this.shieldCost(req.kind, req); if (this.extraTokens && this.extraTokens[sym] && (await this._missing([this._feeAta(req.mint)]))) lam += rentOf(SIZES.tokenAccount); /* its fee account, made at submit */
+    const atoms = this.atomsFor(lam, sym);
     return { fee: (atoms > 0n ? atoms : 0n).toString(), costLamports: lam, sym }; }
 };

@@ -57,11 +57,54 @@ class RelayerCore {
   /// minute in the background; it pays transaction fees and recipients' token-account rent, and never holds user funds).
   health() { return { ok: true, version: VERSION, network: this.dep.network, relayer: this.wallet.publicKey.toBase58(), balanceSol: this.balance === undefined ? null : this.balance / 1e9, lowBalance: this.balance !== undefined && this.balance < LOW_BALANCE_LAMPORTS, publisher: !!this.postman }; }
   async refreshBalance() { try { this.balance = await this.conn.getBalance(this.wallet.publicKey); if (this.balance < LOW_BALANCE_LAMPORTS) console.error('relayer balance low:', this.balance / 1e9, 'SOL'); } catch { /* RPC hiccup: keep the last value */ } }
-  async binPools() { const out = []; for (const b of this.dep.binPools) { const p = await this.V.binPool(b.address); out.push({ ...b, activeId: p.activeId, lowestId: p.lowestId, highestId: p.highestId, seeded: p.seeded, fee: (await this.V.currentFee(b.address)).toString(), price: S.priceOf(p.basePrice, p.binStep, p.activeId).toString(),
-      protocolShare: p.protocolShare, totalFeeX: p.totalFeeX.toString(), totalFeeY: p.totalFeeY.toString(), rewards: p.rewards.map((r, i) => (r.initialized ? { index: i, mint: r.mint.toBase58(), rateQ64: r.rate.toString(), end: Number(r.end) } : null)).filter(Boolean) }); } return out; }
+  /// GET /pools: the deployment's pools and the ones listed on chain since (discover), each with its tier, status
+  /// ('verified' | 'unverified' while its bond is locked | 'delisted') and the fixed protocol fee (bps of every swap's input).
+  async binPools() { try { await this.discover(); } catch { /* the deployment's pools still list */ } const all = [...this.dep.binPools, ...(this.discovered || [])]; const out = [];
+    const bonds = await this.V.bonds(all.map((b) => new PublicKey(b.address))); const now = Math.floor(Date.now() / 1000);
+    for (const [i, b] of all.entries()) { const p = await this.V.binPool(b.address); if (!p) continue; const bond = bonds[i];
+      out.push({ ...b, activeId: p.activeId, lowestId: p.lowestId, highestId: p.highestId, seeded: p.seeded, fee: (await this.V.currentFee(b.address)).toString(), price: S.priceOf(p.basePrice, p.binStep, p.activeId).toString(),
+        protocolShare: 0, protocolFeeBps: p.protocolFeeBps, tier: { id: p.feeTier, feePips: p.baseFee, binStep: p.binStep, label: S.tierLabel(p.binStep, p.baseFee), category: S.tierCategory(p.binStep) },
+        status: p.delisted ? 'delisted' : !b.discovered ? 'verified' : bond && now < Number(bond.unlockAt) ? 'unverified' : 'verified', creator: bond ? bond.creator.toBase58() : null,
+        totalFeeX: p.totalFeeX.toString(), totalFeeY: p.totalFeeY.toString(), rewards: p.rewards.map((r, i) => (r.initialized ? { index: i, mint: r.mint.toBase58(), rateQ64: r.rate.toString(), end: Number(r.end) } : null)).filter(Boolean) }); } return out; }
+  /// Pools anyone listed since the deploy (getProgramAccounts on veyl_bin, at most every 60 s; force: now). Their tokens are
+  /// keyed by mint in symOf / extraTokens, so fees, the fee floor and routes work for them. A token not in the deployment is
+  /// valued for the fee floor only through a pool against a priced token whose priced side holds at least
+  /// DISCOVERED_MIN_DEPTH_USD (default 1000), at DISCOVERED_HAIRCUT (default 0.5) of that pool's price; otherwise this
+  /// relayer refuses fees in it (an unpriced token would let anyone make it pay rent for nothing).
+  async discover(force = false) { if (!force && this._discAt && Date.now() - this._discAt < 60_000) return this.discovered;
+    if (this._discP) return this._discP; this._discP = (async () => { try {
+      const known = new Set(this.dep.binPools.map((b) => b.address)); const chain = await this.V.binPools(); const fresh = chain.filter((p) => !known.has(p.address.toBase58()));
+      this.extraTokens = this.extraTokens || {}; const out = [];
+      for (const p of fresh) { for (const m of [p.mintX, p.mintY]) { const k = m.toBase58(); if (this.symOf[k]) continue; const mi = await this.V.mint(m); if (!mi) continue; await this.V.tokenProgram(m);
+          this.extraTokens[k] = { mint: k, decimals: mi.decimals, program: mi.program }; this.symOf[k] = { sym: k, decimals: mi.decimals, discovered: true }; }
+        const sx = this.symOf[p.mintX.toBase58()], sy = this.symOf[p.mintY.toBase58()]; if (!sx || !sy) continue;
+        out.push({ id: [sx.sym, sy.sym].map((x) => (sx.discovered || sy.discovered ? x : x.toLowerCase())).join('-') + '-' + p.binStep, x: sx.sym, y: sy.sym, binStep: p.binStep, baseFee: p.baseFee, address: p.address.toBase58(), mintX: p.mintX.toBase58(), mintY: p.mintY.toBase58(), discovered: true }); }
+      this.discovered = out; await this._valueDiscovered(fresh); this._discAt = Date.now(); return out; } finally { this._discP = null; } })(); return this._discP; }
+  /// USD prices of discovered tokens (derivedPrices), from their deepest pool against a priced token (see discover).
+  async _valueDiscovered(pools) { const minUsd = Number(process.env.DISCOVERED_MIN_DEPTH_USD || 1000), cut = Number(process.env.DISCOVERED_HAIRCUT || 0.5); const best = {};
+    for (const p of pools) { const kx = p.mintX.toBase58(), ky = p.mintY.toBase58(); const sx = this.symOf[kx], sy = this.symOf[ky]; if (!sx || !sy || p.delisted || !p.seeded) continue;
+      const dec = (s) => (this.dep.tokens[s.sym] || this.extraTokens[s.sym]).decimals; const human = (Number(S.priceOf(p.basePrice, p.binStep, p.activeId)) / 2 ** 128) * 10 ** (dec(sx) - dec(sy));
+      for (const [mine, other, vault, usd] of [[sx, sy, p.vaultY, (u) => human * u], [sy, sx, p.vaultX, (u) => (human > 0 ? u / human : 0)]]) {
+        if (!mine.discovered || other.discovered || !this.prices[other.sym]) continue; let bal = 0n; try { bal = BigInt((await this.conn.getTokenAccountBalance(vault)).value.amount); } catch { continue; }
+        const depth = (Number(bal) / 10 ** dec(other)) * this.prices[other.sym]; if (depth < minUsd) continue; const px = usd(this.prices[other.sym]) * cut;
+        if (px > 0 && (!best[mine.sym] || depth > best[mine.sym].depth)) best[mine.sym] = { px, depth }; } }
+    this.derivedPrices = Object.fromEntries(Object.entries(best).map(([k, v]) => [k, v.px])); }
+  /// A discovered token this relayer cannot value for its fee floor.
+  _unvalued(sym) { return !!(this.extraTokens && this.extraTokens[sym]) && !(this.derivedPrices && this.derivedPrices[sym] > 0); }
+  /// The relayer's fee account for a discovered token, created when missing (its rent is in shieldCost).
+  async _ensureFeeAccount(mint) { const k = new PublicKey(mint).toBase58(); if (!this.extraTokens || !this.extraTokens[k]) return; const tp = await this.V.tokenProgram(k); const ata = this.V.ata(k, this.wallet.publicKey, tp);
+    if (await this.conn.getAccountInfo(ata)) return; const spl = require('@solana/spl-token'); await this.V.send([spl.createAssociatedTokenAccountIdempotentInstruction(this.wallet.publicKey, ata, this.wallet.publicKey, new PublicKey(k), tp)], [], 100_000); }
 }
 const Fees = require('./fees.js'), Notes = require('./notes.js'), Shielded = require('./shielded.js'), Sealed = require('./sealed.js'), Postman = require('./postman.js'), Faucet = require('./faucet.js');
-class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(RelayerCore)))))) {}
+class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(RelayerCore)))))) {
+  /// A request naming a token this relayer has not seen (a pool listed in the last minute) looks again once, then retries.
+  async _withDiscovery(f) { try { await this.discover(); } catch { /* the deployment's tokens still work */ } try { return await f(); } catch (e) { if (!/unknown token/.test(String(e && e.message))) throw e; await this.discover(true); return f(); } }
+  async feeQuote(req) { return this._withDiscovery(() => super.feeQuote(req)); }
+  async submit(req) { return this._withDiscovery(async () => { for (const m of feeMints(req)) await this._ensureFeeAccount(m); return super.submit(req); }); }
+}
+/// The mints a request pays this relayer's fees in (legs, transact / sealed external data, an LP action's pool tokens).
+function feeMints(req) { const out = new Set(); const add = (m) => { if (m && typeof m === 'string' && m.length >= 32) out.add(m); };
+  add(req.mint); if (req.ext) add(req.ext.mint); if (req.leg && req.leg.ext) add(req.leg.ext.mint); for (const l of req.legs || []) { add(l.mint); if (l.ext) add(l.ext.mint); } return [...out]; }
 module.exports = { Relayer, serve, isAllowed, clientKey, pricesFrom, WORST, SIGNED, PROOF_LEGS, SHIELD_KINDS, keyFromEnv, deployFromEnv };
 
 if (require.main === module) {
