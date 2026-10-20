@@ -34,6 +34,7 @@ self-inflicted. **Info** = design notes and things checked and found sound.
 | L-4 | Low | An expired post can still be executed, and cancelled by anyone: a race, both outcomes as signed | Acknowledged |
 | L-5 | Low | A bin with shares but zero value mints new shares 1:1 | Acknowledged (same as EVM; not reachable profitably) |
 | L-6 | Low | A user can make the relayer post, then make execution fail, costing it a few signature fees | Acknowledged (fee floor + rate limit) |
+| L-7 | Low | The relayer's HTTP API was unbounded: unlimited reads (each `/pools` ~2 RPC calls per pool), faucet drainable with fresh addresses, no cap on concurrent submissions | Fixed |
 | I-1..I-8 | Info | Trust in the postman, screening, deposit-record collisions, rent, lookup table, ed25519, context coverage, Groth16 and arithmetic | Notes |
 
 ---
@@ -208,6 +209,23 @@ build; kept for bit-identical maths.
 
 A user can set a swap's `min_out` just above what execution will give: the relayer posts (one fee), execution fails (dry-run,
 no fee), and the relayer cancels (one fee; the rent comes back). Two signature fees per attempt, rate-limited. Kept.
+
+
+## L-7: The relayer's HTTP API was unbounded
+
+Only POSTs were rate-limited. Reads were not, and `GET /pools` read every pool from the chain on each request (about 166 RPC
+calls on devnet), so anyone could exhaust the relayer's RPC quota. IPv6 clients were counted per address (a /64 gives one
+client 2^64 of them). The faucet's per-pair path had no per-caller limit, so fresh addresses drained the faucet wallet's SOL,
+and its in-memory record was never pruned. Any number of submissions could run at once, and error messages could carry the
+RPC URL (with a provider key in it). The denylist was re-read from disk for every deposit, and a malformed file silently
+emptied it.
+
+**Fix (relayer/http.js, relayer/screening.js).** Per-client limits on reads (`RATE_GET`, 600/min) and writes (`RATE_POST`,
+30/min), IPv6 counted per /64; concurrent identical chain reads share one call, `/pools` cached 5 s and `/sealed` 1 s;
+`MAX_INFLIGHT` submissions at once (503 beyond); faucet capped per caller and pair and `DRIP_MAX_PER_HOUR` in total, claimed
+before the drip so two at once cannot both pass, records pruned; JSON-object bodies only; URLs redacted from errors; security
+headers and server timeouts. The denylist is re-read only when it changes and a broken file keeps the last good list.
+**Regression tests.** `tests/http.js` (no chain needed; first in `npm test`).
 
 ---
 

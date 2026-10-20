@@ -29,7 +29,7 @@
 // for the shielded pool it admits each pending deposit whose depositor passes the same screening (approve_deposit).
 //
 // Layout: this file holds the core (wallet, deployment, /info, /health, /pools) and composes the parts below into one class;
-// relayer/http.js serves it. costs.js (request kinds and their worst-case cost), fees.js (the fee floor, /fee), notes.js
+// relayer/http.js serves it (Express). costs.js (request kinds and their worst-case cost), fees.js (the fee floor, /fee), notes.js
 // (Phase 1 submissions, /state), shielded.js (Phase 2 + 3 submissions, /shield), sealed.js (/sealed, the batch crank),
 // postman.js (approved-set publisher), faucet.js (/drip), screening.js (denylist), env.js (keys and deployment from env).
 'use strict';
@@ -74,6 +74,8 @@ if (require.main === module) {
   const r = new Relayer({ connection: conn, wallet, deploy: dep, postman, minFeeBps: Number(env.MIN_FEE_BPS || 5), feeCover: Number(env.FEE_COVER || 1) });
   if (dep.network !== 'mainnet') r.faucet = keyFromEnv(env, 'FAUCET_SECRET_KEY', 'FAUCET_KEY');
   if (!r.prices.SOL) console.error('no SOL price (deploy file or PRICES_JSON): the fee floor is off and small requests can drain this wallet');
+  if (dep.network === 'mainnet' && !env.ALLOWED_ORIGINS) console.error('ALLOWED_ORIGINS is not set: any website can call this relayer from its visitors\' browsers');
+  if (env.RENDER && !Number(env.TRUST_PROXY)) console.error('TRUST_PROXY is not set behind Render: every client shares one rate limit (REVIEW.md L-2)');
   // a failed RPC call in a background job (a timeout, a dropped connection) is logged; it must not stop the relayer
   process.on('unhandledRejection', (e) => console.error('unhandled', (e && e.message) || e));
   const port = Number(env.PORT || 8843); const srv = serve(r, port);
