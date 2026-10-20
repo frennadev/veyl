@@ -610,3 +610,25 @@ button:disabled{cursor:not-allowed}
 .morebtn:focus-visible{outline:2px solid var(--rose);outline-offset:2px;border-radius:4px}
 .linkbtn{display:inline;padding:0;border:0;background:none;color:var(--wine);font:inherit;font-weight:500;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .linkbtn:hover{color:var(--wine-2)}
+/* phones and touch screens: tap targets of at least 44 px (40 for the header pills, to keep the header short), a shorter
+   two-row header, and no text under 12 px. Desktop (fine pointer) is unchanged. */
+@media (pointer:coarse){
+  .ib{width:44px;height:44px}
+  .addr{height:44px}.pvchip,.mchip{height:40px}
+  .tabs button{min-height:44px}
+  .amt .b button{position:relative;min-height:44px;min-width:44px;margin:-12px -8px -12px 0;padding:0 8px}
+  .presets button,.quick button{min-height:44px;padding-top:0;padding-bottom:0;display:inline-flex;align-items:center}
+  .sec button{min-height:44px;padding:0 4px}
+  .linkbtn{padding:10px 0;margin:-10px 0}
+  .tip.inl{width:22px;height:22px;vertical-align:-5px}
+  .seg button,.btn{min-height:44px}
+  #poolQ{min-height:44px}
+  .amt .m input{min-height:44px}
+}
+@media (max-width:639px){
+  .hdr .app>.logo,.hdr .app>.menu{height:52px}
+  .hdr .app>.hdr-r{height:52px;margin-left:auto}
+}
+/* a 390 px phone: the controls fit beside the logo on one row (narrower phones wrap to two, as before) */
+@media (max-width:420px){.hdr .app{gap:6px}.hdr .addr{padding:0 9px;font-size:12px}.pvchip{padding:0 8px;gap:5px}.mchip{padding:0 8px;gap:6px}}
+.sim-k small,.sim>small,#pStats small,.volpre small,.volpre .presets button small{font-size:12px}

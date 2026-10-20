@@ -15,7 +15,7 @@
   --paper:#0A0B09; --paper-2:#111310; --paper-3:#181B16; --panel:#0E100D;
   --line:rgba(214,226,200,.10); --line-2:rgba(214,226,200,.17); --line-3:rgba(214,226,200,.28);
   /* ink */
-  --ink:#ECEFE6; --ink-2:#B5BBAC; --muted:#8E9585; --faint:#767D6E;
+  --ink:#ECEFE6; --ink-2:#B5BBAC; --muted:#8E9585; --faint:#7F8677; /* faint text reaches 4.5:1 on every panel */
   /* oxblood: buttons and surfaces */
   --oxblood:#C8F560; --oxblood-2:#D8FF80; --on-accent:#0A0B09;
   /* accent text (links, active states, display highlights) */
