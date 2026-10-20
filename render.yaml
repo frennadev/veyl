@@ -21,11 +21,8 @@ services:
         sync: false
       - key: FAUCET_SECRET_KEY   # DEVNET ONLY: the devnet deployer key (mint authority of the mock tokens) for "Get test tokens". Never set on mainnet.
         sync: false
-      - key: ALLOWED_ORIGINS   # CORS: the site's host from the service below (a bare host means https://<host>); add a custom domain here later
-        fromService:
-          type: web
-          name: veyl-sol-site
-          property: host
+      - key: ALLOWED_ORIGINS   # CORS: the site's public URL (a blueprint's fromService host is the internal name, not this); add a custom domain here, comma separated
+        value: "https://veyl-sol-site.onrender.com"
       - key: MIN_FEE_BPS
         value: "5"
       - key: LOW_BALANCE_SOL
@@ -34,6 +31,8 @@ services:
         value: "1"
       - key: FEE_COVER     # the fee must pay back at least this multiple of the rent + fees a request costs (REVIEW.md M-1)
         value: "1"
+      - key: ACTIVITY_MS   # the trade index's sweep interval: every request is RPC credits (2 min ≈ 20k requests a day)
+        value: "120000"
       - key: ACTIVITY_MAX_SWAPS   # the trade index's memory cap across pools, sized for the starter plan's 512 MB
         value: "100000"
       - key: JUPITER_API_KEY   # optional: token names and logos without the keyless rate limit
@@ -52,11 +51,8 @@ services:
         value: "20"
       - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
         value: "1"
-      - key: RELAYER_HOST   # baked into veyl.config.js as https://<host>
-        fromService:
-          type: web
-          name: veyl-sol-relayer
-          property: host
+      - key: RELAYER_URL   # the relayer's public URL, baked into veyl.config.js (a blueprint's fromService host is the internal name)
+        value: "https://veyl-sol-relayer.onrender.com"
       - key: SITE_RPC_URL   # the RPC the browser uses. It is public (every visitor's browser sees it): use a separate key, limited to the site's domain
         sync: false
     routes:

@@ -25,7 +25,7 @@ const RESOLUTIONS = { 300: DAY, 900: 3 * DAY, 3600: 7 * DAY, 14400: 7 * DAY, 864
 const KEEP = 7 * DAY, PAGE = 1000, TX_CHUNK = 50, MAX_SWAPS = 50_000;
 const MAX_TOTAL = Number(process.env.ACTIVITY_MAX_SWAPS || 500_000); // across every pool
 
-function makeActivity({ conn, pools, program, parse = (logs) => S.logEvents(logs).filter((e) => e.program === program), maxTotal = MAX_TOTAL, intervalMs = Number(process.env.ACTIVITY_MS || 20_000), gapMs = Number(process.env.ACTIVITY_GAP_MS || 250), now = () => Math.floor(Date.now() / 1000), log = () => {} }) {
+function makeActivity({ conn, pools, program, parse = (logs) => S.logEvents(logs).filter((e) => e.program === program), maxTotal = MAX_TOTAL, intervalMs = Number(process.env.ACTIVITY_MS || 120_000), gapMs = Number(process.env.ACTIVITY_GAP_MS || 250), now = () => Math.floor(Date.now() / 1000), log = () => {} }) {
   const byPool = new Map(); // address -> { swaps: [...], newest, created, complete, oldestT }
   if (!program && !arguments[0].parse) throw new Error("activity: the bin program id is required (only its own events count)");
   let timer = null, running = null, readyAt = 0;

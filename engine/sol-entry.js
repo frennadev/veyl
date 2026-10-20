@@ -535,7 +535,8 @@ export class Engine {
     // the relayer's index of every pool's trades (one request for all pools), when it has this pool and is current
     // (its totals per window, `agg`, and its latest trades; poolStatsChain uses the totals when they cover the window)
     const R = await this._relayerActivity(); const r = R && R.pools[key];
-    if (r && Math.floor(Date.now() / 1000) - R.at < 120) { const A = { swaps: r.recent.map(([t, x, i, o, f, pf, id, sig]) => ({ sig, t, xForY: !!x, amountIn: BigInt(i), amountOut: BigInt(o), fee: BigInt(f), protocolFee: BigInt(pf), activeId: id })),
+    // the index sweeps every 2 minutes (RPC credits): up to 10 minutes old counts as current
+    if (r && Math.floor(Date.now() / 1000) - R.at < 600) { const A = { swaps: r.recent.map(([t, x, i, o, f, pf, id, sig]) => ({ sig, t, xForY: !!x, amountIn: BigInt(i), amountOut: BigInt(o), fee: BigInt(f), protocolFee: BigInt(pf), activeId: id })),
       agg: r.agg, seen: new Set(), newest: r.newest, created: r.created, complete: r.complete, oldestT: r.oldestT ?? Infinity, relayer: true }; this._act[key] = A; return A; }
     const A = (this._act[key] && !this._act[key].relayer && this._act[key]) || (this._act[key] = { swaps: [], seen: new Set(), newest: null, created: null, complete: false, oldestT: Infinity });
     const now = Math.floor(Date.now() / 1000); const fresh = []; let before;

@@ -28,8 +28,9 @@ and **veyl-sol-site** (static site, built from `web/` by `npm run build:site`). 
 branch first; `deploy.devnet.json` (public addresses only) is committed and goes into both.
 
 1. Render dashboard → New → Blueprint → this repo and branch. It reads `render.yaml` and creates both services. Each
-   service's host is passed to the other: the site bakes `https://<relayer host>` into `veyl.config.js`, the relayer allows
-   the site's host in CORS (`ALLOWED_ORIGINS`; a bare host means `https://<host>`).
+   service knows the other's public URL from `render.yaml` (`RELAYER_URL` for the site, `ALLOWED_ORIGINS` for the relayer):
+   `https://veyl-sol-relayer.onrender.com` and `https://veyl-sol-site.onrender.com`. If Render gives a service another URL
+   (the name was taken), change both values. (A blueprint's `fromService` host is the internal name, not the public URL.)
 2. Enter the secrets it asks for (never committed):
    | Service | Key | Value |
    |---|---|---|
@@ -39,13 +40,17 @@ branch first; `deploy.devnet.json` (public addresses only) is committed and goes
    | relayer | `POSTMAN_SECRET_KEY` | optional: the approved-set publisher (never the relayer's key) |
    | relayer | `JUPITER_API_KEY`, `POOL_LOOKUP_TABLES` | optional (token data without the keyless limit; the relayer's tables for pools listed since the deploy, printed in its log when it makes one) |
    | site | `SITE_RPC_URL` | the RPC browsers use. **Public**: every visitor sees it. Use a separate key limited to the site's domain, not the relayer's |
-3. The first deploy: the relayer starts, then the site builds. If the site built before the relayer had a host, redeploy
-   the site once. Check `https://<relayer>/health` (`ok`, `balanceSol`), then open `https://<site>/app`.
+3. Check `https://<relayer>/health` (`ok`, `balanceSol`), then open `https://<site>/app`.
 4. After a relayer start its trade index reads 7 days of every pool's trades (about 2 minutes on devnet; until then the
    app reads the chain itself, more slowly), and token names and logos are fetched again. Nothing else is kept on disk:
    faucet limits also reset on a restart.
 5. A custom domain: add it to the site in Render, then set the relayer's `ALLOWED_ORIGINS` by hand to both origins
    (`https://<site>.onrender.com,https://veyl.example`) instead of the value from the blueprint.
+
+RPC credits: every component reads the chain through its RPC key. The trade index sweeps every pool every 2 minutes
+(`ACTIVITY_MS`; about 20k requests a day for ~30 pools, more for its first 7-day read), and every visitor's browser uses
+`SITE_RPC_URL`. A free Helius key runs out within days if the local stack and Render share it: give Render its own keys
+(one for the relayer and committee, one for the site), and stop the local stack's relayer while Render runs.
 
 Costs: four starter-plan services, the relayer and the three committee nodes (the free plan sleeps: the relayer's trade
 index would rebuild on every wake, and a sleeping committee settles nothing); the static site is free. Keep the relayer wallet funded with devnet SOL (`/health` shows `lowBalance` under `LOW_BALANCE_SOL`). The starter

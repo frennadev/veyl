@@ -176,8 +176,12 @@ function app(relayer, srv = { inflight: 0 }) {
     tokens.warm(relayer.dep.tokens).catch(() => {}); // the site's own tokens: cached before the first visitor asks
   // Every pool's trades, indexed in the background (relayer/activity.js): the app's figures and candles for all pools in
   // one request. ACTIVITY_INDEX=0 turns the indexer off (the app then reads the chain itself, as before).
+  const skip = { set: new Set(), at: 0 };
   const activity = relayer.activity || (relayer.conn && relayer.dep && process.env.ACTIVITY_INDEX !== "0" ? makeActivity({ conn: relayer.conn, program: relayer.dep.programs.bin,
-    pools: async () => { try { await relayer.discover(); } catch { /* the deployment's pools still index */ } return [...relayer.dep.binPools, ...(relayer.discovered || [])].map((b) => b.address); },
+    // delisted pools (withdrawals only) aren't swept: their status is re-read every 10 minutes, not every sweep
+    pools: async () => { try { await relayer.discover(); } catch { /* the deployment's pools still index */ }
+      if (Date.now() - skip.at > 600_000) { try { skip.set = new Set((await pools("")).filter((p) => p.status === "delisted").map((p) => p.address)); skip.at = Date.now(); } catch { /* keep the last */ } }
+      return [...relayer.dep.binPools, ...(relayer.discovered || [])].map((b) => b.address).filter((a) => !skip.set.has(a)); },
     log: (m) => console.error(m) }) : null);
   if (activity && !relayer.activity) activity.start();
   // bodies are built once per sweep inside activity.js; gzipped when the client takes it
