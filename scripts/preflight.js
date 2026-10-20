@@ -79,6 +79,8 @@ async function preflight({ network, quiet = false }) {
     if (bin.indexOf(id.toBuffer()) < 0) problems.push('the .so does not embed this program ID (rebuild)');
     if (mainnet && devIds.includes(id.toBase58())) problems.push('this is the repo\'s public dev keypair: generate a fresh one for mainnet');
     if (mainnet && devIds.some((d) => bin.indexOf(new PublicKey(d).toBuffer()) >= 0)) problems.push('the .so embeds a dev program ID (build with npm run build:mainnet)');
+    // the devnet-only one-off migration (veyl_bin --features devnet-migrate) must never reach mainnet
+    if (mainnet && p === 'veyl_bin' && /Instruction: Migrate(Factory|Pool)/.test(bin.toString('latin1'))) problems.push('the .so contains the devnet-migrate instructions (build with npm run build:mainnet)');
     add(`${p} ID / build`, problems.length ? 'red' : 'ok', problems.length ? problems.join('; ') : id.toBase58() + (mainnet ? ' (fresh mainnet ID)' : ''));
     const srcNewest = Math.max(...fs.readdirSync(path.join(R, 'programs', p, 'src')).map((f) => fs.statSync(path.join(R, 'programs', p, 'src', f)).mtimeMs));
     const h = sha(bin);

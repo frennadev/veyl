@@ -40,6 +40,8 @@ pub use u512::U512;
 declare_id!("6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk");
 #[cfg(feature = "mainnet")]
 declare_id!("11111111111111111111111111111111"); // mainnet veyl_bin (npm run keys:mainnet)
+#[cfg(all(feature = "mainnet", feature = "devnet-migrate"))]
+compile_error!("devnet-migrate is a devnet-only migration: never build it with the mainnet feature");
 
 pub const PIPS: u128 = 1_000_000; // 100%
 pub const MAX_FEE: u128 = 100_000; // 10%
@@ -238,6 +240,56 @@ pub mod veyl_bin {
             bi.assign(&anchor_lang::system_program::ID); bi.resize(0)?;
         }
         emit!(PoolDelisted { pool: ctx.accounts.pool.key(), forfeited }); Ok(())
+    }
+
+    // ---------------------------------------------------------------------------------------- devnet-only one-off migration
+    // Built only with `--features devnet-migrate` (scripts/build.sh dev profile), never in the mainnet profile: they upgrade
+    // the devnet deployment made before permissionless pools in place (scripts/migrate-devnet.js).
+
+    /// Grow the ["factory"] PDA from its pre-tier layout (OLD_FACTORY_SIZE: discriminator, authority, pending_authority, bump,
+    /// fee_authority, pending_fee_authority) to `Factory::SIZE` (the authority pays the extra rent), keep every old field and
+    /// initialise the new ones: treasury = authority, 1 SOL bond, 30-day lock, 0.2% protocol fee, no tier. Factory authority
+    /// only; refused once the account already has the new size.
+    #[cfg(feature = "devnet-migrate")]
+    pub fn migrate_factory(ctx: Context<MigrateFactory>) -> Result<()> {
+        let fi = ctx.accounts.factory.to_account_info(); let auth = ctx.accounts.authority.key();
+        require_keys_eq!(*fi.owner, crate::ID, BinError::WrongPool);
+        {
+            let d = fi.try_borrow_data()?;
+            require!(d.len() == OLD_FACTORY_SIZE, BinError::BadParams);
+            require!(&d[..8] == Factory::DISCRIMINATOR, BinError::BadParams);
+            require!(d[8..40] == auth.to_bytes(), BinError::NotAuthority);
+        }
+        let need = Rent::get()?.minimum_balance(Factory::SIZE).saturating_sub(fi.lamports());
+        if need > 0 {
+            anchor_lang::system_program::transfer(CpiContext::new(ctx.accounts.system_program.to_account_info(), anchor_lang::system_program::Transfer { from: ctx.accounts.authority.to_account_info(), to: fi.clone() }), need)?;
+        }
+        fi.resize(Factory::SIZE)?;
+        {
+            let mut d = fi.try_borrow_mut_data()?; let t = &mut d[OLD_FACTORY_SIZE..]; t.fill(0);
+            t[0..32].copy_from_slice(auth.as_ref());
+            t[32..40].copy_from_slice(&DEFAULT_BOND_LAMPORTS.to_le_bytes());
+            t[40..48].copy_from_slice(&DEFAULT_BOND_LOCK.to_le_bytes());
+            t[48..50].copy_from_slice(&PROTOCOL_FEE_BPS.to_le_bytes());
+        }
+        let f = Factory::try_deserialize(&mut &fi.try_borrow_data()?[..])?;
+        require!(f.authority == auth && f.treasury == auth && f.protocol_fee_bps == PROTOCOL_FEE_BPS && f.num_tiers == 0, BinError::BadParams);
+        msg!("factory migrated: {} -> {} bytes, {} lamports added", OLD_FACTORY_SIZE, Factory::SIZE, need); Ok(())
+    }
+    /// Bring one pool created before permissionless pools to the new rules: protocol fee 0.2% (overwrites the old
+    /// `protocol_share` bytes), listed, `fee_tier` = the enabled factory tier with the pool's bin step (refused if none), and
+    /// that tier's base fee and variable fee control. Idempotent: a pool already on the new rules keeps its tier and its
+    /// delisted flag. Factory authority only; refused while the factory has its old layout (it does not deserialize).
+    #[cfg(feature = "devnet-migrate")]
+    pub fn migrate_pool(ctx: Context<MigratePool>) -> Result<()> {
+        let f = &ctx.accounts.factory; let n = f.num_tiers as usize; let mut p = ctx.accounts.pool.load_mut()?;
+        let migrated = p.protocol_fee_bps == PROTOCOL_FEE_BPS;
+        let keep = migrated && (p.fee_tier as usize) < n && f.tiers[p.fee_tier as usize].bin_step == p.bin_step;
+        let i = if keep { p.fee_tier as usize } else { f.tiers[..n].iter().position(|t| t.enabled == 1 && t.bin_step == p.bin_step).ok_or(BinError::BadTier)? };
+        let t = f.tiers[i];
+        if !migrated { p.delisted = 0; p._pad = [0; 4]; }
+        p.protocol_fee_bps = PROTOCOL_FEE_BPS; p.fee_tier = i as u8; p.base_fee = t.base_fee; p.variable_fee_control = t.variable_fee_control;
+        msg!("pool migrated: tier {} (bin step {}, base fee {}, vfc {})", i, t.bin_step, t.base_fee, t.variable_fee_control); Ok(())
     }
 
     /// Storage for 60 bins (rent paid by whoever needs them first).
@@ -924,6 +976,10 @@ pub struct Factory {
     pub protocol_fee_bps: u16,                  // PROTOCOL_FEE_BPS, copied into every new pool
     pub num_tiers: u8, pub tiers: [FeeTier; MAX_TIERS],
 }
+/// The factory's size before permissionless pools (discriminator, authority, pending_authority, bump, fee_authority,
+/// pending_fee_authority): what `migrate_factory` grows from. devnet-migrate builds only.
+#[cfg(feature = "devnet-migrate")]
+pub const OLD_FACTORY_SIZE: usize = 8 + 32 * 4 + 1;
 impl Factory {
     pub const SIZE: usize = 8 + 32 * 4 + 1 + 32 + 8 + 8 + 2 + 1 + FeeTier::SIZE * MAX_TIERS;
     /// The bin step of tier `i` (0 when there is no such tier: no pool PDA is ever derived from it).
@@ -1180,6 +1236,21 @@ pub struct DelistPool<'info> {
     #[account(mut, seeds = [b"bond", pool.key().as_ref()], bump)] pub bond: UncheckedAccount<'info>,
     /// CHECK: the factory's treasury (has_one).
     #[account(mut)] pub treasury: UncheckedAccount<'info>,
+}
+#[cfg(feature = "devnet-migrate")]
+#[derive(Accounts)]
+pub struct MigrateFactory<'info> {
+    #[account(mut)] pub authority: Signer<'info>,
+    /// CHECK: the factory PDA in its old layout, read by bytes (owner, size, discriminator and authority checked in the handler).
+    #[account(mut, seeds = [b"factory"], bump)] pub factory: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+#[cfg(feature = "devnet-migrate")]
+#[derive(Accounts)]
+pub struct MigratePool<'info> {
+    pub authority: Signer<'info>,
+    #[account(seeds = [b"factory"], bump = factory.bump, has_one = authority @ BinError::NotAuthority)] pub factory: Box<Account<'info, Factory>>,
+    #[account(mut, constraint = pool.load()?.factory == factory.key() @ BinError::WrongPool)] pub pool: AccountLoader<'info, BinPool>,
 }
 #[derive(Accounts)]
 pub struct WithdrawProtocolFee<'info> {

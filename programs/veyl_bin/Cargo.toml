@@ -13,6 +13,8 @@ no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 mainnet = []
+# devnet-only one-off migration (migrate_factory, migrate_pool): scripts/build.sh dev profile only, never with `mainnet`
+devnet-migrate = []
 [dependencies]
 anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl = "0.31.1"

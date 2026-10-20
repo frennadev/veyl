@@ -593,6 +593,10 @@ class Veyl {
   setTreasuryIx(feeAuthority, treasury) { return this.binIx('set_treasury', [pk(treasury)], [R(feeAuthority, true), W(this.factoryPda())]); }
   releaseBondIx(creator, pool) { return this.binIx('release_bond', [], [W(creator, true), R(pool), W(this.bondPda(pool))]); }
   async delistPoolIx(authority, pool) { const f = await this.factory(); return this.binIx('delist_pool', [], [R(authority, true), R(this.factoryPda()), W(pool), W(this.bondPda(pool)), W(f.treasury)]); }
+  /// devnet-only one-off migration (veyl_bin built with --features devnet-migrate; scripts/migrate-devnet.js): grow the old
+  /// 137-byte factory to the current layout (the authority pays the extra rent), then bring each old pool to its tier.
+  migrateFactoryIx(authority) { return this.binIx('migrate_factory', [], [W(authority, true), W(this.factoryPda()), R(SYS)]); }
+  migratePoolIx(authority, pool) { return this.binIx('migrate_pool', [], [R(authority, true), R(this.factoryPda()), W(pool)]); }
   /// Pay protocol fees into a pool (anyone; veyl_entry for the matched part of a sealed batch).
   async payProtocolFeeIx(from, pool, amountX, amountY, { fromX, fromY } = {}) { const p = await this.binPool(pool); return this.binIx('pay_protocol_fee', [u64(amountX), u64(amountY)], this.mintKeys(from, pool, p, fromX, fromY)); }
   initBinArrayIx(payer, pool, chunk) { return new TransactionInstruction({ programId: this.programs.bin, data: Buffer.concat([disc('init_bin_array'), i32(chunk)]), keys: [W(payer, true), R(pool), W(this.binArrayPda(pool, chunk)), R(SYS)] }); }
