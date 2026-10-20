@@ -47,3 +47,6 @@ site/veyl.keys.js
 site/*.zkey
 site/*.wasm
 __pycache__/
+
+# Claude Code: local settings and agent worktrees
+.claude/
