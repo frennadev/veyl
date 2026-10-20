@@ -4,7 +4,7 @@
 // Works in Node and (bundled) in the browser.
 'use strict';
 const { Buffer } = require('buffer');
-const { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction, ComputeBudgetProgram, SYSVAR_INSTRUCTIONS_PUBKEY, Ed25519Program, AddressLookupTableProgram, TransactionMessage, VersionedTransaction } = require('@solana/web3.js');
+const { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction, ComputeBudgetProgram, SYSVAR_INSTRUCTIONS_PUBKEY, Ed25519Program, AddressLookupTableProgram, AddressLookupTableAccount, TransactionMessage, VersionedTransaction } = require('@solana/web3.js');
 const { sha256 } = require('js-sha256');
 const { poseidon1, poseidon2, poseidon3 } = require('poseidon-lite');
 
@@ -404,6 +404,12 @@ function decodeShareAccount(data) { const r = new Reader(data.subarray(8)); cons
   a.pendingFeeX = r.u64(); a.pendingFeeY = r.u64(); a.pendingReward = [r.u64(), r.u64()]; a.slots = [];
   for (let i = 0; i < BINS_PER_ARRAY; i++) a.slots.push({ shares: r.u128(), feeCpX: r.u128(), feeCpY: r.u128(), rewardCp: [r.u128(), r.u128()], askShares: r.u128(), bidShares: r.u128() }); return a; }
 
+/// A lookup table as a transaction can use it now: addresses added in the current slot resolve only from the next one
+/// (a transaction naming them fails), so they are left out until then; a deactivated table (closing) is null.
+async function usableLut(conn, t) { if (!t || !t.isActive()) return null; const s = t.state; if (s.lastExtendedSlotStartIndex >= s.addresses.length) return t;
+  if ((await conn.getSlot('confirmed')) > Number(s.lastExtendedSlot)) return t;
+  return new AddressLookupTableAccount({ key: t.key, state: { ...s, addresses: s.addresses.slice(0, s.lastExtendedSlotStartIndex) } }); }
+
 // ------------------------------------------------------------------------------------------------ the client
 class Veyl {
   /// programs: { pool, bin, entry } program ids. payer: Keypair used to sign and pay by default.
@@ -457,9 +463,10 @@ class Veyl {
   async events(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const ours = new Set(Object.values(this.programs).map((p) => new PublicKey(p).toBase58()));
     return logEvents(t && t.meta && t.meta.logMessages).filter((e) => ours.has(e.program)).map(({ program, ...e }) => e); }
   async returnData(sig) { const t = await this.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }); const r = t && t.meta && t.meta.returnData; return r ? Buffer.from(r.data[0], 'base64') : null; }
-  /// A lookup table account, cached for 30 s (tables only grow at deploy time; this client's own extends clear it).
+  /// A lookup table account, cached for 30 s (this client's own extends clear it), as a transaction may use it now
+  /// (usableLut: addresses added in the current slot only resolve from the next one); null when missing or deactivated.
   async lutAccount(k) { const key = new PublicKey(k).toBase58(); const c = this._luts[key]; if (c && Date.now() - c.at < 30_000) return c.v;
-    const t = (await this.conn.getAddressLookupTable(new PublicKey(key))).value; this._luts[key] = { v: t, at: Date.now() }; return t; }
+    const raw = (await this.conn.getAddressLookupTable(new PublicKey(key))).value; const t = await usableLut(this.conn, raw); if (t === raw) this._luts[key] = { v: t, at: Date.now() }; return t; }
   /// Every address into lookup tables of at most 256: `tables` = existing ones (extended where there is room), new ones made as needed.
   async fillLookupTables(authority, addresses, tables = []) { const out = []; const have = new Set();
     for (const t of tables) { const cur = (await this.conn.getAddressLookupTable(new PublicKey(t))).value; if (!cur || !cur.state.authority || !cur.state.authority.equals(authority.publicKey)) continue; out.push({ key: new PublicKey(t), n: cur.state.addresses.length }); for (const a of cur.state.addresses) have.add(a.toBase58()); }
@@ -474,7 +481,7 @@ class Veyl {
     await this.send([createIx], [authority], 50_000);
     const uniq = [...new Map(addresses.map((a) => [new PublicKey(a).toBase58(), new PublicKey(a)])).values()];
     for (let i = 0; i < uniq.length; i += 20) await this.send([AddressLookupTableProgram.extendLookupTable({ payer: authority.publicKey, authority: authority.publicKey, lookupTable: table, addresses: uniq.slice(i, i + 20) })], [authority], 50_000);
-    this.lookupTable = table; this._luts = {}; return table;
+    if (!this.lookupTable) this.lookupTable = table; this._luts = {}; return table; /* a client with a table keeps it as its first (deployAll sets it) */
   }
   async extendLookupTable(authority, addresses, table = this.lookupTable) {
     const cur = (await this.conn.getAddressLookupTable(new PublicKey(table))).value; const have = new Set(cur.state.addresses.map((a) => a.toBase58()));
@@ -769,7 +776,7 @@ class Veyl {
   }
 }
 module.exports = { W, R, encRoute, packProofN, strings, Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
-  CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, PROTOCOL_FEE_BPS, MAX_TIERS, DEFAULT_FEE_TIERS, protocolFeeOf, canonicalPair, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
+  CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, PROTOCOL_FEE_BPS, MAX_TIERS, DEFAULT_FEE_TIERS, protocolFeeOf, canonicalPair, usableLut, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
   disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents, logEvents, EVENT_IX_TAG, parseEventData,
   mulDiv, mulDivCeil, stepQ, priceOf, feeOf, accOf, refsOf, simulateSwap, sharesForMint, chunkOf, slotOf, chunksForSwap, chunkBit, nextChunk, nextBin, liveChunks, owedOf, pendingRewardGrowth, distribute, sideWeights, shapeWeights, EMPTY_BIN,
   decodeBinPool, decodeBinArray, decodeShareAccount, decodeFactory, decodeBond, MINT_EXT, MINT_EXT_OK, parseMint, refusedExtensions, priceQ, tierCategory, tierLabel, BIN_POOL_DISC };

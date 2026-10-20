@@ -68,9 +68,14 @@ class Node {
   /// Is the on-chain committee this node's (same joint key, this member's key and node at its index)?
   async registered() { if (!this.V || !this.share) return false; const c = await this.V.committee(); if (!c) return false;
     return J.enc(c.pk).toString('hex') === this.share.pk && c.members[this.index - 1] && J.enc(c.members[this.index - 1]).toString('hex') === this.share.member && c.nodes[this.index - 1].equals(this.key.publicKey); }
+  /// The pools to serve: every pool with sealed swaps turned on (one getProgramAccounts read every 30 s, so a pool the
+  /// committee's authority turns on after the deploy is served too), else the deployment's.
+  async _pools() { if (this._poolsAt && Date.now() - this._poolsAt < 30_000) return this._poolList; const name = new Map(this.dep.binPools.map((b) => [b.address, b.id]));
+    try { this._poolList = (await this.V.sealedPools()).map((s) => ({ address: s.binPool.toBase58(), id: name.get(s.binPool.toBase58()) || s.binPool.toBase58().slice(0, 8) })); } catch { this._poolList = this.dep.binPools; }
+    this._poolsAt = Date.now(); return this._poolList; }
   async tick() {
     if (!this.share || !this._chain()) return; const reg = await this.registered(); this.status.registered = reg; if (!reg) return;
-    for (const bp of this.dep.binPools) { const pool = new PublicKey(bp.address); let st; try { st = await this.V.sealedState(pool); } catch { continue; } if (!st) continue;
+    for (const bp of await this._pools()) { const pool = new PublicKey(bp.address); let st; try { st = await this.V.sealedState(pool); } catch { continue; } if (!st) continue;
       try {
         if (this.doClose && st.batch.state === 'open' && BigInt(st.slot) >= st.batch.endSlot) { await this.V.send([this.V.closeBatchIx(this.key.publicKey, pool, st.batch.seq)], [], 1_400_000); this.log(`node ${this.index}: closed ${bp.id} batch ${st.batch.seq}`); }
         for (const b of await CM.pendingBatches(this.V, pool)) { const c = await this.V.committee(); if (b.committeeEpoch !== c.epoch) continue;

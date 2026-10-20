@@ -3,7 +3,7 @@
 // the pool program checks them), but it CAN see the request IP, so this server never logs IPs and only keeps a
 // rate-limit counter in memory.
 //
-//   GET  /info                 relayer wallet, fee range, programs, lookup table
+//   GET  /info                 relayer wallet, fee range, programs, lookup tables (the deployment's and poolLookupTables: this relayer's, for pools listed since)
 //   GET  /state?pool=<pubkey>  the pool's leaves (tree order) and approved labels, for building proofs
 //   GET  /pools                bin pools with their current state (quotes are computed on the device)
 //   GET  /activity             every pool's totals over 1 h / 6 h / 24 h and its latest trades (no addresses)
@@ -35,7 +35,8 @@
 // Layout: this file holds the core (wallet, deployment, /info, /health, /pools) and composes the parts below into one class;
 // relayer/http.js serves it (Express). costs.js (request kinds and their worst-case cost), fees.js (the fee floor, /fee), notes.js
 // (Phase 1 submissions, /state), shielded.js (Phase 2 + 3 submissions, /shield), sealed.js (/sealed, the batch crank),
-// postman.js (approved-set publisher), faucet.js (/drip), screening.js (denylist), env.js (keys and deployment from env).
+// postman.js (approved-set publisher), faucet.js (/drip), luts.js (lookup tables for pools listed since the deploy), screening.js (denylist),
+// env.js (keys and deployment from env).
 'use strict';
 const { Connection, PublicKey } = require('@solana/web3.js');
 const S = require('../sdk/veyl.js'); const { Veyl } = S;
@@ -56,7 +57,7 @@ class RelayerCore {
     this.pools = Object.values(deploy.tokens).map((t) => ({ mint: new PublicKey(t.mint), pool: new PublicKey(t.pool), decimals: t.decimals }));
     this.cache = new Map(); // pool -> { at, leaves, labels, deposits }
   }
-  info() { return { faucet: !!this.faucet, address: this.wallet.publicKey.toBase58(), minFeeBps: this.minFeeBps, maxFeeBps: this.maxFeeBps, minFee: this.minFeeTable(), programs: this.dep.programs, lookupTable: this.dep.lookupTable, entrySigner: this.V.signerPda().toBase58(), network: this.dep.network, postman: this.postman ? this.postman.publicKey.toBase58() : this.dep.postman, kinds: Object.keys(WORST), signedKinds: [...SIGNED] }; }
+  info() { return { faucet: !!this.faucet, address: this.wallet.publicKey.toBase58(), minFeeBps: this.minFeeBps, maxFeeBps: this.maxFeeBps, minFee: this.minFeeTable(), programs: this.dep.programs, lookupTable: this.dep.lookupTable, lookupTables: this.dep.lookupTables || [], poolLookupTables: (this.poolLuts || []).map((t) => t.toBase58()), entrySigner: this.V.signerPda().toBase58(), network: this.dep.network, postman: this.postman ? this.postman.publicKey.toBase58() : this.dep.postman, kinds: Object.keys(WORST), signedKinds: [...SIGNED] }; }
   /// Liveness for the host's health check: version, network, the hot wallet and its last known SOL balance (refreshed every
   /// minute in the background; it pays transaction fees and recipients' token-account rent, and never holds user funds).
   health() { return { ok: true, version: VERSION, network: this.dep.network, relayer: this.wallet.publicKey.toBase58(), balanceSol: this.balance === undefined ? null : this.balance / 1e9, lowBalance: this.balance !== undefined && this.balance < LOW_BALANCE_LAMPORTS, publisher: !!this.postman }; }
@@ -71,10 +72,9 @@ class RelayerCore {
         status: p.delisted ? 'delisted' : !b.discovered ? 'verified' : bond && now < Number(bond.unlockAt) ? 'unverified' : 'verified', creator: bond ? bond.creator.toBase58() : null,
         totalFeeX: p.totalFeeX.toString(), totalFeeY: p.totalFeeY.toString(), rewards: p.rewards.map((r, i) => (r.initialized ? { index: i, mint: r.mint.toBase58(), rateQ64: r.rate.toString(), end: Number(r.end) } : null)).filter(Boolean) }); } return out; }
   /// Pools anyone listed since the deploy (getProgramAccounts on veyl_bin, at most every 60 s; force: now). Their tokens are
-  /// keyed by mint in symOf / extraTokens, so fees, the fee floor and routes work for them. A token not in the deployment is
-  /// valued for the fee floor only through a pool against a priced token whose priced side holds at least
-  /// DISCOVERED_MIN_DEPTH_USD (default 1000), at DISCOVERED_HAIRCUT (default 0.5) of that pool's price; otherwise this
-  /// relayer refuses fees in it (an unpriced token would let anyone make it pay rent for nothing).
+  /// keyed by mint in symOf / extraTokens, so fees, the fee floor and routes work for them; fees in such a token follow
+  /// _valueDiscovered and the limits in fees.js (_derivedLimit), else this relayer refuses them (an unpriced token would let
+  /// anyone make it pay rent for nothing).
   /// A forced re-scan (a request named a mint this relayer does not know yet) runs at most every DISCOVER_MIN_MS (10 s): any
   /// request can name a made-up mint, and each scan reads every pool on chain (REVIEW.md L-7).
   async discover(force = false) { const age = this._discAt ? Date.now() - this._discAt : Infinity; if (age < (force ? Number(process.env.DISCOVER_MIN_MS || 10_000) : 60_000)) return this.discovered;
@@ -85,28 +85,47 @@ class RelayerCore {
           this.extraTokens[k] = { mint: k, decimals: mi.decimals, program: mi.program }; this.symOf[k] = { sym: k, decimals: mi.decimals, discovered: true }; }
         const sx = this.symOf[p.mintX.toBase58()], sy = this.symOf[p.mintY.toBase58()]; if (!sx || !sy) continue;
         out.push({ id: [sx.sym, sy.sym].map((x) => (sx.discovered || sy.discovered ? x : x.toLowerCase())).join('-') + '-' + p.binStep, x: sx.sym, y: sy.sym, binStep: p.binStep, baseFee: p.baseFee, address: p.address.toBase58(), mintX: p.mintX.toBase58(), mintY: p.mintY.toBase58(), discovered: true }); }
-      this.discovered = out; await this._valueDiscovered(fresh); this._discAt = Date.now(); return out; } finally { this._discP = null; } })(); return this._discP; }
-  /// USD prices of discovered tokens (derivedPrices), from their deepest pool against a priced token (see discover).
-  async _valueDiscovered(pools) { const minUsd = Number(process.env.DISCOVERED_MIN_DEPTH_USD || 1000), cut = Number(process.env.DISCOVERED_HAIRCUT || 0.5); const best = {};
+      this.discovered = out; await this._valueDiscovered(fresh); this._discAt = Date.now(); this._chainPools = chain;
+      if (chain.length) this.syncPoolLuts(chain).catch((e) => console.error('pool lookup tables', String(e.message).slice(0, 160))); /* in the background: /pools does not wait for it */
+      return out; } finally { this._discP = null; } })(); return this._discP; }
+  /// USD prices of discovered tokens (derivedPrices), for the fee floor only. A pool's spot price is whatever its creator
+  /// opened it at, and its vault balance can sit at bins nowhere near that price, so neither is trusted: a token is valued
+  /// from its pools against a priced (deployment) token by what selling it into the pool would actually return, counting
+  /// only the priced side's liquidity within DISCOVERED_BAND (default 5%) of the active bin (at most 120 bins), as the
+  /// average price of that band (never above spot). That band must hold at least DISCOVERED_MIN_DEPTH_USD (default 1000);
+  /// the price is cut to DISCOVERED_HAIRCUT (default 0.5) and the lowest seen over the last DISCOVERED_TWAP_MS (30 min)
+  /// is used, so a pump inside that window does not raise it. The deepest such pool wins.
+  async _valueDiscovered(pools) { const env = process.env; const minUsd = Number(env.DISCOVERED_MIN_DEPTH_USD || 1000), cut = Number(env.DISCOVERED_HAIRCUT || 0.5), band = Number(env.DISCOVERED_BAND || 0.05), win = Number(env.DISCOVERED_TWAP_MS || 1_800_000); const best = {};
     for (const p of pools) { const kx = p.mintX.toBase58(), ky = p.mintY.toBase58(); const sx = this.symOf[kx], sy = this.symOf[ky]; if (!sx || !sy || p.delisted || !p.seeded) continue;
-      const dec = (s) => (this.dep.tokens[s.sym] || this.extraTokens[s.sym]).decimals; const human = (Number(S.priceOf(p.basePrice, p.binStep, p.activeId)) / 2 ** 128) * 10 ** (dec(sx) - dec(sy));
-      for (const [mine, other, vault, usd] of [[sx, sy, p.vaultY, (u) => human * u], [sy, sx, p.vaultX, (u) => (human > 0 ? u / human : 0)]]) {
-        if (!mine.discovered || other.discovered || !this.prices[other.sym]) continue; let bal = 0n; try { bal = BigInt((await this.conn.getTokenAccountBalance(vault)).value.amount); } catch { continue; }
-        const depth = (Number(bal) / 10 ** dec(other)) * this.prices[other.sym]; if (depth < minUsd) continue; const px = usd(this.prices[other.sym]) * cut;
+      const dec = (s) => (this.dep.tokens[s.sym] || this.extraTokens[s.sym]).decimals; const nb = Math.min(120, Math.max(1, Math.ceil(Math.log(1 + band) / Math.log(1 + p.binStep / 10_000))));
+      for (const [mine, other, xIn] of [[sx, sy, true], [sy, sx, false]]) { if (!mine.discovered || other.discovered || !this.prices[other.sym]) continue;
+        const q = await this._bandQuote(p, xIn, nb); if (!q) continue; const depth = (q.out / 10 ** dec(other)) * this.prices[other.sym]; if (depth < minUsd) continue;
+        const px = q.rate * 10 ** (dec(mine) - dec(other)) * this.prices[other.sym] * cut; /* USD per whole token sold */
         if (px > 0 && (!best[mine.sym] || depth > best[mine.sym].depth)) best[mine.sym] = { px, depth }; } }
-    this.derivedPrices = Object.fromEntries(Object.entries(best).map(([k, v]) => [k, v.px])); }
+    const now = Date.now(); const hist = (this._pxHist = this._pxHist || {}); const out = {};
+    for (const [k, v] of Object.entries(best)) { hist[k] = [...(hist[k] || []).filter((x) => now - x.at < win), { at: now, px: v.px }]; out[k] = Math.min(...hist[k].map((x) => x.px)); }
+    for (const k of Object.keys(hist)) if (!best[k]) delete hist[k]; /* no deep pool now: unvalued, and its history starts again */
+    this.derivedPrices = out; this.derivedDepth = Object.fromEntries(Object.entries(best).map(([k, v]) => [k, v.depth])); }
+  /// Selling the pool's X (xIn) or Y into the `nb` bins from the active one: { out: the other token's atoms there, rate: out
+  /// per atom sold (out / what buying all of it would take), never above the active bin's price }. null when empty.
+  async _bandQuote(p, xIn, nb) { const a = p.activeId; const ids = []; for (let i = 0; i <= nb; i++) ids.push(xIn ? a - i : a + i);
+    const bins = await this.V.bins(p.address, [...new Set(ids.map(S.chunkOf))]); let out = 0, cost = 0;
+    for (const id of ids) { const b = bins.get(id); if (!b) continue; const px = Number(S.priceOf(p.basePrice, p.binStep, id)) / 2 ** 128; /* Y atoms per X atom */
+      if (xIn) { const y = Number(b.y); if (y > 0 && px > 0) { out += y; cost += y / px; } } else { const x = Number(b.x); if (x > 0) { out += x; cost += x * px; } } }
+    return out > 0 && cost > 0 ? { out, rate: out / cost } : null; }
   /// A discovered token this relayer cannot value for its fee floor.
   _unvalued(sym) { return !!(this.extraTokens && this.extraTokens[sym]) && !(this.derivedPrices && this.derivedPrices[sym] > 0); }
   /// The relayer's fee account for a discovered token, created when missing (its rent is in shieldCost).
   async _ensureFeeAccount(mint) { const k = new PublicKey(mint).toBase58(); if (!this.extraTokens || !this.extraTokens[k]) return; const tp = await this.V.tokenProgram(k); const ata = this.V.ata(k, this.wallet.publicKey, tp);
     if (await this.conn.getAccountInfo(ata)) return; const spl = require('@solana/spl-token'); await this.V.send([spl.createAssociatedTokenAccountIdempotentInstruction(this.wallet.publicKey, ata, this.wallet.publicKey, new PublicKey(k), tp)], [], 100_000); }
 }
-const Fees = require('./fees.js'), Notes = require('./notes.js'), Shielded = require('./shielded.js'), Sealed = require('./sealed.js'), Postman = require('./postman.js'), Faucet = require('./faucet.js');
-class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(RelayerCore)))))) {
+const Fees = require('./fees.js'), Notes = require('./notes.js'), Shielded = require('./shielded.js'), Sealed = require('./sealed.js'), Postman = require('./postman.js'), Faucet = require('./faucet.js'), Luts = require('./luts.js');
+class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(Luts(RelayerCore))))))) {
   /// A request naming a token this relayer has not seen (a pool listed in the last minute) looks again once, then retries.
   async _withDiscovery(f) { try { await this.discover(); } catch { /* the deployment's tokens still work */ } try { return await f(); } catch (e) { if (!/unknown token/.test(String(e && e.message))) throw e; await this.discover(true); return f(); } }
   async feeQuote(req) { return this._withDiscovery(() => super.feeQuote(req)); }
-  async submit(req) { return this._withDiscovery(async () => { for (const m of feeMints(req)) await this._ensureFeeAccount(m); return super.submit(req); }); }
+  /// A pool's accounts being added to a lookup table right now (syncPoolLuts) are waited for, a few seconds at most.
+  async submit(req) { return this._withDiscovery(async () => { for (const m of feeMints(req)) await this._ensureFeeAccount(m); if (this._lutJob) await Promise.race([this._lutJob.catch(() => {}), new Promise((r) => setTimeout(r, 8000))]); return super.submit(req); }); }
 }
 /// The mints a request pays this relayer's fees in (legs, transact / sealed external data, an LP action's pool tokens).
 function feeMints(req) { const out = new Set(); const add = (m) => { if (m && typeof m === 'string' && m.length >= 32) out.add(m); };

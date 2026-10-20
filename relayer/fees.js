@@ -12,15 +12,32 @@ module.exports = (Base) => class Fees extends Base {
     return BigInt(Math.ceil((lamports / 1e9) * (sol / px) * 10 ** t.decimals * this.feeCover)); }
   /// Per kind and token: the smallest fee in atoms that covers the worst case (what the app uses to pick feeBps).
   minFeeTable() { const out = {}; for (const [kind, lam] of Object.entries(WORST)) { out[kind] = {}; for (const sym of Object.keys(this.dep.tokens)) out[kind][sym] = this.atomsFor(lam, sym).toString(); } return out; }
-  /// parts: [{ sym, atoms }] fees paid in each token; refuses unless together they cover `lamports`.
+  /// parts: [{ sym, atoms }] fees paid in each token; refuses unless together they cover `lamports`. A request whose fee
+  /// covers it only with discovered tokens' prices also passes _derivedLimit, and its cost is counted against their budget.
   _coverOrRefuse(lamports, parts) {
     const all = parts; parts = parts.filter((x) => !this._unvalued(x.sym)); /* a discovered token without a price pays nothing toward the floor */
     if (all.length && !parts.length) throw new Error('this relayer cannot value ' + [...new Set(all.map((x) => x.sym))].join(', ') + ' for its fee yet: no pool of it against a priced token is deep enough');
     if (parts.some((x) => this.atomsFor(1e9, x.sym) === 0n)) return; // no price for one of the deployment's tokens: no floor
-    const covered = parts.reduce((acc, x) => acc + Number(x.atoms) / Number(this.atomsFor(lamports, x.sym)), 0);
+    const cov = (xs) => xs.reduce((acc, x) => acc + Number(x.atoms) / Number(this.atomsFor(lamports, x.sym)), 0); const covered = cov(parts);
     if (covered + 1e-12 < 1) { const need = parts.map((x) => `${this.atomsFor(lamports, x.sym)} ${x.sym} atoms`).join(' or ');
       throw new Error(`fee too low for this relayer: it pays ${(lamports / 1e9).toFixed(6)} SOL for this request (rent + fees); the fee must be worth at least ${need}`); }
+    const derived = [...new Set(parts.filter((x) => this._derived(x.sym)).map((x) => x.sym))];
+    if (derived.length && lamports > 0 && cov(parts.filter((x) => !this._derived(x.sym))) + 1e-12 < 1) { this._derivedLimit(derived, lamports); this._derivedSpend(derived, lamports); }
   }
+  /// A token valued only through a pool listed after the deploy (relayer.js _valueDiscovered).
+  _derived(sym) { return !!(this.extraTokens && this.extraTokens[sym]) && !this.prices[sym]; }
+  /// Fees in discovered tokens are worth only what their pools say, and a pool's creator can pull its liquidity right after
+  /// this relayer accepted the fee, so what such fees may cover is capped: DISCOVERED_MAX_COST_SOL per request (default
+  /// 0.03: no new bin array, share account or LpAcc, whose rent is 0.015 to 0.07 SOL each), DISCOVERED_BUDGET_SOL per token
+  /// (default 0.5) and DISCOVERED_BUDGET_TOTAL_SOL over all of them (default 2) per rolling 24 h. Past that, the fee must be
+  /// paid (or covered) in a listed token.
+  _derivedLimit(syms, lamports) { const env = process.env; const per = Number(env.DISCOVERED_MAX_COST_SOL || 0.03) * 1e9, tok = Number(env.DISCOVERED_BUDGET_SOL || 0.5) * 1e9, tot = Number(env.DISCOVERED_BUDGET_TOTAL_SOL || 2) * 1e9;
+    const name = syms.map((s) => s.slice(0, 4) + '…' + s.slice(-4)).join(', ');
+    if (lamports > per) throw new Error(`this request costs this relayer ${(lamports / 1e9).toFixed(4)} SOL (new accounts' rent); a fee in ${name} (a token listed since the deploy) covers at most ${(per / 1e9).toFixed(4)} SOL: pay the fee in a listed token`);
+    const spent = this._derivedSpent(); if (spent.total + lamports > tot || syms.some((s) => (spent[s] || 0) + lamports > tok)) throw new Error(`this relayer has taken all the fees in ${name} it accepts today (tokens listed since the deploy are capped): pay the fee in a listed token`); }
+  _derivedSpent() { const now = Date.now(); this._dspend = (this._dspend || []).filter((x) => now - x.at < 86_400_000); const out = { total: 0 };
+    for (const x of this._dspend) { out.total += x.lamports; for (const s of x.syms) out[s] = (out[s] || 0) + x.lamports; } return out; }
+  _derivedSpend(syms, lamports) { (this._dspend = this._dspend || []).push({ at: Date.now(), syms, lamports }); }
   async _missing(addrs) { const infos = await this.conn.getMultipleAccountsInfo(addrs.map((a) => new PublicKey(a))); return infos.filter((x) => !x).length; }
   /// What this exact request costs the relayer, in lamports.
   async costOf(kind, req) { const V = this.V; const d = req.d; let lam = 0;
@@ -61,6 +78,7 @@ module.exports = (Base) => class Fees extends Base {
   async feeQuote(req) { req = deepBig(req); const kind = req.kind; if (!WORST[kind]) throw new Error('unknown kind'); if (SHIELD_KINDS.has(kind) && kind !== 'migrate') return this.shieldFeeQuote(req);
     const lam = await this.costOf(kind, req); const base = await this._feeBase(kind, req, false);
     if (base.some((x) => this.atomsFor(1e9, x.sym) === 0n)) return { feeBps: this.minFeeBps, costLamports: lam };
+    if (base.every((x) => this._derived(x.sym))) this._derivedLimit([...new Set(base.map((x) => x.sym))], lam);
     const cover = base.reduce((a, x) => a + Number(x.atoms) / Number(this.atomsFor(lam, x.sym)), 0);
     let bps = this.minFeeBps; if (cover <= 0) throw new Error('nothing to pay the relayer fee from');
     const need = Math.ceil(10_000 / cover); if (need > bps) bps = need + 1; // +1: fees are rounded down on chain
@@ -88,6 +106,7 @@ module.exports = (Base) => class Fees extends Base {
   /// POST /fee for a Phase 2 kind: { kind, mint, ... } -> the flat fee (atoms of `mint`) that covers this relayer's cost.
   async shieldFeeQuote(req) { const sym = this._symOfMint(req.mint); if (this._unvalued(sym)) this._coverOrRefuse(0, [{ sym, atoms: 0n }]);
     let lam = await this.shieldCost(req.kind, req); if (this.extraTokens && this.extraTokens[sym] && (await this._missing([this._feeAta(req.mint)]))) lam += rentOf(SIZES.tokenAccount); /* its fee account, made at submit */
+    if (this._derived(sym)) this._derivedLimit([sym], lam);
     const atoms = this.atomsFor(lam, sym);
     return { fee: (atoms > 0n ? atoms : 0n).toString(), costLamports: lam, sym }; }
 };

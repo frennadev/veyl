@@ -18,6 +18,7 @@ const KIND = { SWAP: 3, CLAIM: 4 };
 const STATE = ['open', 'closed', 'settled', 'failed'];
 const MAX_MEMBERS = 6; const AMOUNT_LIMIT = 1n << 40n; const MAX_PER_DIRECTION = 64;
 const Q128 = 1n << 128n;
+const SEALED_POOL_SIZE = 8 + 3 * 32 + 3 * 8 + 16 + 6; // SealedPool::SIZE
 const bytesVec = (b) => { const x = Z.bytes(b); return Buffer.concat([u32(x.length), x]); };
 
 // ------------------------------------------------------------------------------------------------ hashes (= sealed.rs)
@@ -103,6 +104,10 @@ function install(Veyl) {
   P_.committee = async function () { const a = await this.conn.getAccountInfo(this.committeePda()); return a ? decodeCommittee(a.data) : null; };
   P_.sealed = async function (binPool) { const a = await this.conn.getAccountInfo(this.sealedPda(binPool)); return a ? decodeSealed(a.data) : null; };
   P_.batch = async function (binPool, seq) { const addr = this.batchPda(binPool, seq); const a = await this.conn.getAccountInfo(addr); return a ? { address: addr, ...decodeBatch(a.data) } : null; };
+  /// Every bin pool with sealed swaps turned on (a SealedPool account: the committee authority's init_sealed_pool), as
+  /// [{ binPool, ...settings }]: one getProgramAccounts read, deployment file or not (pools listed later included).
+  P_.sealedPools = async function () { const rows = await this.conn.getProgramAccounts(this.programs.entry, { commitment: 'confirmed', filters: [{ dataSize: SEALED_POOL_SIZE }, { memcmp: { offset: 0, bytes: V_.disc('SealedPool', 'account').toString('base64'), encoding: 'base64' } }] });
+    return rows.map((r) => decodeSealed(r.account.data)); };
   /// The pool's current batch with its settings, and the slot now (for the countdown).
   P_.sealedState = async function (binPool) { const s = await this.sealed(binPool); if (!s) return null; const b = await this.batch(binPool, s.seq); const slot = await this.conn.getSlot('confirmed'); return { sealed: s, batch: b, slot }; };
 

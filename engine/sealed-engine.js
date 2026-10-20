@@ -19,14 +19,14 @@ export function installSealed(Engine) {
   /// the last finished batch's public outcome. From the relayer; read from the chain when the relayer cannot answer.
   P.sealedState = async function (pool) {
     try { const r = await fetch(this.cfg.relayer + '/sealed?pool=' + encodeURIComponent(pool.address || pool)).then((x) => x.json()); if (!r.error) return r; } catch { /* chain below */ }
-    const st = await this.V.sealedState(new PublicKey(pool.address || pool)); if (!st) return { enabled: false };
+    const st = await this.V.sealedState(new PublicKey(pool.address || pool)); if (!st) return { enabled: false, reason: 'not-enabled', why: 'Sealed swaps are turned on pool by pool by the batch committee; this pool does not have them (yet). Instant private swaps work.' };
     const { sealed: s, batch: b, slot } = st; const pub = (x) => x && { seq: String(x.seq), state: x.state, count: x.count, rollovers: x.rollovers, endSlot: String(x.endSlot), closedSlot: String(x.closedSlot), verified: x.verified, totals: x.totals.map(String), num: x.num.map(String), den: x.den.map(String), xForY: x.xForY };
     const last = s.seq > 0n ? await this.V.batch(new PublicKey(pool.address || pool), s.seq - 1n) : null; const c = await this.V.committee();
     return { enabled: true, slot, slotMs: 400, paused: s.paused, mintX: s.mintX.toBase58(), mintY: s.mintY.toBase58(), seq: String(s.seq), epochSlots: String(s.epochSlots), settleTimeout: String(s.settleTimeout), minIn: s.minIn.map(String), kMin: s.kMin, maxRollovers: s.maxRollovers, batch: pub(b), last: pub(last), committee: c ? { t: c.t, n: c.n, epoch: c.epoch, kind: c.kind, pk: J.enc(c.pk).toString('hex') } : null };
   };
   /// Seal a swap into the pool's current batch: `xIn` sells the pool's X token (else Y), `amount` in display units.
   P.sealedSwap = async function (pool, { xIn, amount }) {
-    await this.shieldSync(); const st = await this.sealedState(pool); if (!st.enabled) throw new Error('Sealed swaps are not enabled for this pool.');
+    await this.shieldSync(); const st = await this.sealedState(pool); if (!st.enabled) throw new Error(st.why || 'Sealed swaps are not enabled for this pool.');
     if (st.paused) throw new Error('Sealed swaps are paused for this pool.'); if (!st.committee) throw new Error('No batch committee is registered on this network.');
     const sym = xIn ? pool.x : pool.y; const mint = new PublicKey(this.tok(sym).mint); const v = this.unit(sym, amount); const dir = xIn ? 0 : 1;
     const minIn = BigInt(st.minIn[dir]); if (v < minIn) throw new Error('The smallest sealed swap in this pool is ' + this.fmt(sym, minIn) + ' ' + sym + '.');
