@@ -85,8 +85,8 @@ Only the upgrade authority can create pools or the factory (`init_pool`, `init_f
 handover, and list only classic SPL Token mints (USDC, USDT, wrapped SOL): no transfer-fee, hook or permanent-delegate mints.
 
 ## Cost (computed by `--dry-run`)
-Per program: rent(45+len) + rent(36) kept, plus a write buffer rent(37+len) held while that program uploads (refunded); rent(n) = (128+n) x 6,960 lamports; ~1 tx per KB x 5,000 lamports. Accounts: sizes in `config/account-sizes.json`.
-Programs today: `veyl_pool` 768 KB, `veyl_bin` 782 KB, `veyl_entry` 1.6 MB, so the programs alone keep about 16 SOL on any network and the largest write buffer adds 8.1 SOL to the peak.
+Per program: rent(45+len) + rent(36) kept, plus a write buffer rent(37+len) held while that program uploads (refunded); rent(n) is what the RPC answers (`getMinimumBalanceForRentExemption`; about 5,080 lamports a byte on mainnet and devnet in Nov 2026; the deploy's offline fallback, (128+n) x 6,960, overestimates); ~1 tx per KB x 5,000 lamports. Accounts: sizes in `config/account-sizes.json`.
+Programs today: `veyl_pool` 786 KB, `veyl_bin` 832 KB (mainnet build), `veyl_entry` 1.6 MB: they keep 3.99 + 4.23 + 8.23 = **16.45 SOL** on any network (mainnet RPC, Nov 2026), and the largest write buffer adds 8.23 SOL to the peak (refunded when that upload finishes).
 - **Devnet**, the 12 built-in pools, mock mints (dry-run, Oct 2026): **16.67 SOL** kept, **24.80 SOL** peak. Seeding adds ~0.25 SOL a pool; `VEYL-DEVNET.command` adds that and 2 SOL for the faucet, then prints the total (about 30 SOL for 12 pools; all 83 pools need roughly twice that).
 - **Mainnet** (SOL/USDC/USDT, 3 bin pools): about **16.4 SOL** kept, **24.5 SOL** peak (same programs; run the dry-run for the exact figure). Plus priority fees if you set `PRIORITY_FEE_MICROLAMPORTS`.
 - Paid later by whoever needs them (never refunded: there is no close instruction yet): a bin array (60 bins, 9,664 bytes) **0.0682 SOL**,
