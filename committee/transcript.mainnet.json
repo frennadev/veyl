@@ -1,0 +1,87 @@
+{
+ "protocol": "veyl-committee-dkg/jf-dkg-v1",
+ "curve": "babyjubjub (circomlib), base B8",
+ "session": "mainnet-one-operator-20261102",
+ "t": 2,
+ "n": 3,
+ "qual": [
+  1,
+  2,
+  3
+ ],
+ "dealers": [
+  {
+   "index": 1,
+   "node": "21TQvSsGpvW69uE5sGfJAv4tKvLb4HS9LkdZkpnNDqqo",
+   "boxKey": "fZmJVIOSlUb6mBAYfD++hiySrN5xH2ICH74uVm1rgGU=",
+   "commitments": [
+    "1f946569493bb14c7a40b42bf307462145656bc2a1711b7dcc20a57436ea13991d0e93579a6cf14b7abd594b25625ee9441d46e44eef97b1db0b28c49d9c28e9",
+    "00e09bb080b554928ef81b2a61308b5618c02c92967cff71c91694c4325d1a252e17a4c2acb87296a4c046b0e17f7c877d119565545671e169edb9d92934255f"
+   ],
+   "shares": {
+    "2": "htWUra9fc3nL17xnKtoXwwbkbk9kffpZxQHYg+fpfa33X4Dl4f3poXNzL2igWbHj",
+    "3": "EUMbX+640o6uB2AxVbmLZfOD/UDgrJ3mHYNg3iJbQ4yB4xeTBH2x1mItR4HTVo9A"
+   },
+   "sig": "8R8l1IourczB7+fhA1kjVO584GIlcoew4hN3pkzzKpAy4pW3A5PJaF0E/JTNPkk8Hu4eIfwBvIcKwjXPToT/Dg=="
+  },
+  {
+   "index": 2,
+   "node": "7FeDECM7yCax1fhnUP9az8A2TYXGAionAsZ4775pq7wK",
+   "boxKey": "hQepiwHjLcq3FSXOS7v13QK2lgjoIoOHqGiOEHpIm1U=",
+   "commitments": [
+    "21ca36d5e2df1933610cec9babc0cda36347f25ab1872bc62bf97f0a627ea27c07a59b2bfa905397f39adb0f2e33dd0d7dc73f59c971bbd81eecc3dab2cfe17e",
+    "04000dbca61f1c2a33138e6475f0b4448fae861de8ba2c48bc5b89d26d6330de28ba9326f00e1aff0bcb03c61a49faeb2a884a8a5e00bfdb87ce4db072d5b230"
+   ],
+   "shares": {
+    "1": "Nwp2nlvEiKYfFpkg/NJv3SE6xM00DV/XIWIi+4Ubiq0EEPoHxeqelE4DNtNFbeJY",
+    "3": "I8sUIrEtw9ZFSpJjfCH6Iocs9wd9J4eNIGVsqITdK+TDtmyxiDlkiLkqckZF6W9T"
+   },
+   "sig": "+VOhRA5SvTVzqAX2VY8+gEPNW9sokASxWEPlZxqb6sMKqlWsVNQ0LJfU/74hqLBRYgbMx9LaKa6hQA8hQTg+AA=="
+  },
+  {
+   "index": 3,
+   "node": "5r5qFbUhXgww1uL5iZWJuZu9ekscaQzfjVx3NRvyvAFo",
+   "boxKey": "WEEYBB7c7hdV/9rHiJ/rJs36qRwrnNe0u7NcGx+XCjA=",
+   "commitments": [
+    "19d5207a0bcfac10d053046b294ac2aeb0bf1937833947ebb49334da3214a48a06fa5ed8a15efd256e6eff01a05675e37d49ea766403b458ae18e28ecf666eae",
+    "1c29863d2573980f7de0801ddbd764b046f6af7bceaa3deb74f45e7faa756ab72ab7ee12bb2dcbd34ffff11f49fff3b8d1cf348e1ca3dace4e516d32cb0d2aba"
+   ],
+   "shares": {
+    "1": "tnY4HxPSbgZJNak/SSzwqVd7EbkPWty/4G+/g7xBW+wvmhyfAMpTFSwFrzlLm9Ke",
+    "2": "tWpxsl1f3KK2Q/SnoAUdDRP7xO4gAJoa0gt1ewtARF3bzwMPlt7e+PGGoeJRerVD"
+   },
+   "sig": "olXsWKPZwK8BvZH9zfvyjywd6BTEVSVCIsd6+6iQSEGHBzQMb0QKhdB/0ZXPKw53rBAXR4PGlpo2D3ZUgtR+AA=="
+  }
+ ],
+ "round2": [
+  {
+   "index": 1,
+   "view": "9844dccaaf8ec5e997bb8ca7e716174ad33224cb7524588dc316965dbe0f0dea",
+   "complaints": [],
+   "sig": "yLw83SG3peiWT460cd+B0RkMknR+c4sWxVswXOk4mSUxDo0GT8kZzFe4Ig9b+smJYB//FI/2ZPQe2YgjbUtXBA=="
+  },
+  {
+   "index": 2,
+   "view": "9844dccaaf8ec5e997bb8ca7e716174ad33224cb7524588dc316965dbe0f0dea",
+   "complaints": [],
+   "sig": "774PJK4dBMmX+HEX36V8BE5uN1jZ5PJZCxeBR8FENpnrJ5Xge9qCKFFlu/e/1qthjK9HvdFsr0PxR49+Kr0FAA=="
+  },
+  {
+   "index": 3,
+   "view": "9844dccaaf8ec5e997bb8ca7e716174ad33224cb7524588dc316965dbe0f0dea",
+   "complaints": [],
+   "sig": "yuo6jPZHii1POWAtoTKDQrZRLBDSawnm4CGX3aorVoGVoNc+B2XXziMSA14CcDLs2AzXUgnZOeEj2A4BX6wEDw=="
+  }
+ ],
+ "pk": "18cc156b7044693c34c491c9894aaa3d6d0fcec51b74dba63a84928718c47a4c20fb8267ca7e669c41d3456e647e83e4ef15bcb19201bcf99d706a20030e122b",
+ "members": [
+  "0268ed89810cb3aae998f199e3cf31b9a21744a6efa2767732b9bd82ad02e52d1bdd9f5db7a081c33d4ccaea4b73fdeca0e6dd6414b583589ee906948765b65c",
+  "0f02660b5919dfed6c1492530b55f2cd4ca91846a937aa951801ac9455fd9bdb0b85e3b0c43966cca76e3e3d6a1f55a848e43725bb1bd6cdf3e3cbd4a8db3e8e",
+  "2b0ca3f8984d52a370d6e93f27ee88ac81b3badbc488d6856f95c6dff55575f91cd10d4202cf731b9dd787f64cd5b926bb6452e9fb8692d700478d3c73837428"
+ ],
+ "nodes": [
+  "21TQvSsGpvW69uE5sGfJAv4tKvLb4HS9LkdZkpnNDqqo",
+  "7FeDECM7yCax1fhnUP9az8A2TYXGAionAsZ4775pq7wK",
+  "5r5qFbUhXgww1uL5iZWJuZu9ekscaQzfjVx3NRvyvAFo"
+ ]
+}
