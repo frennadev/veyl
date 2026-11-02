@@ -136,7 +136,7 @@ async function main() {
     return selectTokens({ ...cfg, prices: lp.prices }); };
   let { tokens, binPools } = await priced(!args.dryRun);
   console.log(`Veyl (Solana) deploy -> ${network}${args.dryRun ? '  [dry run: nothing is sent]' : ''}`);
-  console.log(`RPC ${N.isVerify(rpc) ? '(unset: config still says VERIFY)' : rpc}`);
+  console.log(`RPC ${N.isVerify(rpc) ? '(unset: config still says VERIFY)' : (() => { try { return new URL(rpc).host + (new URL(rpc).search ? ' (query hidden: it may hold an API key)' : ''); } catch { return '(unparsable)'; } })()}`); /* never the full URL: keyed RPCs carry their API key in it */
   console.log(`Deployer ${key.keypair ? key.keypair.publicKey.toBase58() : '(' + key.error + ')'}`);
 
   // preflight (always printed; red refuses a real deploy on every network)

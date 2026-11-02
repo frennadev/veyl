@@ -43,5 +43,5 @@ if (require.main === module) (async () => {
   const ti = a.rest.indexOf('--trades'); const trades = ti >= 0 ? Number(a.rest[ti + 1]) : 4;
   const si = a.rest.indexOf('--span'); const span = si >= 0 ? Number(a.rest[si + 1]) : 20; const ui = a.rest.indexOf('--usd'); const usdPerSide = ui >= 0 ? Number(a.rest[ui + 1]) : 20_000;
   const r = await seed({ V, conn, payer, dep, trades, span, usdPerSide, again: a.rest.includes('--again'), log: (m) => console.log('  ' + m) });
-  console.log('seeded ' + r.length + ' pools on ' + a.network + ' (' + rpc + ')');
+  console.log('seeded ' + r.length + ' pools on ' + a.network + ' (' + (() => { try { return new URL(rpc).host; } catch { return 'rpc'; } })() + ')');
 })().catch((e) => { console.error(e.message || e); process.exit(1); });
