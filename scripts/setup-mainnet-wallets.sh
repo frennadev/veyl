@@ -23,7 +23,9 @@ newkey() { # $1 file, $2 what it is: a fresh keypair with a seed phrase shown ON
   if [ -f "$1" ]; then echo "  reusing $(basename "$1")"; return; fi
   echo; echo "== $2: write the seed phrase below on paper; it is the only backup =="
   solana-keygen new --no-bip39-passphrase -o "$1"
-  chmod 600 "$1"; }
+  chmod 600 "$1"
+  # the build below prints a lot: wait until the phrase is on paper, then clear it from the screen
+  read -r -p "Written the seed phrase down? Press Enter to continue... " _ </dev/tty; clear 2>/dev/null || true; }
 pub() { solana-keygen pubkey "$1"; }
 
 newkey "$KEYS/deployer.json" "deployer (pays the deploy)"
