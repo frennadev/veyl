@@ -253,8 +253,9 @@ export class Engine {
   /// a path needs is read once, all in parallel, then each path is simulated locally (same result as V.quoteLocal per hop,
   /// without re-reading a pool for every path: with dozens of pools over a remote RPC that took tens of seconds).
   /// -> { path: [{ pool, xForY, out, name, feePips (the pool's base fee), volatilityPips (its variable fee now) }], out, fee,
-  /// lpFee, protocolFee }: lpFee and protocolFee (the fixed 0.2% of each hop's input) in atoms of the input token (a second
-  /// hop's converted at the first hop's rate); `fee` = their sum per hop in each hop's own token, as before.
+  /// lpFee, lpBonus, protocolFee }: lpFee (the tier fee + the fixed 0.05% LP bonus, all to LPs), lpBonus (that 0.05% part of
+  /// lpFee) and protocolFee (the fixed 0.2% of each hop's input) in atoms of the input token (a second hop's converted at the
+  /// first hop's rate); `fee` = their sum per hop in each hop's own token, as before.
   async quoteRoute(symIn, symOut, amountIn) {
     const pools = this.cfg.binPools; const paths = [];
     const hopsFor = (a, b) => pools.filter((p) => (p.x === a && p.y === b) || (p.x === b && p.y === a)).map((p) => ({ pool: p.address, xForY: p.x === a, out: p.x === a ? p.y : p.x, name: this.tokLabel(p.x) + '–' + this.tokLabel(p.y) }));
@@ -263,13 +264,13 @@ export class Engine {
     const state = new Map(); for (const h of paths.flat()) { const k = h.pool + (h.xForY ? ':x' : ':y'); if (!state.has(k)) state.set(k, (async () => { const pool = new PublicKey(h.pool); const p = await this.V.binPool(pool); return { p, bins: await this.V.bins(pool, S.chunksForSwap(p, h.xForY, S.SWAP_ARRAYS)) }; })().catch(() => null)); }
     const loaded = new Map(await Promise.all([...state].map(async ([k, v]) => [k, await v])));
     let best = null; const now = Math.floor(Date.now() / 1000); amountIn = BigInt(amountIn);
-    for (const path of paths) { let amt = amountIn, ok = true, fee = 0n, lpFee = 0n, protocolFee = 0n, rate = null; const hops = [];
+    for (const path of paths) { let amt = amountIn, ok = true, fee = 0n, lpFee = 0n, lpBonus = 0n, protocolFee = 0n, rate = null; const hops = [];
       for (const h of path) { const s = loaded.get(h.pool + (h.xForY ? ':x' : ':y'));
         try { if (!s) throw new Error('pool unavailable'); const q = S.simulateSwap(s.p, s.bins, h.xForY, amt, now); const pr = S.protocolFeeOf(amt, s.p.protocolFeeBps === undefined ? S.PROTOCOL_FEE_BPS : s.p.protocolFeeBps);
-          const toIn = (v) => (rate ? (v * rate[0]) / rate[1] : v); lpFee += toIn(q.lpFee); protocolFee += toIn(pr); if (!rate) rate = [amt, q.out > 0n ? q.out : 1n]; else rate = [rate[0] * amt, rate[1] * (q.out > 0n ? q.out : 1n)];
+          const toIn = (v) => (rate ? (v * rate[0]) / rate[1] : v); lpFee += toIn(q.lpFee); lpBonus += toIn(q.lpBonus); protocolFee += toIn(pr); if (!rate) rate = [amt, q.out > 0n ? q.out : 1n]; else rate = [rate[0] * amt, rate[1] * (q.out > 0n ? q.out : 1n)];
           const { ref, iref } = S.refsOf(s.p, now); const cur = Number(S.feeOf(s.p, S.accOf(ref, iref, s.p.activeId)));
           hops.push({ ...h, feePips: Number(s.p.baseFee), volatilityPips: Math.max(0, cur - Number(s.p.baseFee)) }); amt = q.out; fee += q.fee; } catch { ok = false; break; } }
-      if (ok && amt > 0n && (!best || amt > best.out)) best = { path: hops, out: amt, fee, lpFee, protocolFee }; }
+      if (ok && amt > 0n && (!best || amt > best.out)) best = { path: hops, out: amt, fee, lpFee, lpBonus, protocolFee }; }
     return best;
   }
   async swap(symIn, symOut, amountIn, { slippageBps = 100 } = {}) {
@@ -429,7 +430,7 @@ export class Engine {
     return this._savePos({ id: 'p' + Date.now(), kind: 'private', pool: addr, x: pool.x, y: pool.y, owner: owner.publicKey.toBase58(), key: Buffer.from(owner.secretKey).toString('base64'), ids, lo: o.lo, hi: o.hi, shape, zap: true, createdAt: Date.now(), tx: r.txHash }); }
   async planZapPreview(pool, o) { const st = await this.poolState(pool.address, 1); const ids = []; for (let i = o.lo; i <= o.hi; i++) ids.push(i); const shape = o.shape === 'bidask' ? 'bidAsk' : o.shape || 'spot';
     const sym = o.xIn ? pool.x : pool.y; const p = await this.V.planZap(new PublicKey(pool.address), { xIn: !!o.xIn, amountIn: this.unit(sym, o.amount), ids, ...shapeWeights(ids, st.active, shape), slippageBps: 200 });
-    return { swapIn: this.fmt(sym, p.swapAmount), swapOut: this.fmt(o.xIn ? pool.y : pool.x, p.swapOut), activeAfter: p.activeAfter, bins: p.amountsX.filter((x, i) => x > 0n || p.amountsY[i] > 0n).length, lpFee: p.lpFee, protocolFee: p.protocolFee }; } // fees: atoms of the token zapped in (its swapped part)
+    return { swapIn: this.fmt(sym, p.swapAmount), swapOut: this.fmt(o.xIn ? pool.y : pool.x, p.swapOut), activeAfter: p.activeAfter, bins: p.amountsX.filter((x, i) => x > 0n || p.amountsY[i] > 0n).length, lpFee: p.lpFee, lpBonus: p.lpBonus, protocolFee: p.protocolFee }; } // fees: atoms of the token zapped in (its swapped part)
 
   // ---- notes paid out by a signed private action: the ones the chain did not create (a zero amount) are dropped
   _outNote(sym, key) { const s = newNote(); return { pool: this.tok(sym).pool, sym, nullifier: s.nullifier, secret: s.secret, precommitment: s.precommitment, refundKey: key, createdAt: Date.now() }; }

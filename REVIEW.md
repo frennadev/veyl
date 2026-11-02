@@ -670,10 +670,38 @@ so a total is below 2^46 and baby-step giant-step decodes it off chain; the prog
 4. `consume_swap` / `consume_claim` in veyl_pool (entry-only) and the claim proof padding.
 5. `committee/dkg.js` (share encryption, signatures, transcript) and `committee/node.js` (share storage).
 
+## LP bonus (November 2026): 0.05% of every swap to liquidity providers
+
+**What changed.** Owner decision (2026-11-02): every swap through a veyl_bin pool pays an extra 0.05% of its input to the
+pool's LPs, on top of the tier's LP fee (base + volatility) and the fixed 0.2% protocol fee. `LP_BONUS_BPS = 5` is a program
+constant, not a pool field: existing pools get it with the upgrade alone (no account layout change, no migration). In
+`simulate` (the single fee path behind `swap`, `quote`, `swap_and_add`, and so every CPI: private swaps, routed hops, zaps,
+the sealed batch's net swap), `bonus = min(lp_bonus_of(amount_in), amount_in - protocol_fee)` with
+`lp_bonus_of(a) = ceil(a * 5 / 10_000)`. The rounding direction and input are the protocol fee's (`protocol_fee_of`, the gross
+input), and the protocol fee is still computed on the same gross input as before, so it stays exactly 0.2%. Both come off the
+input first. What is left trades through the bins as before. Each traded bin gets `bonus * used / traded` (floored; the last
+bin takes the remainder, so the parts sum to the bonus exactly). That part is added to the bin's LP fee before the existing
+market-maker / limit-order split, so it follows the LP fee's path: fee growth per eligible share, the limit orders' filled
+amount pro rata to what they sold, and the protocol when no provider is eligible. A swap too small to trade
+(amount_in <= 2: everything left is fees) books the bonus to the protocol. The sealed batch's matched part never reaches
+the bins, so it pays only the protocol fee, as before. The `Swapped` event's `fee`, `quote`'s fee and `total_fee_x/y` include
+the bonus.
+
+**Bounds checked.** The tier fee's `MAX_FEE` (10%) cap and `PIPS - fee > 0` are unchanged: the bonus is not added to the
+per-bin rate. The trader pays at most 10% + 0.25% (+ rounding). `bonus <= amount_in - protocol_fee`, so the input never
+underflows. `bonus * used` is below 2^128 (two u64 values). Each bin's part is at most the remaining bonus (floored shares of
+the non-final bins add up to less than the bonus). Filled amounts and reserves still go through the u64 checks.
+Conservation: the bonus is part of the input already pulled into the vault. Fee growth is floored and filled amounts are
+exact, so claimable + reserves + orders + protocol <= vault. The new test in tests/bin-permissionless.js finds 1 atom of
+dust. The JS twin `simulateSwap` does the same calculation (it also returns `lpBonus` and a per-bin `bonus`) and matches
+the program to the atom (quote, event fee, protocol fee).
+
 ## What changed for users (also in PRIVACY.md)
 
 - A relayer that receives a proof can no longer hold the note: any other relayer's newer post replaces it, and ragequit always
   works for an original deposit.
+- Every swap pays an extra 0.05% of its input to the pool's liquidity providers (on top of the pool's fee and the 0.2% protocol
+  fee); LPs claim it with their fees.
 - Small amounts pay a higher relayer rate (its costs are fixed); the app asks the relayer and shows the real figure.
 - Liquidity adds carry a minimum per bin (1% below the current figure), and dust no longer makes a removal fail.
 - Phase 2: balances, transfers inside the pool and liquidity position sizes are hidden; every amount at a pool, deposits and

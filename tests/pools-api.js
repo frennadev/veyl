@@ -20,7 +20,7 @@ const code = async (p, c) => { try { await p; return 'no error'; } catch (e) { r
 async function sandbox() {
   console.log('\n-- Sandbox');
   const sb = new E.Sandbox({ persist: false, market: false, bots: false, history: false }); await sb.init();
-  check('Engine.PROTOCOL_FEE_BPS = 20 (static), Sandbox too', E.Engine.PROTOCOL_FEE_BPS === 20 && E.Sandbox.PROTOCOL_FEE_BPS === 20);
+  check('Engine.PROTOCOL_FEE_BPS = 20 and Engine.LP_BONUS_BPS = 5 (static), Sandbox too', E.Engine.PROTOCOL_FEE_BPS === 20 && E.Sandbox.PROTOCOL_FEE_BPS === 20 && E.Engine.LP_BONUS_BPS === 5 && E.Sandbox.LP_BONUS_BPS === 5);
   const tiers = await sb.listTiers(); const want = { 1: 100, 5: 500, 10: 500, 20: 2500, 30: 3000, 50: 5000, 80: 10000, 100: 20000 };
   check('listTiers: the owner\'s 8 tiers { id, label, category, feePips, binStep }', tiers.length === 8 && tiers.every((t, i) => t.id === i && want[t.binStep] === t.feePips && t.label && ['stable', 'major', 'volatile'].includes(t.category)), JSON.stringify(tiers[5]));
   const terms = await sb.bondTerms(); check('bondTerms: 1 SOL, 30 days', terms.amount === 1_000_000_000n && terms.lockDays === 30);
@@ -47,7 +47,7 @@ async function sandbox() {
   check('quoteRoute with a mint and a symbol: lpFee + protocolFee (0.2% of each hop\'s input, a second hop\'s converted) in input atoms, path feePips / volatilityPips', q && (q.path.length === 1 ? q.protocolFee === S.protocolFeeOf(amt) : q.protocolFee > S.protocolFeeOf(amt) && q.protocolFee <= 2n * S.protocolFeeOf(amt) + 2n) && q.lpFee > 0n && q.path.some((h) => h.feePips >= 500 && h.volatilityPips >= 0), q && JSON.stringify({ lp: String(q.lpFee), pr: String(q.protocolFee), path: q.path.map((h) => h.name + ' ' + h.feePips + '/' + h.volatilityPips) }));
   const pub = await sb.swapPublic(T.JUP.mint, T.USDC.mint, '5'); check('swapPublic keyed by mints', pub.out > 0n);
   check('publicBalance / privateBalance / fmt take a mint', (await sb.publicBalance(T.USDC.mint)) === (await sb.publicBalance('USDC')) && sb.privateBalance(T.SOL.mint) === sb.privateBalance('SOL') && sb.fmt(T.SOL.mint, 10n ** 9n) === 1);
-  const zp = await sb.planZapPreview(row, { xIn: true, amount: 10, lo: st.active - 3, hi: st.active + 3 }); check('planZapPreview: lpFee + protocolFee of its swapped part', zp.protocolFee > 0n && zp.lpFee > 0n, String(zp.protocolFee));
+  const zp = await sb.planZapPreview(row, { xIn: true, amount: 10, lo: st.active - 3, hi: st.active + 3 }); check('planZapPreview: lpFee (incl. lpBonus) + protocolFee of its swapped part', zp.protocolFee > 0n && zp.lpFee > zp.lpBonus && zp.lpBonus > 0n, String(zp.protocolFee));
   const json = sb.chain.toJSON(); const ch2 = new sb.chain.constructor({ tokens: Object.values(sb.chain.tokens), pools: sb.chain.poolCfg, verify: async () => ({ ok: true }) }); ch2.load(JSON.parse(JSON.stringify(json, (k, v) => (typeof v === 'bigint' ? v.toString() : v)), (k, v) => v));
   check('persistence: a listed pool survives a reload of the chain state', ch2.pools.has(made.address) && ch2.pools.get(made.address).cfg.user);
   sb.stop();
@@ -127,7 +127,7 @@ async function onChain() {
     const owner = Keypair.generate().publicKey; await as.send(await as.ensureBinAccountsIxs(alice.publicKey, addr, ids, owner, alice.publicKey));
     await as.send([await as.mintIx(alice.publicKey, addr, { owner, authority: alice.publicKey, ids, amountsX: S.distribute(ax, w.weightsX), amountsY: S.distribute(ay, w.weightsY) })], [], 1_400_000);
     const amt = units(10, 6); const q = await e.quoteRoute(N, 'USDC', amt); const onchain = await V.quote(addr, xIsN, amt);
-    check('quoteRoute (mint in, symbol out): out == the program\'s quote; protocolFee = 0.2% of the input; lpFee = fee - protocolFee', q && q.out === onchain.out && q.protocolFee === S.protocolFeeOf(amt) && q.lpFee + q.protocolFee === onchain.fee, q && JSON.stringify({ out: String(q.out), chain: String(onchain.out), lp: String(q.lpFee), pr: String(q.protocolFee), fee: String(onchain.fee) }));
+    check('quoteRoute (mint in, symbol out): out == the program\'s quote; protocolFee = 0.2% of the input; lpFee = fee - protocolFee = tier fee + lpBonus (0.05%, ceil)', q && q.out === onchain.out && q.protocolFee === S.protocolFeeOf(amt) && q.lpFee + q.protocolFee === onchain.fee && q.lpBonus === S.lpBonusOf(amt) && q.lpBonus === 5_000n && q.lpFee - q.lpBonus === S.mulDivCeil(amt - q.protocolFee - q.lpBonus, 2_500n, S.PIPS), q && JSON.stringify({ out: String(q.out), chain: String(onchain.out), lp: String(q.lpFee), pr: String(q.protocolFee), fee: String(onchain.fee) }));
     check('quoteRoute path entry: name, feePips (2500), volatilityPips', q.path.length === 1 && q.path[0].feePips === 2500 && q.path[0].volatilityPips >= 0 && /USDC/.test(q.path[0].name), JSON.stringify(q.path[0]));
     const usdc0 = await V.tokenBalance(T.USDC.mint, alice.publicKey); const sw = await e.swapPublic(N, USDC, '10');
     check('swapPublic keyed by mints through the new pool', sw.tx && (await V.tokenBalance(T.USDC.mint, alice.publicKey)) - usdc0 >= (q.out * 98n) / 100n);

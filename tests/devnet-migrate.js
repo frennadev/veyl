@@ -113,8 +113,8 @@ const NEW_SO = process.env.MIGRATE_SO || path.join(ROOT, 'target/deploy/veyl_bin
     // ---------------------------------------------------------------- a swap after migration pays exactly 0.2%
     { const p = await V.binPool(P20); const amount = units(10, 6); const bins = await V.bins(P20, S.chunksForSwap(p, true)); const sim = S.simulateSwap(p, bins, true, amount, nowS());
       const sig = await as(bob).send([await V.swapIx(bob.publicKey, P20, true, amount)], [], 1_400_000); const ev = (await V.events(sig)).find((e) => e.name === 'Swapped'); const q = await V.binPool(P20);
-      const proto = S.protocolFeeOf(amount, 20); const lp = S.mulDivCeil(amount - proto, 2_500n, S.PIPS);
-      check('swap on a migrated pool: protocol += ceil(0.2%) exactly, LP fee at the new 0.25%, chain == JS twin', q.protocolFeeX - p.protocolFeeX === proto && proto === 20_000n && ev.protocolFee === proto && sim.lpFee === lp && ev.fee === lp + proto && ev.amountOut === sim.out, `+${q.protocolFeeX - p.protocolFeeX} lp ${sim.lpFee}`); }
+      const proto = S.protocolFeeOf(amount, 20); const bonus = S.lpBonusOf(amount); const lp = S.mulDivCeil(amount - proto - bonus, 2_500n, S.PIPS) + bonus;
+      check('swap on a migrated pool: protocol += ceil(0.2%) exactly, LP fee at the new 0.25% + the 0.05% LP bonus, chain == JS twin', q.protocolFeeX - p.protocolFeeX === proto && proto === 20_000n && ev.protocolFee === proto && sim.lpFee === lp && ev.fee === lp + proto && ev.amountOut === sim.out, `+${q.protocolFeeX - p.protocolFeeX} lp ${sim.lpFee}`); }
 
     // ---------------------------------------------------------------- new rules work: permissionless listing at a tier
     { const [x, y] = S.canonicalPair(B, C); const pool = V.binPoolPda(x, y, 20); const b0 = BigInt(await conn.getBalance(alice.publicKey, 'confirmed'));
