@@ -8,7 +8,10 @@
 //      ENTRY_PROGRAM; Anchor.toml [programs.mainnet]; config/mainnet.json "programs". Devnet/local IDs are unchanged.
 //   3. npm run build:mainnet (unless --no-build): the three programs with --features mainnet into target/deploy-mainnet/.
 //   4. Check: each mainnet .so embeds its own mainnet ID and the mainnet IDs of the programs it calls, and none of the dev IDs.
-// --check runs step 4 alone. Then: PROGRAM_KEYPAIR_DIR=<dir> npm run preflight -- --network mainnet.
+//   5. The relayer's two keys, in the same directory (created when missing, reused after): relayer-keypair.json (its fee-only
+//      hot wallet) and postman-keypair.json (the approved-set publisher); their public keys go into config/mainnet.json
+//      "relayer" / "postman". Then it prints every value still left for the owner and where each secret goes.
+// --check runs step 4 alone (and compares the keys in --dir with the config). Then: PROGRAM_KEYPAIR_DIR=<dir> npm run preflight -- --network mainnet.
 'use strict';
 const fs = require('fs'); const path = require('path'); const { execFileSync } = require('child_process');
 const { Keypair, PublicKey } = require('@solana/web3.js');
@@ -26,12 +29,14 @@ function sourceIds() { const out = {}; for (const p of PROGRAMS) { const m = fs.
   const e = fs.readFileSync(libRs('veyl_pool'), 'utf8').match(MAINNET_ENTRY); out.poolEntryConst = e ? e[2] : null; return out; }
 const insideRepo = (d) => { const r = path.relative(ROOT, path.resolve(d)); return !r.startsWith('..') && !path.isAbsolute(r); };
 
+/// The relayer's own keys, kept next to the program keypairs: config key -> file.
+const ROLE_KEYS = { relayer: 'relayer-keypair.json', postman: 'postman-keypair.json' };
 function loadOrCreate(dir) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); const ids = {}; const created = [];
-  for (const p of PROGRAMS) { const f = path.join(dir, p + '-keypair.json'); let kp;
+  for (const p of [...PROGRAMS, ...Object.keys(ROLE_KEYS)]) { const f = path.join(dir, ROLE_KEYS[p] || p + '-keypair.json'); let kp;
     if (fs.existsSync(f)) kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(f, 'utf8'))));
     else { kp = Keypair.generate(); fs.writeFileSync(f, JSON.stringify([...kp.secretKey]), { mode: 0o600, flag: 'wx' }); created.push(p); }
-    ids[KEY_OF[p]] = kp.publicKey.toBase58(); }
+    ids[KEY_OF[p] || p] = kp.publicKey.toBase58(); }
   return { ids, created };
 }
 function writeSources(ids) {
@@ -39,7 +44,8 @@ function writeSources(ids) {
   const f = libRs('veyl_pool'); const s = fs.readFileSync(f, 'utf8'); if (!MAINNET_ENTRY.test(s)) throw new Error('veyl_pool: no mainnet ENTRY_PROGRAM line'); fs.writeFileSync(f, s.replace(MAINNET_ENTRY, `$1${ids.entry}$3`));
   const at = path.join(ROOT, 'Anchor.toml'); let toml = fs.readFileSync(at, 'utf8').replace(/\n\[programs\.mainnet\][^[]*/, '\n');
   toml = toml.replace(/(\[programs\.localnet\][^[]*)/, `$1[programs.mainnet]\n${PROGRAMS.map((p) => `${p} = "${ids[KEY_OF[p]]}"`).join('\n')}\n`); fs.writeFileSync(at, toml);
-  const cf = path.join(ROOT, 'config/mainnet.json'); const cfg = JSON.parse(fs.readFileSync(cf, 'utf8')); cfg.programs = { pool: ids.pool, bin: ids.bin, entry: ids.entry }; fs.writeFileSync(cf, JSON.stringify(cfg, null, 2) + '\n');
+  const cf = path.join(ROOT, 'config/mainnet.json'); const cfg = JSON.parse(fs.readFileSync(cf, 'utf8')); cfg.programs = { pool: ids.pool, bin: ids.bin, entry: ids.entry };
+  for (const k of Object.keys(ROLE_KEYS)) if (ids[k]) cfg[k] = ids[k]; fs.writeFileSync(cf, JSON.stringify(cfg, null, 2) + '\n');
 }
 /// Every mainnet .so: its own ID and the IDs it calls are the mainnet ones; no dev ID anywhere. Returns problems (empty = ok).
 function checkBuild(ids, soDir = MAINNET_SO_DIR) {
@@ -52,6 +58,22 @@ function checkBuild(ids, soDir = MAINNET_SO_DIR) {
   return problems;
 }
 
+/// What is left for the owner after this script, with the exact values and commands. Secrets are never printed: only where they live.
+function nextSteps(dir, ids) {
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/mainnet.json'), 'utf8')); const { unverified } = require('./net.js'); const left = unverified(cfg);
+  console.log(`
+Next (mainnet), in order:
+  1. Commit the sources and config/mainnet.json (program IDs and public keys are public). Never commit ${dir}; back it up offline.
+  2. config/mainnet.json, by hand:${left.length ? left.map((k) => `\n       ${k.padEnd(10)} ${k === 'treasury' ? '"<your own wallet address>"  (receives forfeited listing bonds; not a key from this directory)' : k === 'relayerUrl' ? '"https://<your relayer host>"  (no trailing slash; the Render service URL or your domain)' : '(see its VERIFY note)'}`).join('') : ' nothing left'}
+  3. Relayer host env (Render "veyl-sol-relayer", NETWORK=mainnet), pasted from the files, never from chat or a repo:
+       RELAYER_SECRET_KEY   = the contents of ${path.join(dir, ROLE_KEYS.relayer)}   (public key ${ids.relayer}; send it ~0.5 SOL)
+       POSTMAN_SECRET_KEY   = the contents of ${path.join(dir, ROLE_KEYS.postman)}   (public key ${ids.postman}; send it ~0.05 SOL for approvals)
+       RPC_URL              = your paid mainnet RPC (Helius etc.); ALLOWED_ORIGINS = your site's origin; TRUST_PROXY=1
+       e.g. pbcopy < ${path.join(dir, ROLE_KEYS.relayer)}   then paste into Render, and clear the clipboard after
+  4. PROGRAM_KEYPAIR_DIR=${dir} DEPLOYER_KEYPAIR=<deployer keypair outside the repo> npm run preflight -- --network mainnet
+     (the key ceremony and the batch committee stay red until they are done: DEPLOY.md, Before mainnet)`);
+}
+
 function main() {
   const args = process.argv.slice(2); const opt = (k) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : undefined; };
   const dir = opt('dir') || process.env.MAINNET_KEYPAIR_DIR;
@@ -59,6 +81,9 @@ function main() {
     const pr = checkBuild(ids);
     if (dir) for (const p of PROGRAMS) { const f = path.join(dir, p + '-keypair.json'); const k = fs.existsSync(f) ? Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(f, 'utf8')))).publicKey.toBase58() : 'missing';
       if (k !== ids[KEY_OF[p]]) pr.push(`${p}: keypair in ${dir} is ${k}, the sources say ${ids[KEY_OF[p]]}`); }
+    if (dir) { const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/mainnet.json'), 'utf8'));
+      for (const [k, file] of Object.entries(ROLE_KEYS)) { const f = path.join(dir, file); if (!fs.existsSync(f)) continue; const pk = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(f, 'utf8')))).publicKey.toBase58();
+        if (cfg[k] !== pk) pr.push(`${k}: ${file} in ${dir} is ${pk}, config/mainnet.json says ${cfg[k]}`); } }
     console.log(pr.length ? 'NOT OK:\n  ' + pr.join('\n  ') : `OK: target/deploy-mainnet/*.so carry the mainnet IDs ${ids.pool} / ${ids.bin} / ${ids.entry} and no dev ID`); process.exit(pr.length ? 1 : 0); }
   if (!dir) { console.error('MAINNET_KEYPAIR_DIR=<path outside the repo> (or --dir): where the mainnet program keypairs live. They are never committed.'); process.exit(2); }
   if (insideRepo(dir)) { console.error(`${dir} is inside the repo: program keypairs must live outside it`); process.exit(2); }
@@ -66,12 +91,13 @@ function main() {
   const dev = devIds(); for (const k of Object.keys(ids)) if (ids[k] === dev[k]) { console.error(`the ${k} keypair in ${dir} is the repo's DEV keypair`); process.exit(1); }
   console.log(`mainnet program keypairs in ${dir} (${created.length ? 'created: ' + created.join(', ') : 'all existed; reused'})`);
   for (const p of PROGRAMS) console.log(`  ${p.padEnd(11)} ${ids[KEY_OF[p]]}`);
-  writeSources(ids); console.log('wrote the cfg(feature = "mainnet") IDs into programs/*/src/lib.rs, Anchor.toml [programs.mainnet], config/mainnet.json (devnet/local IDs unchanged)');
+  for (const k of Object.keys(ROLE_KEYS)) console.log(`  ${k.padEnd(11)} ${ids[k]}  (${ROLE_KEYS[k]})`);
+  writeSources(ids); console.log('wrote the cfg(feature = "mainnet") IDs into programs/*/src/lib.rs, Anchor.toml [programs.mainnet], and the program IDs + relayer + postman public keys into config/mainnet.json (devnet/local IDs unchanged)');
   if (!args.includes('--no-build')) { console.log('building the mainnet profile (npm run build:mainnet)...'); execFileSync('bash', [path.join(ROOT, 'scripts/build.sh'), 'mainnet'], { stdio: 'inherit', cwd: ROOT }); }
   const pr = checkBuild(ids);
   console.log(pr.length ? '\nBUILD CHECK FAILED:\n  ' + pr.join('\n  ') : '\nbuild check: every target/deploy-mainnet/*.so embeds the mainnet IDs (its own and the ones it calls) and no dev ID');
-  console.log(`\nNext: PROGRAM_KEYPAIR_DIR=${dir} npm run preflight -- --network mainnet   (commit the sources: the IDs are public; never the keypair directory)`);
+  nextSteps(dir, ids);
   process.exit(pr.length ? 1 : 0);
 }
-module.exports = { sourceIds, checkBuild, PLACEHOLDER, MAINNET_SO_DIR, insideRepo };
+module.exports = { sourceIds, checkBuild, PLACEHOLDER, MAINNET_SO_DIR, insideRepo, ROLE_KEYS, nextSteps };
 if (require.main === module) main();

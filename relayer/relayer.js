@@ -3,7 +3,8 @@
 // the pool program checks them), but it CAN see the request IP, so this server never logs IPs and only keeps a
 // rate-limit counter in memory.
 //
-//   GET  /info                 relayer wallet, fee range, programs, lookup tables (the deployment's and poolLookupTables: this relayer's, for pools listed since)
+//   GET  /info                 relayer wallet, fee range, programs, lookup tables (the deployment's and poolLookupTables: this relayer's, for pools listed since),
+//                              caps: the deposit caps while Veyl is new (relayer/caps.js; null when off)
 //   GET  /state?pool=<pubkey>  the pool's leaves (tree order) and approved labels, for building proofs
 //   GET  /pools                bin pools with their current state (quotes are computed on the device)
 //   GET  /activity             every pool's totals over 1 h / 6 h / 24 h and its latest trades (no addresses)
@@ -35,7 +36,7 @@
 // Layout: this file holds the core (wallet, deployment, /info, /health, /pools) and composes the parts below into one class;
 // relayer/http.js serves it (Express). costs.js (request kinds and their worst-case cost), fees.js (the fee floor, /fee), notes.js
 // (Phase 1 submissions, /state), shielded.js (Phase 2 + 3 submissions, /shield), sealed.js (/sealed, the batch crank),
-// postman.js (approved-set publisher), faucet.js (/drip), luts.js (lookup tables for pools listed since the deploy), screening.js (denylist),
+// postman.js (approved-set publisher), caps.js (deposit caps), faucet.js (/drip), luts.js (lookup tables for pools listed since the deploy), screening.js (denylist),
 // env.js (keys and deployment from env).
 'use strict';
 const { PublicKey } = require('@solana/web3.js');
@@ -127,8 +128,8 @@ class RelayerCore {
     return out;
   }
 }
-const Fees = require('./fees.js'), Notes = require('./notes.js'), Shielded = require('./shielded.js'), Sealed = require('./sealed.js'), Postman = require('./postman.js'), Faucet = require('./faucet.js'), Luts = require('./luts.js');
-class Relayer extends Faucet(Postman(Sealed(Shielded(Notes(Fees(Luts(RelayerCore))))))) {
+const Fees = require('./fees.js'), Notes = require('./notes.js'), Shielded = require('./shielded.js'), Sealed = require('./sealed.js'), Postman = require('./postman.js'), Caps = require('./caps.js'), Faucet = require('./faucet.js'), Luts = require('./luts.js');
+class Relayer extends Faucet(Postman(Caps(Sealed(Shielded(Notes(Fees(Luts(RelayerCore)))))))) {
   /// A request naming a token this relayer has not seen (a pool listed in the last minute) looks again once, then retries.
   async _withDiscovery(f) { try { await this.discover(); } catch { /* the deployment's tokens still work */ } try { return await f(); } catch (e) { if (!/unknown token/.test(String(e && e.message))) throw e; await this.discover(true); return f(); } }
   async feeQuote(req) { return this._withDiscovery(() => super.feeQuote(req)); }
@@ -148,6 +149,8 @@ if (require.main === module) {
   const r = new Relayer({ connection: conn, wallet, deploy: dep, postman, minFeeBps: Number(env.MIN_FEE_BPS || 5), feeCover: Number(env.FEE_COVER || 1) });
   if (dep.network !== 'mainnet') r.faucet = keyFromEnv(env, 'FAUCET_SECRET_KEY', 'FAUCET_KEY');
   if (!r.prices.SOL) console.error('no SOL price (deploy file or PRICES_JSON): the fee floor is off and small requests can drain this wallet');
+  console.log('deposit caps', r.caps ? JSON.stringify(r.caps) : 'off');
+  if (dep.network === 'mainnet' && !r.caps) console.error('no deposit caps on mainnet (config/mainnet.json "caps", CAPS_JSON, or CAPS=off on purpose)');
   if (dep.network === 'mainnet' && !env.ALLOWED_ORIGINS) console.error('ALLOWED_ORIGINS is not set: any website can call this relayer from its visitors\' browsers');
   if (env.RENDER && !Number(env.TRUST_PROXY)) console.error('TRUST_PROXY is not set behind Render: every client shares one rate limit (REVIEW.md L-2)');
   // a failed RPC call in a background job (a timeout, a dropped connection) is logged; it must not stop the relayer

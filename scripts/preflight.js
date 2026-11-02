@@ -16,6 +16,10 @@ const PROGRAMS = ['veyl_pool', 'veyl_bin', 'veyl_entry']; const KEY_OF = { veyl_
 const KNOWN_DEV_ZKEYS = ['b1ce9fa6440fd92d540badb7f0053b08f6a6a0a1bb5b6afaac9b112a14d44447', '7f9e3d222a400b3bb63e986e36d33f68723414e8fa606752c2a57f9182d20064', '005d3190f5a7ddbafb14d52488d0304988ae22407666dce6b032a7cc1b4b3c2d',
   '5905898bbc9889d03c75384159de066cae304f2bd637f0ea3a80e968bb00c8b2', '24ee888ae9154f87a48341d21e16729db1db3da89326be1784892f3121e4c2c7'];
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+/// Mainnet blockers the owner may accept with a written reason in config "waivers" (shown as warnings, never hidden).
+const WAIVABLE = ['external-audit', 'multisig'];
+/// An RPC URL for printing: no path, query or credentials (a paid RPC's API key lives there).
+const safeUrl = (u) => { try { const x = new URL(u); return x.protocol + '//' + x.host + (x.pathname.length > 1 || x.search ? '/…' : ''); } catch { return '(unparsable URL)'; } };
 
 /// The verifying key's curve points in the byte layout groth16-solana takes (same encoding as scripts/vkey-to-rust.js).
 function vkeyParts(vk) {
@@ -43,6 +47,12 @@ async function preflight({ network, quiet = false }) {
   const anchor = tool('anchor', ['--version']); add('anchor CLI (optional)', 'info', anchor || 'not installed (not needed: programs build with cargo-build-sbf)');
 
   // ---- config + env
+  //      owner waivers: only the external audit and the multisig can be waived (each then shows as a warning); never the
+  //      ceremony, the committee or the program keys
+  const short = (t) => (t.length > 110 ? t.slice(0, 107) + '…' : t);
+  const waived = Object.fromEntries(Object.entries(cfg.waivers || {}).filter(([k, v]) => !k.startsWith('_') && typeof v === 'string' && v.trim()));
+  for (const k of Object.keys(waived)) if (!WAIVABLE.includes(k)) { add('waiver ' + k, 'red', 'cannot be waived (only ' + WAIVABLE.join(', ') + '): remove it from config/' + network + '.json "waivers"'); delete waived[k]; }
+  if (mainnet && waived.multisig) add('open: High multisig', 'warn', 'WAIVED by the owner: ' + short(waived.multisig));
   const unv = N.unverified(cfg);
   add(`config/${network}.json`, unv.length ? 'red' : 'ok', unv.length ? 'unverified values: ' + unv.join(', ') : 'complete');
   const key = N.deployerKey();
@@ -146,7 +156,9 @@ async function preflight({ network, quiet = false }) {
 
   // ---- chain
   const ver = await N.rpcCall(rpc, 'getVersion');
-  add('RPC reachable', ver.ok ? 'ok' : 'red', ver.ok ? rpc + '  solana-core ' + ver.result['solana-core'] : (N.isVerify(rpc) ? 'config rpc still says VERIFY' : rpc + '  ' + ver.error));
+  const rpcShown = safeUrl(rpc) + (process.env.RPC_URL ? ' (RPC_URL)' : ' (config rpc)');
+  add('RPC reachable', ver.ok ? 'ok' : 'red', ver.ok ? rpcShown + '  solana-core ' + ver.result['solana-core'] : (N.isVerify(rpc) ? 'config rpc still says VERIFY' : rpcShown + '  ' + ver.error));
+  if (mainnet && cfg.rpc && !N.isVerify(cfg.rpc) && /api[-_]?key|token=|secret/i.test(cfg.rpc)) add('config rpc', 'red', 'config/mainnet.json "rpc" carries a key: it is published in deploy.mainnet.json and the site; pass the paid RPC as RPC_URL instead');
   if (ver.ok && cfg.genesisHash) { const g = await N.rpcCall(rpc, 'getGenesisHash'); add('cluster (genesis hash)', g.ok && g.result === cfg.genesisHash ? 'ok' : 'red', g.ok ? (g.result === cfg.genesisHash ? network : 'this RPC is another cluster: ' + g.result) : g.error); }
   if (ver.ok) {
     // cost estimate + balance
@@ -172,6 +184,12 @@ async function preflight({ network, quiet = false }) {
     if (Object.values(cfg.mints || {}).some((v) => v && !N.isVerify(v))) add('required mints exist', 'red', 'cannot check: RPC unreachable');
   }
 
+  // ---- opening prices ("live" = fetched at deploy time from two sources, scripts/live-prices.js) and deposit caps
+  if (Object.values(cfg.prices || {}).includes('live') || process.env.LAUNCH_PRICES_JSON) { const lp = await require('./live-prices.js').resolvePrices(cfg);
+    const got = Object.entries(lp.live).filter(([, l]) => l.price).map(([s, l]) => `${s} ${l.price} (CoinGecko ${l.sources.coingecko}, Jupiter ${l.sources.jupiter})`);
+    add('opening prices (live at deploy)', lp.errors.length ? (mainnet ? 'red' : 'warn') : 'ok', lp.errors.length ? lp.errors.join('; ') : (got.length ? 'now: ' + got.join(', ') + '; fetched again at deploy' : 'pinned by LAUNCH_PRICES_JSON')); }
+  if (mainnet) { const caps = require('../sdk/caps.js').normCaps(cfg.caps); add('deposit caps', caps ? 'ok' : 'warn', caps ? Object.entries(caps).map(([k, o]) => k + ' ' + Object.entries(o).map(([s, v]) => (s === '*' ? '$' + v + ' other' : v + ' ' + s)).join(', ')).join('; ') + ' (the relayer enforces; CAPS_JSON overrides)' : 'none in config/mainnet.json "caps": every deposit is admitted'); }
+
   // the registered committee must be the transcript's (when deployed)
   if (ver.ok && N.loadDeploy(network)) { try { const tr = readTranscript(network); const { Connection } = require('@solana/web3.js'); const { Veyl } = require('../sdk/veyl.js'); require('../sdk/sealed.js');
       const c = await new Veyl({ connection: new Connection(rpc, 'confirmed'), programs: N.loadDeploy(network).programs }).committee();
@@ -187,13 +205,15 @@ async function preflight({ network, quiet = false }) {
       const { Connection } = require('@solana/web3.js'); const { Veyl } = require('../sdk/veyl.js'); const { readRoles, roleFindings } = require('./roles.js');
       const roles = await readRoles(new Veyl({ connection: new Connection(rpc, 'confirmed'), programs: depFile.programs }), depFile);
       const f = roleFindings(roles, { deployer: depFile.deployer, relayer: depFile.relayer }); rolesChecked = true;
-      add('roles (upgrade, pool, postman, factory, protocol fee, reward funders)', f.red.length ? (mainnet ? 'red' : 'info') : f.warn.length ? 'warn' : 'ok', f.red.length || f.warn.length ? [...f.red, ...f.warn].slice(0, 6).join('; ') + (f.red.length && mainnet ? '. npm run handover -- --network ' + network + ' --to <multisig>' : '') : 'every role is off the deployer key');
+      if (waived.multisig) { const onDeployer = f.red.filter((x) => /held by the deployer/.test(x)); f.red = f.red.filter((x) => !onDeployer.includes(x)); f.warn.unshift(...onDeployer.map((x) => x + ' (multisig waived: hand it to your offline key)')); }
+      add('roles (upgrade, pool, postman, factory, protocol fee, reward funders)', f.red.length ? (mainnet ? 'red' : 'info') : f.warn.length ? 'warn' : 'ok', f.red.length || f.warn.length ? [...f.red, ...f.warn].slice(0, 6).join('; ') + (f.red.length && mainnet ? '. npm run handover -- --network ' + network + ' --to <' + (waived.multisig ? 'offline key' : 'multisig') + '>' : '') : 'every role is off the deployer key');
     } catch (e) { add('roles (upgrade, pool, postman, factory, protocol fee, reward funders)', mainnet ? 'red' : 'info', 'could not read: ' + e.message); }
-  } else if (mainnet) add('roles (upgrade, pool, postman, factory, protocol fee, reward funders)', 'warn', 'after deploy: npm run handover -- --network mainnet --to <multisig>; preflight then checks nothing is left on the deployer key');
+  } else if (mainnet) add('roles (upgrade, pool, postman, factory, protocol fee, reward funders)', 'warn', 'after deploy: npm run handover -- --network mainnet --to <' + (waived.multisig ? 'your offline authority key' : 'multisig') + '>; preflight then checks nothing is left on the deployer key');
 
   // ---- open blocking findings (items marked "auto" are decided by the checks above, not by their status field)
+  //      an owner waiver (config "waivers") turns external-audit into a warning: still listed, never hidden
   const B = JSON.parse(fs.readFileSync(path.join(R, 'config/blockers.json'), 'utf8')).items.filter((b) => !b.auto && b.status !== 'resolved');
-  for (const b of B) add(`open: ${b.severity} ${b.id}`, mainnet ? (b.when === 'after-deploy' ? 'warn' : 'red') : 'info', b.title.length > 110 ? b.title.slice(0, 107) + '…' : b.title);
+  for (const b of B) { const w = waived[b.id]; add(`open: ${b.severity} ${b.id}`, !mainnet ? 'info' : w || b.when === 'after-deploy' ? 'warn' : 'red', w ? 'WAIVED by the owner: ' + short(w) : short(b.title)); }
   if (!B.length) add('open blocking findings', 'ok', 'none');
   void rolesChecked;
 
