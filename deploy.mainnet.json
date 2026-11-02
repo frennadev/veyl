@@ -1,0 +1,150 @@
+{
+  "network": "mainnet",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "deployer": "8rxMXkA6gmHhGrYr8xCHL7noZp6K1WP9dap2EuBmUQ8p",
+  "slot": 464553126,
+  "programs": {
+    "pool": "5fAwTJofpJ527cxuVGuA2gFZgHbPvktxCCvsUwBHFHJm",
+    "bin": "2Xh9gzq3mPiCEF6MpUAXn6Mce4MJPkJaiAeAv5cuorhV",
+    "entry": "4vGpwpkRwnuKBgN8rGX5P4zf1ATunBzLwzkrACvgspx2"
+  },
+  "postman": "GhWM3VBNHfhwDyukd7QriaxJRurPiq7h63VPv9KoQgGg",
+  "relayer": "HEZYjbKtSdFYiXsQ9NiiAs8i4YfEAZ5eKS4ozYiNgTMy",
+  "lookupTable": "9rYhYjvntwfZPZZmYP3UL94zV8ew1yhtZASeYdJbauzd",
+  "lookupTables": [],
+  "shield": "5BtQ4XXV9LZNrUXeATJzN6ddDYQ615VYB9cLXELPXLqY",
+  "shieldOwner": "7CW6ZUcDeCSKVVmhwvFz45XTYaHZ5kE7irxUvDZcuHko",
+  "tokens": {
+    "SOL": {
+      "mint": "So11111111111111111111111111111111111111112",
+      "decimals": 9,
+      "pool": "8zSmQkHuULDJ4yQ4cD7zM87q1CToCbu76pWqLXRoCFvt",
+      "minDeposit": 0.0005,
+      "price": 93.7238
+    },
+    "USDC": {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "decimals": 6,
+      "pool": "CFfQvLJSRRZboVEoVAifJdQJUHFJmDFZppNE8MY1yT7u",
+      "minDeposit": 1,
+      "price": 1
+    },
+    "USDT": {
+      "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "decimals": 6,
+      "pool": "HaqWWT1iYv2codpMCs2zAns2G12jbZzMFdgt7wFmmgpw",
+      "minDeposit": 1,
+      "price": 1
+    }
+  },
+  "binPools": [
+    {
+      "id": "sol-usdc",
+      "x": "SOL",
+      "y": "USDC",
+      "binStep": 10,
+      "baseFee": 500,
+      "address": "5pMVAckqRq2Nw5xQC4eQiB3pXYzzmQbDuzkY4X1fen2o"
+    },
+    {
+      "id": "sol-usdt",
+      "x": "SOL",
+      "y": "USDT",
+      "binStep": 10,
+      "baseFee": 500,
+      "address": "H12faY3JMobTYVPyCAjTZVygeh4WvZyVJHEp19FZBoD5"
+    },
+    {
+      "id": "usdt-usdc",
+      "x": "USDC",
+      "y": "USDT",
+      "binStep": 1,
+      "baseFee": 100,
+      "address": "A1Hbn1Em4xNnFRaNeyxjVDw7yujW4H3WSeDXBbWkEHgH"
+    }
+  ],
+  "feeTiers": [
+    {
+      "index": 0,
+      "binStep": 1,
+      "baseFee": 100,
+      "vfc": 10000,
+      "enabled": true,
+      "label": "Stable 0.01%",
+      "category": "stable"
+    },
+    {
+      "index": 1,
+      "binStep": 5,
+      "baseFee": 500,
+      "vfc": 10000,
+      "enabled": true,
+      "label": "Stable 0.05%",
+      "category": "stable"
+    },
+    {
+      "index": 2,
+      "binStep": 10,
+      "baseFee": 500,
+      "vfc": 10000,
+      "enabled": true,
+      "label": "Major 0.05%",
+      "category": "major"
+    },
+    {
+      "index": 3,
+      "binStep": 20,
+      "baseFee": 2500,
+      "vfc": 10000,
+      "enabled": true,
+      "label": "Major 0.25%",
+      "category": "major"
+    },
+    {
+      "index": 4,
+      "binStep": 30,
+      "baseFee": 3000,
+      "vfc": 4500,
+      "enabled": true,
+      "label": "Major 0.30%",
+      "category": "major"
+    },
+    {
+      "index": 5,
+      "binStep": 50,
+      "baseFee": 5000,
+      "vfc": 1600,
+      "enabled": true,
+      "label": "Volatile 0.5%",
+      "category": "volatile"
+    },
+    {
+      "index": 6,
+      "binStep": 80,
+      "baseFee": 10000,
+      "vfc": 625,
+      "enabled": true,
+      "label": "Volatile 1%",
+      "category": "volatile"
+    },
+    {
+      "index": 7,
+      "binStep": 100,
+      "baseFee": 20000,
+      "vfc": 400,
+      "enabled": true,
+      "label": "Volatile 2%",
+      "category": "volatile"
+    }
+  ],
+  "bond": {
+    "lamports": "1000000000",
+    "lockSeconds": 2592000,
+    "treasury": "JATTW3J4T6rwiJ6v4GUogShJqFhhb35MdmzWDtbT7rTC"
+  },
+  "deployedAt": "2026-11-02T15:55:03.304Z",
+  "committeeTranscript": "e9ead1a4872a38001d9bd7afa618025e7a6f0320ca7b5b920f56130177578e87",
+  "sealedPools": [
+    "sol-usdc"
+  ]
+}
