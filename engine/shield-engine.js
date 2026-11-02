@@ -12,6 +12,7 @@ import { Buffer } from 'buffer';
 import { PublicKey, Keypair } from '@solana/web3.js';
 const S = require('../sdk/veyl.js');
 const Z = require('../sdk/shield.js');
+const Caps = require('../sdk/caps.js');
 const { chunkOf, distribute, shapeWeights, sideWeights, priceOf, simulateSwap, chunksForSwap, EMPTY_BIN } = S;
 const b58 = (k) => new PublicKey(k).toBase58();
 const B64 = (u) => Buffer.from(u).toString('base64');
@@ -156,8 +157,10 @@ export function installShield(Engine, PrivacyError) {
   /// Public tokens -> the shielded pool. The wallet signs two transactions (the proof, then the deposit); the notes wait
   /// for the approved-set publisher, and until then the deposit can be taken back (cancelDeposit).
   P.shieldDeposit = async function (sym, amount) {
-    if (!this.pk) throw new Error('Connect a wallet first.'); const zw = this.zw || this.shieldInit(); await this.shieldSync();
-    const v = this.unit(sym, amount); const mint = new PublicKey(this.tok(sym).mint); const wrap = await this.wrapIxs(mint, v); const d = zw.deposit(mint, v);
+    if (!this.pk) throw new Error('Connect a wallet first.'); const v = this.unit(sym, amount);
+    const capped = await this.depositCap(sym, v); if (capped.message) throw new Error(capped.message); /* over a deposit cap: refused before the wallet signs anything */
+    const zw = this.zw || this.shieldInit(); await this.shieldSync();
+    const mint = new PublicKey(this.tok(sym).mint); const wrap = await this.wrapIxs(mint, v); const d = zw.deposit(mint, v);
     const p = await this.proveIn('transact', d.input); const pubs = p.pubs.map(BigInt);
     const ixPost = this.V.postProofIx(this.pk, Z.KIND.TRANSACT, Buffer.from(p.proof, 'base64'), pubs); const ixDep = await this.V.shieldDepositIx(this.pk, d.ext, pubs);
     /* a token listed since the deploy may still lack its shielded / entry vaults: the first depositor makes them (rent ~0.002 SOL each) */
@@ -168,6 +171,14 @@ export function installShield(Engine, PrivacyError) {
     this.store.data.shield.pending.push({ commitment: String(d.commitments[0]), sym, amount: String(v), tx, at: Date.now() }); this.store.save();
     return { tx, value: v };
   };
+  /// The deposit caps while Veyl is new, from the relayer's /info (sdk/caps.js): { max, total, room } in whole tokens (null
+  /// when not capped or not known) and, with `atoms`, the message a deposit of that size gets (null when it is within them).
+  /// The relayer's publisher enforces them either way; a relayer that cannot be reached does not stop a deposit here.
+  P.depositCap = async function (sym, atoms = null) { const t = this.tok(sym); const tok = { sym, mint: t.mint, decimals: t.decimals }; let caps = null;
+    try { const info = await this.relayerInfo(); caps = (info && info.caps) || null; } catch { /* no relayer: the publisher still enforces them */ }
+    const per = caps && caps.perDeposit && caps.perDeposit[t.mint], tot = caps && caps.totalShielded && caps.totalShielded[t.mint];
+    return { max: per && !per.unpriced ? per.amount : null, total: tot && !tot.unpriced ? tot.amount : null, room: tot && tot.room != null ? Number(BigInt(tot.room)) / 10 ** t.decimals : null,
+      message: atoms === null ? null : Caps.capMessage(caps, tok, atoms) }; };
   P.cancelDeposit = async function (pending) { if (!this.pk) throw new Error('Connect the wallet you deposited from.');
     return this._sendAll([[await this.V.cancelDepositIx(this.pk, new PublicKey(pending.pending), new PublicKey(pending.mint))]], 200_000); };
   /// Shielded -> another Veyl address, inside the pool. Public: two nullifiers, two new notes, the relayer's flat fee and so

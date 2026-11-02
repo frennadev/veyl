@@ -19,9 +19,12 @@ module.exports = (Base) =>
       const k = new PublicKey(pool).toBase58();
       const c = this.cache.get(k);
       if (c && Date.now() - c.at < 5000) return c;
-      this.poolFor(pool);
+      const { mint } = this.poolFor(pool);
       const { leaves, deposits } = await this.V.readTree(pool);
-      const labels = deposits.filter(isAllowed).map((d) => d.label);
+      // a deposit over the per-deposit cap (relayer/caps.js) is left out of the approved set: ragequit takes it back
+      const labels = deposits
+        .filter((d) => isAllowed(d) && this._underDepositCap(mint, d.value))
+        .map((d) => d.label);
       const st = {
         at: Date.now(),
         leaves,

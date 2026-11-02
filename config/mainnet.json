@@ -1,12 +1,13 @@
 {
-  "_comment": "Solana mainnet-beta. Every value starting with VERIFY must be checked against its issuer / your own records and the VERIFY prefix removed by hand; deploy and preflight refuse while any remain. Mainnet must not happen before a multi-party key ceremony and an external audit (DEPLOY.md, Before mainnet).",
+  "_comment": "Solana mainnet-beta. Every value starting with VERIFY is the owner's to fill in (each says how); deploy and preflight refuse while any remain. Owner decisions (2026-11-02, \"waivers\" below): no external audit and no multisig before launch, single-key authorities, deposit caps from day one (\"caps\"); the multi-party key ceremony and the batch committee's key generation stay hard requirements (DEPLOY.md, Before mainnet).",
   "network": "mainnet",
-  "rpc": "VERIFY: https://api.mainnet-beta.solana.com (or your own paid RPC endpoint)",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "_rpc": "The public endpoint: it is written into deploy.mainnet.json and the site config, so it must never carry an API key. Deploy and preflight use RPC_URL instead when it is set (scripts/net.js rpcOf): pass your paid RPC (Helius etc., kept in .env) that way, never in this file.",
   "genesisHash": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
   "chainName": "Solana",
   "explorer": "https://solscan.io",
   "explorerSuffix": "",
-  "relayerUrl": "VERIFY: https://<your relayer host>",
+  "relayerUrl": "VERIFY: the HTTPS URL of your relayer host, no trailing slash (e.g. the Render service's https://<name>.onrender.com, or your own domain). Check: curl -s <url>/health answers {\"ok\":true,...,\"network\":\"mainnet\"} once the relayer runs with deploy.mainnet.json",
   "mockMints": false,
   "tokens": [
     "SOL",
@@ -72,33 +73,59 @@
     "sol": 1,
     "lockDays": 30
   },
-  "treasury": "VERIFY: multisig (e.g. Squads vault) that receives forfeited listing bonds",
+  "treasury": "VERIFY: your own wallet address (base58; a hardware wallet is best). It receives forfeited listing bonds; the protocol fee authority can change it later. Never the deployer, relayer or postman key",
   "mints": {
     "SOL": "So11111111111111111111111111111111111111112",
-    "USDC": "VERIFY: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (Circle USDC, SPL Token program)",
-    "USDT": "VERIFY: Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB (Tether USDT, SPL Token program)"
+    "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "USDT": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
   },
+  "_mints": "Verified 2026-11-02. USDC: Circle's docs (developers.circle.com/stablecoins/usdc-contract-addresses, mainnet table, Solana row) + on chain (getAccountInfo on api.mainnet-beta.solana.com: owner TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA, the classic SPL Token program; decimals 6; mint authority BJE5MMbqXjVwjAF7oxwPYXnTXDyspzZyt4vwenNw5ruG). USDT: Tether's site (tether.to/en/supported-protocols, Solana Blockchain) + on chain (owner the classic SPL Token program, decimals 6, mint authority Q6XprfkF8RQQKoQVG33xT88H7wi8Uk1B1CC7YAs69Gi). SOL is wrapped SOL (native mint). Preflight re-checks owner and decimals on every run.",
   "prices": {
-    "SOL": "VERIFY: SOL price in USD at deploy time (sets the SOL-USDC / SOL-USDT launch bins)",
-    "USDT": "VERIFY: USDT price in USDC at deploy time (usually 1)"
+    "SOL": "live",
+    "USDT": 1
   },
+  "_prices": "USD prices that set each bin pool's opening bin. \"live\": fetched by the deploy at that moment from CoinGecko and Jupiter's price API, which must agree within 1% (LIVE_PRICE_MAX_SPREAD), else the deploy stops; LAUNCH_PRICES_JSON='{\"SOL\":<price>}' pins one by hand. USDT is held at its 1 USD peg (USDC is 1 too): usdt-usdc opens at 1.",
   "programs": {
-    "pool": "VERIFY: fresh veyl_pool program ID (npm run keys:mainnet writes it; never the repo's dev keypair)",
-    "bin": "VERIFY: fresh veyl_bin program ID (npm run keys:mainnet writes it; never the repo's dev keypair)",
-    "entry": "VERIFY: fresh veyl_entry program ID (npm run keys:mainnet writes it; never the repo's dev keypair)"
+    "pool": "VERIFY: written by npm run keys:mainnet (fresh veyl_pool keypair in MAINNET_KEYPAIR_DIR, outside the repo); never edit by hand",
+    "bin": "VERIFY: written by npm run keys:mainnet (fresh veyl_bin keypair in MAINNET_KEYPAIR_DIR, outside the repo); never edit by hand",
+    "entry": "VERIFY: written by npm run keys:mainnet (fresh veyl_entry keypair in MAINNET_KEYPAIR_DIR, outside the repo); never edit by hand"
   },
-  "postman": "VERIFY: multisig or dedicated key that publishes the approved set",
-  "relayer": "VERIFY: relayer hot-wallet pubkey (fee-only, low balance)",
+  "postman": "VERIFY: written by npm run keys:mainnet (postman-keypair.json in MAINNET_KEYPAIR_DIR: the approved-set publisher, its secret goes to the relayer host as POSTMAN_SECRET_KEY)",
+  "relayer": "VERIFY: written by npm run keys:mainnet (relayer-keypair.json in MAINNET_KEYPAIR_DIR: the relayer's fee-only hot wallet, its secret goes to the relayer host as RELAYER_SECRET_KEY; keep ~0.5 SOL on it)",
   "sealed": {
-    "_comment": "Phase 3 sealed batch swaps: which bin pools get batches, and their rules. The committee comes from committee/transcript.mainnet.json (a real dealerless DKG among independent operators; preflight is red without it). VERIFY before mainnet: every value below.",
+    "_comment": "Phase 3 sealed batch swaps (slots ~0.4 s). One pool at launch, SOL/USDC, so every sealed swap shares one crowd. Same timings as devnet (150-slot epochs ~1 min, a 1,500-slot ~10 min settlement window, k = 3 per direction, max drift 50 bins = ~5% at bin step 10), with 8 rollovers (~9 min) instead of 4 so a quiet launch-week batch waits for company before it refunds, and minimums of ~$10 so filling a batch with fake participants costs real money. Program limits: epoch and window 1..216,000 slots (window >= 10), k <= 64, minimum < 2^40 atoms. The committee comes from committee/transcript.mainnet.json (a real dealerless DKG among independent operators; preflight is red without it).",
     "pools": [
-      "VERIFY"
+      "sol-usdc"
     ],
-    "epochSlots": "VERIFY",
-    "settleTimeout": "VERIFY",
-    "kMin": "VERIFY",
-    "maxRollovers": "VERIFY",
-    "maxDrift": "VERIFY",
-    "minIn": "VERIFY"
+    "epochSlots": 150,
+    "settleTimeout": 1500,
+    "kMin": 3,
+    "maxRollovers": 8,
+    "maxDrift": 50,
+    "minIn": {
+      "SOL": 0.1,
+      "USDC": 10,
+      "USDT": 10
+    }
+  },
+  "caps": {
+    "_comment": "Deposit caps while Veyl is new (no external audit yet), in whole tokens; \"*\" = US dollars for any other token (one the relayer cannot price is not admitted). The relayer's approved-set publisher admits a shielded deposit only within them, oldest first; a refused one stays pending and its depositor can take it back from the app at any time. totalShielded counts what sits in the shielded pool's vault (private positions in bin pools are not included). Change them here (redeploy the relayer) or with the relayer's CAPS_JSON env; no program change needed (relayer/caps.js, DEPLOY.md Deposit caps).",
+    "perDeposit": {
+      "SOL": 100,
+      "USDC": 10000,
+      "USDT": 10000,
+      "*": 1000
+    },
+    "totalShielded": {
+      "SOL": 2500,
+      "USDC": 250000,
+      "USDT": 250000,
+      "*": 25000
+    }
+  },
+  "waivers": {
+    "_comment": "Owner decisions that turn a mainnet blocker into a warning in preflight (it stays listed). Only these two ids can be waived; the key ceremony, the batch committee and fresh program keys cannot.",
+    "external-audit": "Owner decision 2026-11-02: launch without an external audit, with deposit caps (\"caps\") limiting what is at risk. REVIEW.md is the internal review.",
+    "multisig": "Owner decision 2026-11-02: single-key authorities at launch, no multisig. Hand every role from the deployer to one dedicated offline key (npm run handover -- --network mainnet --to <that key>); preflight warns while a role sits on the deployer."
   }
 }

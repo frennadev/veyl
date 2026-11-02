@@ -1,6 +1,6 @@
 # Deploying Veyl on Solana
 
-Devnet today. Mainnet is blocked until every item in **Before mainnet** is done; `npm run preflight -- --network mainnet` stays red until then. Security review: `REVIEW.md`. Privacy: `PRIVACY.md`. Key ceremony: `ceremony/README.md`.
+Devnet today. Mainnet is blocked until every item in **Before mainnet** is done; `npm run preflight -- --network mainnet` stays red until then. Owner decisions (2026-11-02): no external audit and no multisig before launch (single-key authorities, recorded in `config/mainnet.json` "waivers", shown as preflight warnings), deposit caps from day one (**Deposit caps**); the key ceremony and the batch committee stay required. Security review: `REVIEW.md`. Privacy: `PRIVACY.md`. Key ceremony: `ceremony/README.md`.
 
 ## Prerequisites
 Node 20+, Solana CLI (Agave) 3.1.x (tested 3.1.9). Rust + `cargo-build-sbf` (platform-tools v1.52) only to rebuild the programs. Keys live **outside the repo**; scripts read them from paths in env and never print them.
@@ -66,23 +66,59 @@ node key. Stop the local nodes (`devnet-local.sh` with `COMMITTEE=1`) once these
 
 ## Mainnet (only after Before mainnet)
 ```bash
-export MAINNET_KEYPAIR_DIR=~/keys/veyl/mainnet                 # OUTSIDE the repo; never committed
+export MAINNET_KEYPAIR_DIR=~/keys/veyl/mainnet                 # OUTSIDE the repo; never committed; back it up offline
 npm run keys:mainnet        # fresh program keypairs there (reused if present), their IDs into the cfg(feature = "mainnet")
                             # lines of programs/*/src/lib.rs + Anchor.toml [programs.mainnet] + config/mainnet.json, then
                             # npm run build:mainnet -> target/deploy-mainnet/, and checks every .so carries the mainnet IDs
-                            # (its own and the ones it calls) and no dev ID. Devnet/local IDs are unchanged.
-# edit config/mainnet.json: remove every "VERIFY: ..." (RPC, USDC/USDT mints, launch prices, postman, relayer, relayerUrl)
+                            # (its own and the ones it calls) and no dev ID. Devnet/local IDs are unchanged. It also makes the
+                            # relayer's two keys there (relayer-keypair.json, postman-keypair.json), writes their public keys
+                            # into config/mainnet.json "relayer" / "postman", and prints what is left and where each secret goes.
+# edit config/mainnet.json: the two VERIFY values left, "relayerUrl" (your relayer host) and "treasury" (your own wallet)
+solana-keygen new -o ~/keys/veyl/mainnet-deployer.json         # pays rent and is the upgrade authority until the handover
 export DEPLOYER_KEYPAIR=~/keys/veyl/mainnet-deployer.json PROGRAM_KEYPAIR_DIR=$MAINNET_KEYPAIR_DIR CEREMONY_PTAU_14=~/keys/veyl/powersOfTau28_hez_final_14.ptau CEREMONY_PTAU_15=~/keys/veyl/powersOfTau28_hez_final_15.ptau
-npm run preflight -- --network mainnet                     # must be fully green (re-verifies the whole ceremony)
-npm run deploy -- --network mainnet --dry-run
+export RPC_URL=<your paid mainnet RPC>                       # from .env; never written into a repo file
+npm run preflight -- --network mainnet                     # must be green; the waived audit / multisig show as warnings
+npm run deploy -- --network mainnet --dry-run              # also prints the live SOL price the pools would open at
 npm run deploy -- --network mainnet --confirm-mainnet      # asks you to type "mainnet"
-npm run handover -- --network mainnet --to <multisig vault> --postman <publisher key> --dry-run
-npm run handover -- --network mainnet --to <multisig vault> --postman <publisher key> --confirm-mainnet
-# upgrade authority moves at once; pool + factory authority are two-step: the multisig executes the printed accept
-# instructions. Once the relayer works: npm run handover -- ... --freeze-lut. Preflight then shows no role on the deployer.
+npm run handover -- --network mainnet --to <your offline authority key> --postman <config postman> --dry-run
+npm run handover -- --network mainnet --to <your offline authority key> --postman <config postman> --confirm-mainnet
+# upgrade authority moves at once; pool + factory authority are two-step: the new key signs the printed accept
+# instructions (--accept-keypair <file> does it). Once the relayer works: npm run handover -- ... --freeze-lut.
 ```
 Only the upgrade authority can create pools or the factory (`init_pool`, `init_factory`), so deploy and initialise before the
 handover, and list only classic SPL Token mints (USDC, USDT, wrapped SOL): no transfer-fee, hook or permanent-delegate mints.
+
+- **RPC.** `config/mainnet.json` "rpc" is the public `https://api.mainnet-beta.solana.com`: it is written into
+  `deploy.mainnet.json` and the site config, so it never carries an API key. Deploy, preflight and the relayer use `RPC_URL`
+  when it is set (`scripts/net.js` rpcOf): pass the paid RPC (Helius etc., in `.env`) that way only; preflight prints its host,
+  never its key, and is red if the config's "rpc" ever carries one. The site uses `SITE_RPC_URL` at build time.
+- **Opening prices.** "prices": `"SOL": "live"` is fetched by the deploy at that moment (twice: for the plan, and again right
+  before the bin pools are made) from CoinGecko and Jupiter's price API, which must agree within 1%
+  (`LIVE_PRICE_MAX_SPREAD`), else the deploy stops before sending anything more. `LAUNCH_PRICES_JSON='{"SOL":<price>}'` pins
+  one by hand. USDT is held at its 1 USD peg. Preflight shows the price it would use now.
+- **Single-key authorities (no multisig, owner decision).** Hand every role from the deployer to one dedicated offline key
+  (a hardware wallet); keep the postman on its own key (`--postman`) so approvals stay automatic. Preflight warns (not red)
+  while a role sits on the deployer, and stays red if one sits on the relayer's hot wallet.
+
+## Deposit caps
+While Veyl is new (no external audit), the relayer's approved-set publisher admits shielded deposits only within caps; no
+program change is involved. `config/<network>.json` "caps", in whole tokens:
+```json
+"caps": { "perDeposit": { "SOL": 100, "USDC": 10000, "USDT": 10000, "*": 1000 },
+          "totalShielded": { "SOL": 2500, "USDC": 250000, "USDT": 250000, "*": 25000 } }
+```
+- `perDeposit`: one deposit above it is never admitted. `totalShielded`: deposits are admitted oldest first while the shielded
+  vault (minus pending deposits) stays within it. `"*"` is a US-dollar cap for every token not named, at the relayer's prices; a
+  token it cannot price is not admitted while `"*"` is set.
+- A refused deposit stays pending: the depositor takes it back from the app at any time (`cancel_deposit`, which only the
+  depositor can sign and the publisher cannot block). A deposit held by `totalShielded` is admitted later if room opens up.
+- Phase 1 (legacy pool) deposits above `perDeposit` are left out of the approved set; the depositor takes them back with ragequit.
+- The relayer serves the caps at `GET /info` ("caps", per mint, with the room left under each total); the app refuses an
+  over-cap deposit before the wallet signs ("Deposits are capped at 10,000 USDC while Veyl is new.").
+- Override on the relayer host without a rebuild: `CAPS_JSON='{"perDeposit":{...},"totalShielded":{...}}'` (replaces the
+  whole object) or `CAPS=off`. Devnet and local have no caps. The relayer image copies `config/`.
+- Not covered: public liquidity adds into bin pools (they never pass the relayer) and private positions already moved out of
+  the shielded vault. A per-pool cap there would need a program change (a `max_liquidity` check in `veyl_bin`'s add path).
 
 ## Cost (computed by `--dry-run`)
 Per program: rent(45+len) + rent(36) kept, plus a write buffer rent(37+len) held while that program uploads (refunded); rent(n) is what the RPC answers (`getMinimumBalanceForRentExemption`; about 5,080 lamports a byte on mainnet and devnet in Nov 2026; the deploy's offline fallback, (128+n) x 6,960, overestimates); ~1 tx per KB x 5,000 lamports. Accounts: sizes in `config/account-sizes.json`.
@@ -284,20 +320,22 @@ Mainnet stays blocked while any of these is open; `npm run preflight -- --networ
 2. **Batch committee key generation (Critical for sealed swaps).** Three independent operators run it (above) and publish
    the transcript; preflight is red on mainnet until `committee/transcript.mainnet.json` exists, re-verifies, is at least 2 of
    3 with distinct node keys and is not a local session. The local and e2e committees are one machine's three processes.
-3. **External audit (recommended; a hard blocker in `config/blockers.json`).** An independent firm should audit the three
-   programs, the circuit and the browser engine. `REVIEW.md` is an internal review (1 High and 6 Medium found and fixed, each
-   with a regression test), a stand-in, not an audit. Only the team marks this item resolved, with the published report as
-   evidence.
-4. **Verify the mainnet values in `config/mainnet.json`.** Every `VERIFY:` value must be checked against its issuer and your own
-   records and the prefix removed by hand: the USDC and USDT mint addresses (Circle, Tether; SPL Token program, 6 decimals;
-   preflight checks they exist with the right owner and decimals), the RPC, launch prices, postman, relayer and relayer URL.
-   The program IDs are written by `npm run keys:mainnet`.
+3. **External audit: waived by the owner for launch (2026-11-02).** `config/blockers.json` keeps it open; `config/mainnet.json`
+   "waivers" records the decision, so preflight shows it as a warning instead of red (it is never hidden). Deposit caps limit
+   what is at risk meanwhile. `REVIEW.md` is an internal review (1 High and 6 Medium found and fixed, each with a regression
+   test), a stand-in, not an audit. Only `external-audit` and `multisig` can be waived; the ceremony, the committee and the
+   program keys cannot.
+4. **The owner's values in `config/mainnet.json`.** Done and recorded in the file: the USDC and USDT mints (Circle's and
+   Tether's docs + on chain: classic SPL Token, 6 decimals; preflight re-checks), the public RPC, live opening prices, the sealed
+   pool rules, the deposit caps. Left for the owner: `relayerUrl` (your relayer host) and `treasury` (your own wallet); the
+   program IDs, `postman` and `relayer` are written by `npm run keys:mainnet`.
 
 Ready, run at deploy time (preflight checks each):
 - Phase 1 roles: the protocol fee authority and any reward funder are handed over with the rest (`npm run handover`); preflight
   flags them while the deployer (or the relayer's wallet) holds them.
 - Fresh program keypairs outside the repo and the mainnet build profile: `npm run keys:mainnet` (never the `target/deploy` dev keys).
 - Authority handover after deploy: `npm run handover` moves the three upgrade authorities, every pool authority, the factory
-  authority and every postman role to the multisig (postman to a dedicated key if publishing should stay automatic), with
-  `--dry-run`; preflight flags any role still held by the deployer or a postman that is the relayer's wallet.
+  authority and every postman role to `--to` (at launch: one offline key, the multisig being waived; postman to its dedicated
+  key with `--postman` so publishing stays automatic), with `--dry-run`; preflight flags any role still held by the deployer
+  (a warning while the multisig is waived) or a postman that is the relayer's wallet (red).
 - The internal review's fixes (`REVIEW.md`) are in the programs, the relayer and the app.

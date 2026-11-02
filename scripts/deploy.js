@@ -8,6 +8,8 @@
 //                                             come from target/deploy-mainnet (`npm run build:mainnet`).
 //   POSTMAN_PUBKEY / RELAYER_PUBKEY           approved-set publisher and relayer wallet (default: the deployer, local/devnet only).
 //   PRIORITY_FEE_MICROLAMPORTS                optional compute-unit price for the program deploy transactions.
+//   LAUNCH_PRICES_JSON='{"SOL":94.2}'         pins opening prices (USD); config "prices" values of "live" are fetched at deploy time
+//                                             from CoinGecko + Jupiter, which must agree within 1% (scripts/live-prices.js).
 //
 // Order: preflight -> the three programs (skipped when the on-chain bytes are identical) -> private pools -> factory ->
 // fee tiers (config feeTiers), listing bond + treasury (config bond / treasury) -> bin pools -> entry + vaults -> relayer fee accounts -> lookup table -> deploy.<network>.json -> site/veyl.config.js ->
@@ -17,6 +19,7 @@
 'use strict';
 const fs = require('fs'); const path = require('path'); const { execFileSync } = require('child_process');
 const N = require('./net.js');
+const { resolvePrices } = require('./live-prices.js');
 
 // Largest first: each program's write buffer is held on top of the rent already kept, so the big buffer goes up while little is kept.
 const PROGRAMS = ['veyl_entry', 'veyl_bin', 'veyl_pool'];
@@ -126,7 +129,12 @@ async function main() {
   const args = N.parseArgs(); const network = args.network; const cfg = N.loadConfig(network); const rpc = N.rpcOf(cfg);
   const key = N.deployerKey();
   const programDir = N.programKeypairDir(network);
-  const { tokens, binPools } = selectTokens(cfg); const existing = N.loadDeploy(network);
+  const existing = N.loadDeploy(network);
+  // opening prices: "live" config values fetched now (scripts/live-prices.js), again right before the pools are made
+  const priced = async (final) => { const lp = await resolvePrices(cfg); for (const [s, l] of Object.entries(lp.live)) if (l.price) console.log(`  live price ${s} = ${l.price} USD (CoinGecko ${l.sources.coingecko}, Jupiter ${l.sources.jupiter})`);
+    if (lp.errors.length) { if (final) { console.error(lp.errors.join('\n') + '\nNo opening price: nothing (more) was sent.'); process.exit(1); } console.log('  ' + lp.errors.join('\n  ') + (args.dryRun ? '\n  (dry run: the plan below uses the built-in price)' : '')); }
+    return selectTokens({ ...cfg, prices: lp.prices }); };
+  let { tokens, binPools } = await priced(!args.dryRun);
   console.log(`Veyl (Solana) deploy -> ${network}${args.dryRun ? '  [dry run: nothing is sent]' : ''}`);
   console.log(`RPC ${N.isVerify(rpc) ? '(unset: config still says VERIFY)' : rpc}`);
   console.log(`Deployer ${key.keypair ? key.keypair.publicKey.toBase58() : '(' + key.error + ')'}`);
@@ -168,6 +176,7 @@ async function main() {
   const pick = (envName, cfgVal) => process.env[envName] || (cfgVal && !N.isVerify(cfgVal) ? cfgVal : undefined);
   const postman = pick('POSTMAN_PUBKEY', cfg.postman), relayer = pick('RELAYER_PUBKEY', cfg.relayer);
   if (network === 'mainnet' && (!postman || !relayer)) { console.error('Mainnet needs the postman and relayer public keys (config/mainnet.json or POSTMAN_PUBKEY / RELAYER_PUBKEY).'); process.exit(1); }
+  if (Object.values(cfg.prices || {}).includes('live')) ({ tokens, binPools } = await priced(true));
   const mints = Object.fromEntries(Object.entries(cfg.mints || {}).filter(([, v]) => v && !N.isVerify(v)));
   const { deployAll } = require('./lib.js');
   const fx = factoryTerms(cfg); if (fx.error) { console.error(fx.error); process.exit(1); }
@@ -182,7 +191,7 @@ async function main() {
   if (sealed) { dep.committeeTranscript = sealed.committee; dep.sealedPools = sealed.sealed; fs.writeFileSync(path.join(N.ROOT, `deploy.${network}.json`), JSON.stringify(dep, null, 2)); }
   console.log(JSON.stringify({ network: dep.network, slot: dep.slot, deployer: dep.deployer, programs: dep.programs, lookupTable: dep.lookupTable, pools: Object.keys(dep.tokens).length, binPools: dep.binPools.length }, null, 1));
   console.log(`\nNext: npm run build:site -- --network ${network}   (and start the relayer with this deploy file)`);
-  if (network === 'mainnet') console.log(`Then move every role off the deployer key: npm run handover -- --network mainnet --to <multisig> --dry-run, then without --dry-run (preflight flags what is left).`);
+  if (network === 'mainnet') console.log(`Then move every role off the deployer key: npm run handover -- --network mainnet --to <your offline authority key (or a multisig)> --dry-run, then without --dry-run (preflight flags what is left).`);
 }
 
 module.exports = { plan, selectTokens, factoryTerms, deploySealed, sealedPools, sealedParams };

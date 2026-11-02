@@ -1,7 +1,7 @@
 # Veyl (Solana) relayer + approved-set publisher. Build from the repo root:
 #   docker build -f relayer/Dockerfile -t veyl-sol-relayer .
 # Config is env only (see .env.example): NETWORK, RPC_URL, RELAYER_SECRET_KEY (its own fee-only hot wallet), optional
-# POSTMAN_SECRET_KEY, DEPLOY_JSON or a deploy.<network>.json copied in at build time, PORT (8843).
+# POSTMAN_SECRET_KEY, CAPS_JSON / CAPS=off (deposit caps, relayer/caps.js), DEPLOY_JSON or a deploy.<network>.json copied in at build time, PORT (8843).
 FROM node:20-slim
 ENV NODE_ENV=production PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 PORT=8843
 WORKDIR /app
@@ -9,6 +9,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
 COPY sdk ./sdk
 COPY relayer ./relayer
+# the network configs (public): the deposit caps come from config/<NETWORK>.json "caps" unless CAPS_JSON / CAPS=off say otherwise
+COPY config ./config
 # deploy.devnet.json / deploy.mainnet.json (public addresses only) if they exist; package.json keeps the glob non-empty
 COPY package.json deploy.*.json ./
 USER node
