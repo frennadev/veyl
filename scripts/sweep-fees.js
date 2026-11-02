@@ -67,4 +67,4 @@ async function main() {
     catch (e) { failed++; console.error(`  ${r.pair} failed: ${String((e && e.message) || e).slice(0, 200)}`); } }
   console.log(`\n${done} pools swept${failed ? `, ${failed} failed` : ''}.`); if (failed) process.exit(1);
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
