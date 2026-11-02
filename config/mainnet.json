@@ -106,7 +106,9 @@
       "SOL": 0.1,
       "USDC": 10,
       "USDT": 10
-    }
+    },
+    "later": true,
+    "_later": "true: launch without sealed swaps. The deploy skips the committee and sealed pools while committee/transcript.mainnet.json is missing; once the three operators have run the key generation, commit that file and run the deploy again (programs are skipped, only the committee and the sealed pools are created). Then set this to false."
   },
   "caps": {
     "_comment": "Deposit caps while Veyl is new (no external audit yet), in whole tokens; \"*\" = US dollars for any other token (one the relayer cannot price is not admitted). The relayer's approved-set publisher admits a shielded deposit only within them, oldest first; a refused one stays pending and its depositor can take it back from the app at any time. totalShielded counts what sits in the shielded pool's vault (private positions in bin pools are not included). Change them here (redeploy the relayer) or with the relayer's CAPS_JSON env; no program change needed (relayer/caps.js, DEPLOY.md Deposit caps).",

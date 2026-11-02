@@ -152,7 +152,7 @@ async function preflight({ network, quiet = false }) {
 
   // ---- the batch committee (Phase 3): mainnet needs a real dealerless DKG among independent members, with its public
   //      transcript (committee/transcript.<network>.json) verifying and matching the committee registered on chain
-  { const C = committeeRows({ network, mainnet }); for (const r of C) add(r.check, r.status, r.detail); }
+  { const C = committeeRows({ network, mainnet, later: !!(cfg.sealed && cfg.sealed.later) }); for (const r of C) add(r.check, r.status, r.detail); }
 
   // ---- chain
   const ver = await N.rpcCall(rpc, 'getVersion');
@@ -223,9 +223,9 @@ async function preflight({ network, quiet = false }) {
 }
 /// committee/transcript.<network>.json: the public DKG transcript of the network's batch committee.
 function readTranscript(network) { const f = process.env.COMMITTEE_TRANSCRIPT || path.join(R, `committee/transcript.${network}.json`); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; }
-function committeeRows({ network, mainnet }) {
+function committeeRows({ network, mainnet, later = false }) {
   const rows = []; const tr = readTranscript(network); const D = require('../committee/dkg.js');
-  if (!tr) { rows.push({ check: 'batch committee: DKG transcript', status: mainnet ? 'red' : 'info', detail: `committee/transcript.${network}.json missing: sealed swaps need the committee's key generation (DEPLOY.md, "Batch committee")` }); return rows; }
+  if (!tr) { rows.push({ check: 'batch committee: DKG transcript', status: mainnet && !later ? 'red' : later ? 'warn' : 'info', detail: later ? `sealed swaps start later (config sealed.later): the deploy leaves them off; after the committee's key generation commit committee/transcript.${network}.json and run the deploy again (no program redeploy) to register it and open the sealed pools` : `committee/transcript.${network}.json missing: sealed swaps need the committee's key generation (DEPLOY.md, "Batch committee")` }); return rows; }
   const v = D.verifyTranscript(tr); const distinct = new Set(tr.nodes).size === tr.n;
   const problems = [...v.errs]; if (tr.t < 2 || tr.n < 3) problems.push(`threshold ${tr.t} of ${tr.n} (mainnet needs at least 2 of 3)`); if (!distinct) problems.push('repeated node keys');
   if (/^local-/.test(String(tr.session))) problems.push('a local (one machine) key generation: every member ran on the same host');
