@@ -22,6 +22,7 @@
     "ceremony:rehearse": "node ceremony/rehearse.mjs",
     "build:mainnet": "bash scripts/build.sh mainnet",
     "keys:mainnet": "node scripts/keys-mainnet.js",
+    "wallets:mainnet": "bash scripts/setup-mainnet-wallets.sh",
     "handover": "node scripts/handover.js",
     "test:bin": "node tests/bin-permissionless.js",
     "test:pools": "node tests/pools-api.js",
