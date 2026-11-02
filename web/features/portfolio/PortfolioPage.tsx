@@ -8,7 +8,8 @@ import { openBackup, openRestore } from '@/features/backup/BackupDialogs';
 import { FaucetButton, openStartOver, topUp, openStart, notConnected } from '@/features/session/AccountDialogs';
 import { engine, isLive, useSession } from '@/features/session/session';
 import { balanceOf } from '@/lib/veyl/services/balances';
-import { age, short, tiny } from '@/lib/format';
+import { age, short, tiny, usd } from '@/lib/format';
+import { useMarketTick } from '@/features/market/market';
 import type { LegacyNote, PendingDeposit, VeylEngine } from '@/lib/veyl/types';
 import { go } from '@/features/shell/router';
 import { OrderRow, PortfolioSummary, PositionCard } from '@/features/positions/PositionCards';
@@ -78,12 +79,24 @@ function PrivateBalanceCard() {
   const E = engine();
   const held = Object.keys(E.tokens).filter((k) => balanceOf(b, 'priv', k) > 1e-12);
   const addr = E.veylAddress();
+  useMarketTick(); // the total below follows the live prices
+  const m = useSession((s) => s.rt?.market);
+  const vals = held.map((k) => ({ k, v: balanceOf(b, 'priv', k) * (m?.usd(k) ?? NaN) }));
+  const priced = vals.filter((x) => isFinite(x.v) && x.v > 0), total = priced.reduce((t, x) => t + x.v, 0);
   const empty = E.shieldError ? (rpcTrouble(E.shieldError) ?? 'Could not read your private balance: ' + E.shieldError)
     : account ? 'Nothing in your private balance yet. ' + (sbx ? 'Top up from your wallet card.' : 'Deposit to start, or share your Veyl address to be paid privately.')
       : 'Nothing in your private balance yet. Share your Veyl address to be paid privately, or connect a wallet to deposit.';
   return (
     <div className="card shield" id="shieldCard">
       <div className="k"><span>Private balance<Tip term="privateBalance" align="l" /></span><span className="pill priv"><Icon name="lock" />Hidden on-chain</span></div>
+      {/* the total at live market prices, and how it splits; a token without a price is left out and said so */}
+      {total > 0 && <div className="pbtotal" id="balTotal">
+        <b className="sens">{usd(total)}</b>
+        <small>{priced.length < vals.length ? `at market prices · ${vals.length - priced.length} without a price` : 'at live market prices'}</small>
+        <div className="alloc" role="img" aria-label={'Split: ' + priced.map((x) => `${x.k} ${Math.round((x.v / total) * 100)}%`).join(', ')}>
+          {[...priced].sort((p, q) => q.v - p.v).map((x) => <i key={x.k} style={{ flexGrow: x.v }} title={`${x.k} ${Math.round((x.v / total) * 100)}%`} />)}
+        </div>
+      </div>}
       <div className="toks" id="balList">
         {loading && !held.length ? <p className="dim" style={{ margin: 0, fontSize: 14 }}>Reading your private balance from the chain. The first time on a device this can take a minute.</p> : held.length
           ? held.map((k) => <div key={k}><TokenLogo sym={k} /><b className="sens">{tiny(balanceOf(b, 'priv', k))}</b><span>{k}</span></div>)

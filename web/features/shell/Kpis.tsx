@@ -1,6 +1,6 @@
 'use client';
-// The header strip: your positions, fees earned and on-chain liquidity (on a real chain), and SOL's market price with its
-// source and age. The Sandbox and preview show the SOL price only.
+// The overview strip at the top of the Pools page (it used to crowd the header): your positions, fees earned and on-chain
+// liquidity (on a real chain), and SOL's market price with its source and age. The Sandbox and preview show the SOL price only.
 import { useEffect, useState, type ReactNode } from 'react';
 import { failed, usePositions } from '@/features/positions/positions';
 import { positionUsd } from '@/features/positions/PositionCards';

@@ -1,7 +1,7 @@
 // Per-page <head> tags, the same set and wording the old static pages had. React 19 hoists <title>, <meta> and <link> into
 // <head> wherever they are rendered. Stylesheets carry `precedence`, so React keeps them in <head> in first-seen order: the
 // root layout's fonts and veyl.css first, then any page stylesheet (app.css), so the cascade is unchanged.
-const OG_IMAGE_ALT = 'The Veyl mark beside the line: Liquidity, without a name.';
+const OG_IMAGE_ALT = 'The Veyl ghost beside the wordmark, over the line: Concentrated liquidity, kept private.';
 export default function PageHead({ title, description, ogTitle = title, ogDescription = description, styles = [] }:
   { title: string; description: string; ogTitle?: string; ogDescription?: string; styles?: string[] }) {
   return (

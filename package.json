@@ -12,6 +12,7 @@
     "e2e": "node e2e/run.js",
     "preflight": "node scripts/preflight.js",
     "deploy": "node scripts/deploy.js",
+    "dev": "node scripts/build-site.js --network devnet && echo 'demo (no wallet): http://localhost:3000/app.html?mode=sandbox-dev' && node scripts/serve-dist.js 3000",
     "build:site": "node scripts/build-site.js",
     "serve:site": "node scripts/serve-dist.js",
     "localnet": "node scripts/localnet.js",

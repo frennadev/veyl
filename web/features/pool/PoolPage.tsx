@@ -77,7 +77,7 @@ export default function PoolPage() {
           <div className="card chartcard">
             <div className="h"><b>Liquidity by bin<Tip term="liquidityByBin" align="l" /></b><div className="legend" id="pLegend">
               <span><i style={{ background: 'var(--y-side)' }}></i>{tl(pool.y)} side</span><span><i style={{ background: 'var(--x-side)' }}></i>{tl(pool.x)} side</span>
-              <span><i style={{ background: 'var(--act)' }}></i>Active bin</span><span><i className="ln" style={{ background: 'var(--wine-2)' }}></i>Your range</span>
+              <span><i style={{ background: 'var(--act)' }}></i>Active bin</span><span><i className="ln" style={{ background: 'var(--priv)' }}></i>Your range</span>
             </div></div>
             <BinChart m={m} message={message} overlay={{ range: { lo, hi }, preview, orderBin, orders }} />
           </div>
