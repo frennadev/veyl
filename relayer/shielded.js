@@ -54,7 +54,14 @@ module.exports = (Base) =>
             1_400_000,
           ),
         );
-      const posted = await V.posted(pda);
+      // read-after-write: the read may reach a node (or, after a failover, the public RPC) a slot behind the one that
+      // confirmed the post, so a missing account is retried briefly before the request fails
+      let posted = null;
+      for (let i = 0; i < 8; i++) {
+        posted = await V.posted(pda);
+        if (posted) break;
+        await new Promise((r) => setTimeout(r, 750));
+      }
       if (!posted || posted.kind !== kind) throw new Error("proof not posted");
       return { pubs, poster: posted.poster };
     }
