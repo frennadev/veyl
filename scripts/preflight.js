@@ -17,7 +17,7 @@ const KNOWN_DEV_ZKEYS = ['b1ce9fa6440fd92d540badb7f0053b08f6a6a0a1bb5b6afaac9b11
   '5905898bbc9889d03c75384159de066cae304f2bd637f0ea3a80e968bb00c8b2', '24ee888ae9154f87a48341d21e16729db1db3da89326be1784892f3121e4c2c7'];
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 /// Mainnet blockers the owner may accept with a written reason in config "waivers" (shown as warnings, never hidden).
-const WAIVABLE = ['external-audit', 'multisig', 'single-operator-committee'];
+const WAIVABLE = ['external-audit', 'multisig', 'single-operator-committee', 'trusted-setup'];
 /// An RPC URL for printing: no path, query or credentials (a paid RPC's API key lives there).
 const safeUrl = (u) => { try { const x = new URL(u); return x.protocol + '//' + x.host + (x.pathname.length > 1 || x.search ? '/…' : ''); } catch { return '(unparsable URL)'; } };
 
@@ -147,7 +147,9 @@ async function preflight({ network, quiet = false }) {
   }
   // trusted setup: a recorded, verified multi-party ceremony whose vkey is the one baked into veyl_pool (ceremony/check.mjs)
   void zkHash;
-  try { const { setupRows } = await import('../ceremony/check.mjs'); for (const r of await setupRows({ mainnet, poolSo, vkeyParts })) add(r.check, r.status, r.detail); }
+  /* an owner waiver ("trusted-setup": launch on the single-machine keys, ceremony later) turns the setup reds into warnings that stay listed */
+  const wSetup = waived['trusted-setup'];
+  try { const { setupRows } = await import('../ceremony/check.mjs'); for (const r of await setupRows({ mainnet, poolSo, vkeyParts })) add(r.check, wSetup && r.status === 'red' ? 'warn' : r.status, wSetup && r.status === 'red' ? 'WAIVED by the owner: ' + wSetup.slice(0, 90) + '… | ' + r.detail : r.detail); }
   catch (e) { add('trusted setup (ceremony)', mainnet ? 'red' : 'warn', 'could not check: ' + e.message); }
 
   // ---- the batch committee (Phase 3): mainnet needs a real dealerless DKG among independent members, with its public
