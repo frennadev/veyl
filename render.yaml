@@ -1,5 +1,6 @@
-# Render blueprint: the relayer (Docker web service) and the static site, on devnet. Secrets are entered in the Render
-# dashboard (sync: false), never committed. Set NETWORK / the build --network to mainnet only after DEPLOY.md "Before mainnet".
+# Render blueprint: the relayer (Docker web service), the static site and the sealed-batch committee, on MAINNET. Secrets are
+# entered in the Render dashboard (sync: false), never committed. Push this only together with the mainnet deploy: the relayer
+# and the site read deploy.mainnet.json, which the deploy writes. Devnet still runs locally: scripts/devnet-local.sh.
 # Steps: DEPLOY.md "Hosting on Render".
 services:
   # ------------------------------------------------------------------ relayer: fees, submissions, faucet, token data, trade index
@@ -12,21 +13,19 @@ services:
     healthCheckPath: /health
     envVars:
       - key: NETWORK
-        value: "devnet"
-      - key: RPC_URL   # a dedicated devnet RPC (Helius etc.); the public one rate-limits the relayer
+        value: "mainnet"
+      - key: RPC_URL   # the paid mainnet RPC (https://mainnet.helius-rpc.com/?api-key=...); never commit it
         sync: false
       - key: RELAYER_SECRET_KEY   # the relayer hot wallet (fee-only, low balance): JSON byte array or base58
         sync: false
       - key: POSTMAN_SECRET_KEY   # optional: approved-set publisher key (never the relayer's key)
-        sync: false
-      - key: FAUCET_SECRET_KEY   # DEVNET ONLY: the devnet deployer key (mint authority of the mock tokens) for "Get test tokens". Never set on mainnet.
         sync: false
       - key: ALLOWED_ORIGINS   # CORS: the site's public URL (a blueprint's fromService host is the internal name, not this); add a custom domain here, comma separated
         value: "https://veyl-sol-site.onrender.com"
       - key: MIN_FEE_BPS
         value: "5"
       - key: LOW_BALANCE_SOL
-        value: "0.05"
+        value: "0.5"
       - key: TRUST_PROXY   # Render's proxy: rate-limit on the client address it appends to X-Forwarded-For (REVIEW.md L-2)
         value: "1"
       - key: FEE_COVER     # the fee must pay back at least this multiple of the rent + fees a request costs (REVIEW.md M-1)
@@ -44,7 +43,7 @@ services:
   - type: web
     name: veyl-sol-site
     runtime: static
-    buildCommand: npm ci && npm run build:site -- --network devnet
+    buildCommand: npm ci && npm run build:site -- --network mainnet
     staticPublishPath: dist/site
     envVars:
       - key: NODE_VERSION
@@ -121,10 +120,11 @@ services:
         name: Cache-Control
         value: "no-cache"
 
-  # ------------------------------------------------------------------ the sealed-batch committee (2 of 3), devnet testing
-  # Sealed swaps settle only while t of the n nodes run. Members should run on separate infrastructure (committee/README.md
-  # "Trust"); all three here is for devnet testing only. Each node starts from its existing key share (SHARE_JSON, a
-  # secret) and the public transcript in committee/transcript.devnet.json, so no disk and no new key generation is needed.
+  # ------------------------------------------------------------------ the sealed-batch committee (2 of 3), mainnet
+  # Sealed swaps settle only while t of the n nodes run. All three here run under one operator (owner decision; config
+  # waivers "single-operator-committee"): whoever controls this account could decrypt individual sealed swap sizes. Move
+  # nodes to independent operators later (committee/OPERATOR.md; set_committee between batches). Each node starts from its
+  # key share (SHARE_JSON, a secret) made by scripts/setup-mainnet-committee.js, and committee/transcript.mainnet.json.
   # Private services: nothing public; after the key generation the nodes only talk to the chain.
   - type: pserv
     name: veyl-sol-committee-1
@@ -134,16 +134,16 @@ services:
     plan: starter
     envVars:
       - key: NETWORK
-        value: "devnet"
+        value: "mainnet"
       - key: STATE_DIR      # no disk: the share comes from SHARE_JSON on every start
         value: "/tmp/committee"
-      - key: RPC_URL        # a dedicated devnet RPC (may be the relayer's)
+      - key: RPC_URL        # the paid mainnet RPC (may be the relayer's)
         sync: false
-      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-devnet/node-1.json (it pays its share transactions: keep devnet SOL on it)
+      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-mainnet/node-1.json (it pays its share transactions: keep ~0.3 SOL on it)
         sync: false
-      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-devnet/config-1.json (index, t, n, peers; public keys only)
+      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-mainnet/config-1.json (index, t, n, peers; public keys only)
         sync: false
-      - key: SHARE_JSON        # ~/keys/veyl/committee-devnet/state-1/share.json: this member's KEY SHARE (secret)
+      - key: SHARE_JSON        # ~/keys/veyl/committee-mainnet/state-1/share.json: this member's KEY SHARE (secret)
         sync: false
 
   - type: pserv
@@ -154,16 +154,16 @@ services:
     plan: starter
     envVars:
       - key: NETWORK
-        value: "devnet"
+        value: "mainnet"
       - key: STATE_DIR      # no disk: the share comes from SHARE_JSON on every start
         value: "/tmp/committee"
-      - key: RPC_URL        # a dedicated devnet RPC (may be the relayer's)
+      - key: RPC_URL        # the paid mainnet RPC (may be the relayer's)
         sync: false
-      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-devnet/node-2.json (it pays its share transactions: keep devnet SOL on it)
+      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-mainnet/node-2.json (it pays its share transactions: keep ~0.3 SOL on it)
         sync: false
-      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-devnet/config-2.json (index, t, n, peers; public keys only)
+      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-mainnet/config-2.json (index, t, n, peers; public keys only)
         sync: false
-      - key: SHARE_JSON        # ~/keys/veyl/committee-devnet/state-2/share.json: this member's KEY SHARE (secret)
+      - key: SHARE_JSON        # ~/keys/veyl/committee-mainnet/state-2/share.json: this member's KEY SHARE (secret)
         sync: false
 
   - type: pserv
@@ -174,14 +174,14 @@ services:
     plan: starter
     envVars:
       - key: NETWORK
-        value: "devnet"
+        value: "mainnet"
       - key: STATE_DIR      # no disk: the share comes from SHARE_JSON on every start
         value: "/tmp/committee"
-      - key: RPC_URL        # a dedicated devnet RPC (may be the relayer's)
+      - key: RPC_URL        # the paid mainnet RPC (may be the relayer's)
         sync: false
-      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-devnet/node-3.json (it pays its share transactions: keep devnet SOL on it)
+      - key: NODE_SECRET_KEY   # this member's node key: ~/keys/veyl/committee-mainnet/node-3.json (it pays its share transactions: keep ~0.3 SOL on it)
         sync: false
-      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-devnet/config-3.json (index, t, n, peers; public keys only)
+      - key: COMMITTEE_JSON    # ~/keys/veyl/committee-mainnet/config-3.json (index, t, n, peers; public keys only)
         sync: false
-      - key: SHARE_JSON        # ~/keys/veyl/committee-devnet/state-3/share.json: this member's KEY SHARE (secret)
+      - key: SHARE_JSON        # ~/keys/veyl/committee-mainnet/state-3/share.json: this member's KEY SHARE (secret)
         sync: false
