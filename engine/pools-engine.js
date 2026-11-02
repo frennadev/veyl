@@ -24,6 +24,7 @@ export class PoolError extends Error { constructor(code, message) { super(messag
 export function installPools(Engine) {
   const P = Engine.prototype;
   Engine.PROTOCOL_FEE_BPS = S.PROTOCOL_FEE_BPS;
+  Engine.LP_BONUS_BPS = S.LP_BONUS_BPS;
   Engine.PoolError = PoolError;
 
   // ---------------------------------------------------------------------------------------------- tokens keyed by mint

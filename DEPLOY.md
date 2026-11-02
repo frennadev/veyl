@@ -85,8 +85,8 @@ Only the upgrade authority can create pools or the factory (`init_pool`, `init_f
 handover, and list only classic SPL Token mints (USDC, USDT, wrapped SOL): no transfer-fee, hook or permanent-delegate mints.
 
 ## Cost (computed by `--dry-run`)
-Per program: rent(45+len) + rent(36) kept, plus a write buffer rent(37+len) held while that program uploads (refunded); rent(n) = (128+n) x 6,960 lamports; ~1 tx per KB x 5,000 lamports. Accounts: sizes in `config/account-sizes.json`.
-Programs today: `veyl_pool` 768 KB, `veyl_bin` 782 KB, `veyl_entry` 1.6 MB, so the programs alone keep about 16 SOL on any network and the largest write buffer adds 8.1 SOL to the peak.
+Per program: rent(45+len) + rent(36) kept, plus a write buffer rent(37+len) held while that program uploads (refunded); rent(n) is what the RPC answers (`getMinimumBalanceForRentExemption`; about 5,080 lamports a byte on mainnet and devnet in Nov 2026; the deploy's offline fallback, (128+n) x 6,960, overestimates); ~1 tx per KB x 5,000 lamports. Accounts: sizes in `config/account-sizes.json`.
+Programs today: `veyl_pool` 786 KB, `veyl_bin` 832 KB (mainnet build), `veyl_entry` 1.6 MB: they keep 3.99 + 4.23 + 8.23 = **16.45 SOL** on any network (mainnet RPC, Nov 2026), and the largest write buffer adds 8.23 SOL to the peak (refunded when that upload finishes).
 - **Devnet**, the 12 built-in pools, mock mints (dry-run, Oct 2026): **16.67 SOL** kept, **24.80 SOL** peak. Seeding adds ~0.25 SOL a pool; `VEYL-DEVNET.command` adds that and 2 SOL for the faucet, then prints the total (about 30 SOL for 12 pools; all 83 pools need roughly twice that).
 - **Mainnet** (SOL/USDC/USDT, 3 bin pools): about **16.4 SOL** kept, **24.5 SOL** peak (same programs; run the dry-run for the exact figure). Plus priority fees if you set `PRIORITY_FEE_MICROLAMPORTS`.
 - Paid later by whoever needs them (never refunded: there is no close instruction yet): a bin array (60 bins, 9,664 bytes) **0.0682 SOL**,
@@ -130,7 +130,9 @@ All of these allow browser calls (CORS `*`) as far as their docs say; `engine/ma
 ## Fees, rewards, limit orders (Phase 1)
 - **Protocol fee.** A fixed **0.2%** (`protocol_fee_bps = 20`) of every swap's input, on top of the pool's LP fee, goes to an
   accounted protocol balance in its vaults; LPs keep the whole LP fee (claimable per position) and limit orders are paid into
-  the filled amount. Sealed batches pay it on the matched part too (`pay_protocol_fee`). LP fees come from the factory's fee
+  the filled amount. **LP bonus:** every swap also pays a fixed **0.05%** (`LP_BONUS_BPS = 5`, a program constant, all pools
+  and tiers) of its input to LPs, distributed exactly like the LP fee. A trader pays tier fee + 0.05% + 0.2% (SOL/USDC at
+  the 0.05% tier: 0.30%, plus any volatility fee). Sealed batches pay it on the matched part too (`pay_protocol_fee`). LP fees come from the factory's fee
   tiers (`"feeTiers"` in `config/<network>.json`; a listed tier cannot be edited). Pools anyone lists post a refundable bond
   (`"bond": { sol, lockDays }`); `"treasury"` receives delisted bonds. Only the factory's **protocol fee authority** may withdraw: the
   deployer at first; `npm run handover` proposes it to the multisig (two-step, the multisig accepts), like the factory

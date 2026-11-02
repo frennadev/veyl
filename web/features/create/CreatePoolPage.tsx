@@ -72,7 +72,7 @@ function TokenPreview({ mint, check }: { mint: string; check: TokenCheck | null 
 
 export default function CreatePoolPage() {
   const live = useSession((s) => isLive(s)), account = useSession((s) => s.account);
-  const protocolFeeBps = useSession((s) => s.rt?.protocolFeeBps ?? null);
+  const protocolFeeBps = useSession((s) => s.rt?.protocolFeeBps ?? null), lpBonusBps = useSession((s) => s.rt?.lpBonusBps ?? null);
   const [mintA, setMintA] = useState(''), [mintB, setMintB] = useState('');
   const [tierId, setTierId] = useState<number | null>(null), [price, setPrice] = useState(''), [err, setErr] = useState('');
   const E = live ? engine() : null;
@@ -148,7 +148,7 @@ export default function CreatePoolPage() {
           {offBy !== null && Math.abs(offBy) >= 0.05 && <Hint icon="alert" tone="warn" id="cpPriceWarn">That&apos;s {Math.round(Math.abs(offBy) * 100)}% {offBy > 0 ? 'above' : 'below'} the market price. Traders will buy and sell against your liquidity until the pool reaches the market price, and the difference comes out of what you deposit.</Hint>}
           <dl className="det">
             <div><dt>Bond<Tip term="bond" align="l" /></dt><dd>{terms ? `${Number(terms.amount) / 1e9} SOL, refundable after ${terms.lockDays} days` : 'A refundable SOL deposit, returned after the lock period'}</dd></div>
-            {tier && <div><dt>Traders pay<Tip term="traderCost" align="l" /></dt><dd>{pctOf(tier.feePips)} + volatility fee{protocolFeeBps != null ? ` + ${(protocolFeeBps / 100).toFixed(2)}% protocol` : ''}</dd></div>}
+            {tier && <div><dt>Traders pay<Tip term="traderCost" align="l" /></dt><dd>{pctOf(tier.feePips)} + volatility fee{lpBonusBps != null ? ` + ${(lpBonusBps / 100).toFixed(2)}% LP bonus` : ''}{protocolFeeBps != null ? ` + ${(protocolFeeBps / 100).toFixed(2)}% protocol` : ''}{protocolFeeBps != null && lpBonusBps != null ? ` (${pctOf(tier.feePips + (protocolFeeBps + lpBonusBps) * 100)} at rest)` : ''}</dd></div>}
             <div><dt>Network fee</dt><dd>Paid from your wallet (public)</dd></div>
           </dl>
           <Hint icon="alert" tone="warn">Creating a pool is public: your wallet pays the bond and appears as the creator. Liquidity added to it later can be private.</Hint>

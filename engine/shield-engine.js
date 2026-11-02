@@ -160,8 +160,10 @@ export function installShield(Engine, PrivacyError) {
     const v = this.unit(sym, amount); const mint = new PublicKey(this.tok(sym).mint); const wrap = await this.wrapIxs(mint, v); const d = zw.deposit(mint, v);
     const p = await this.proveIn('transact', d.input); const pubs = p.pubs.map(BigInt);
     const ixPost = this.V.postProofIx(this.pk, Z.KIND.TRANSACT, Buffer.from(p.proof, 'base64'), pubs); const ixDep = await this.V.shieldDepositIx(this.pk, d.ext, pubs);
+    /* a token listed since the deploy may still lack its shielded / entry vaults: the first depositor makes them (rent ~0.002 SOL each) */
+    const vaults = this._vaultIxs ? (await this._vaultIxs(this.pk, [mint])).ixs : [];
     const ob = this._outboxAdd({ kind: 'deposit', ext: d.ext, p }); let tx; // the deposit's note, kept before the wallet signs (see outbox)
-    try { tx = await this._sendAll(wrap.length ? [wrap, [ixPost], [ixDep]] : [[ixPost], [ixDep]], 1_400_000); } catch (e) { for (const o of ob) o.err = Date.now(); this.store.save(); throw e; }
+    try { tx = await this._sendAll([...(vaults.length ? [vaults] : []), ...(wrap.length ? [wrap] : []), [ixPost], [ixDep]], 1_400_000); } catch (e) { for (const o of ob) o.err = Date.now(); this.store.save(); throw e; }
     for (const o of ob) o.tx = tx;
     this.store.data.shield.pending.push({ commitment: String(d.commitments[0]), sym, amount: String(v), tx, at: Date.now() }); this.store.save();
     return { tx, value: v };

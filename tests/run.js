@@ -197,7 +197,7 @@ const { counts, check, refused, CU, cuOf, logsOf, lap, freshValidator, funded, f
     const amountIn = units(2.5, 9);
     const qc = await V.quote(BPX.address, true, amountIn); const ql = await V.quoteLocal(BPX.address, true, amountIn, Math.floor(Date.now() / 1000));
     check('quote (on-chain simulate) == quote (JS twin) for 2.5 SOL -> USDC', qc.out === ql.out && qc.fee === ql.fee && qc.endId === ql.endId, `out ${qc.out} fee ${qc.fee} endId ${qc.endId}`);
-    check('quote crosses bins: 2.5 SOL eats bin 0 (150 USDC) and walks down; LP fee between the 0.05% base and 0.2%, plus the 0.2% protocol fee', qc.endId < 0 && qc.fee - S.protocolFeeOf(amountIn) >= amountIn / 2_000n && qc.fee - S.protocolFeeOf(amountIn) < amountIn / 500n);
+    check('quote crosses bins: 2.5 SOL eats bin 0 (150 USDC) and walks down; LP fee between the 0.05% base and 0.2%, plus the 0.05% LP bonus and the 0.2% protocol fee', qc.endId < 0 && ql.lpBonus === S.lpBonusOf(amountIn) && qc.fee - S.protocolFeeOf(amountIn) - ql.lpBonus >= (amountIn * 99n) / 200_000n && qc.fee - S.protocolFeeOf(amountIn) - ql.lpBonus < amountIn / 500n);
     check('slippage protection: minOut above the quote is refused', await refused(as(bob).send([await V.swapIx(bob.publicKey, BPX.address, true, amountIn, qc.out + 1n)], [], 1_400_000), /Slippage/));
     const b0 = await bal(USDC, bob.publicKey);
     sig = await as(bob).send([await V.swapIx(bob.publicKey, BPX.address, true, amountIn, qc.out)], [], 1_400_000); await cuOf(conn, sig, 'swap (3 bins)');

@@ -13,11 +13,13 @@
 //!    it buys, so empty ranges cost nothing; MAX_STEPS bounds the number of bins actually traded against.
 //!  - Fees (Meteora-style): a swap fee is no longer folded into the bin's reserves. Every swap first pays the protocol
 //!    fee, a fixed `protocol_fee_bps` (0.2%, copied from the factory when the pool is created, never changed) of the input
-//!    amount, rounded up, accounted to the pool's protocol balance. The rest trades through the bins and pays the pool's LP
-//!    fee, which goes 100% to liquidity: split between the bin's market-making liquidity (fee growth per share, per token,
-//!    claimed with `claim_fees`) and its limit-order liquidity (paid into the order's filled amount), pro rata to what each
-//!    sold. Shares of `MIN_LIQUIDITY` (locked forever) are excluded from the per-share division (a fee with no provider to
-//!    pay goes to the protocol), so every fee atom ends up claimable or protocol, minus floor rounding left in the vault.
+//!    amount, rounded up, accounted to the pool's protocol balance, and the LP bonus, a fixed `LP_BONUS_BPS` (0.05%, all
+//!    pools and tiers, a program constant) of the same gross input, rounded up. The rest trades through the bins and pays
+//!    the pool's LP fee; each bin's LP fee plus its pro-rata part of the bonus (by input used) goes 100% to liquidity:
+//!    split between the bin's market-making liquidity (fee growth per share, per token, claimed with `claim_fees`) and its
+//!    limit-order liquidity (paid into the order's filled amount), pro rata to what each sold. Shares of `MIN_LIQUIDITY`
+//!    (locked forever) are excluded from the per-share division (a fee with no provider to pay goes to the protocol), so
+//!    every fee atom ends up claimable or protocol, minus floor rounding left in the vault.
 //!  - Listing (permissionless): anyone creates a pool for a canonical pair (mint_x < mint_y) at one of the factory's fee
 //!    tiers (bin step + base fee + variable fee control; one pool per pair per tier, fixed forever), paying a refundable
 //!    bond (`Bond` PDA, `release_bond` after the lock). The factory authority may delist a pool (`delist_pool`): its bond
@@ -64,6 +66,9 @@ pub const MAX_IDS: usize = 70;
 pub const BPS: u128 = 10_000;
 /// Protocol fee: bps of every swap's input, on top of the LP fee (0.2%). Fixed: set in the factory at init, copied into each pool.
 pub const PROTOCOL_FEE_BPS: u16 = 20;
+/// LP bonus: bps of every swap's (gross) input paid to liquidity on top of the tier's LP fee and the protocol fee (0.05%).
+/// A program constant (no pool field): every pool, old or new, pays it from the upgrade on. Distributed like the LP fee.
+pub const LP_BONUS_BPS: u16 = 5;
 pub const MAX_TIERS: usize = 16;
 pub const DEFAULT_BOND_LAMPORTS: u64 = 1_000_000_000; // 1 SOL until the factory authority sets it
 pub const DEFAULT_BOND_LOCK: i64 = 30 * 86_400;
@@ -118,6 +123,8 @@ fn sub64(a: u64, b: u64) -> Result<u64> { a.checked_sub(b).ok_or_else(|| error!(
 /// ceil(amount * bps / 10_000): the protocol fee a swap of `amount` pays (taken from the input before it trades). veyl_entry
 /// uses the same function for the matched (netted) part of a sealed batch, paid with `pay_protocol_fee`.
 pub fn protocol_fee_of(amount: u64, bps: u16) -> u64 { ((amount as u128 * bps as u128 + BPS - 1) / BPS) as u64 }
+/// ceil(amount * LP_BONUS_BPS / 10_000): the LP bonus a swap of `amount` pays (same input and rounding as the protocol fee).
+pub fn lp_bonus_of(amount: u64) -> u64 { protocol_fee_of(amount, LP_BONUS_BPS) }
 /// floor(v * bps / 10_000): what a caller-chosen share (bps) of an amount is.
 pub fn bps_of(v: u64, bps: u16) -> u64 { ((v as u128 * bps as u128) / BPS) as u64 }
 /// Claimable amount for `shares` between a checkpoint and the current growth (Q64.64 per share, wrapping accumulators).
@@ -715,16 +722,20 @@ fn next_bin(p: &BinPool, arrays: &[Found<BinArray>], from: i32, x_for_y: bool) -
     }
 }
 
-/// `_simulate`: the protocol fee (`protocol_fee_of(amount_in)`, rounded up) comes off the input first; the rest trades from
-/// the active bin, bin by bin, until it is used up. Per bin the formula is the EVM's; the LP fee taken in each bin is split
-/// between market makers and limit orders pro rata to what each sold. `fee` = LP fee + protocol fee (what the trader paid),
-/// `protocol_fee` = the protocol fee + any LP fee that had no provider to pay.
+/// `_simulate`: the protocol fee (`protocol_fee_of(amount_in)`) and the LP bonus (`lp_bonus_of(amount_in)`, both of the gross
+/// input, rounded up; the bonus capped at what the protocol fee leaves) come off the input first; the rest trades from the
+/// active bin, bin by bin, until it is used up. Per bin the formula is the EVM's; the bin's LP fee plus its part of the bonus
+/// (bonus * used / traded, floored; the last bin takes the remainder, so the parts sum to the bonus exactly) is split
+/// between market makers and limit orders pro rata to what each sold. `fee` = LP fee + bonus + protocol fee (what the
+/// trader paid), `protocol_fee` = the protocol fee + any LP fee or bonus that had no provider to pay (also the whole bonus
+/// when nothing is left to trade).
 pub fn simulate(p: &BinPool, arrays: &[Found<BinArray>], x_for_y: bool, amount_in: u64, now: i64) -> Result<SwapResult> {
     require!(p.seeded == 1, BinError::InsufficientLiquidity);
     let (vol_ref, id_ref) = p.refs(now);
-    let proto_in = protocol_fee_of(amount_in, p.protocol_fee_bps);
-    let mut r = SwapResult { out: 0, fee: proto_in, protocol_fee: proto_in, end_id: p.active_id, vol_acc: 0, vol_ref, id_ref, touched: Vec::new() };
-    let mut left = (amount_in - proto_in) as u128; let mut id = p.active_id; let mut step = 0usize; let mut prices = Prices::new(&p.base_price, &p.step_q);
+    let proto_in = protocol_fee_of(amount_in, p.protocol_fee_bps); let bonus = lp_bonus_of(amount_in).min(amount_in - proto_in);
+    let traded = (amount_in - proto_in - bonus) as u128; let (bonus, mut bonus_left) = (bonus as u128, bonus as u128);
+    let mut r = SwapResult { out: 0, fee: proto_in + bonus as u64, protocol_fee: proto_in + if traded == 0 { bonus as u64 } else { 0 }, end_id: p.active_id, vol_acc: 0, vol_ref, id_ref, touched: Vec::new() };
+    let mut left = traded; let mut id = p.active_id; let mut step = 0usize; let mut prices = Prices::new(&p.base_price, &p.step_q);
     while left > 0 {
         id = next_bin(p, arrays, id, x_for_y)?.ok_or(BinError::InsufficientLiquidity)?;
         require!(step < MAX_STEPS, BinError::TooManySteps); step += 1;
@@ -747,7 +758,8 @@ pub fn simulate(p: &BinPool, arrays: &[Found<BinArray>], x_for_y: bool, amount_i
             let g_ = to_u128(g_)?; got = if g_ > avail { avail } else { g_ };
         }
         // split the bin's trade (and its LP fee) between market makers and limit orders pro rata to what each sold
-        let lp_fee = fee_amt;
+        let bonus_part = if used == left { bonus_left } else { bonus * used / traded }; bonus_left -= bonus_part;
+        let lp_fee = fee_amt + bonus_part;
         let net = used - fee_amt;
         let lo_got = got * lo_avail / avail; let mm_got = got - lo_got;
         let (lo_in, lo_fee) = if got == 0 { (0, 0) } else { (net * lo_got / got, lp_fee * lo_got / got) };
@@ -756,7 +768,7 @@ pub fn simulate(p: &BinPool, arrays: &[Found<BinArray>], x_for_y: bool, amount_i
         let mut proto_extra = 0u128;
         if mm_fee > 0 {
             if eligible > 0 { let add = (mm_fee << 64) / eligible; if x_for_y { wadd_st(&mut b.fee_gx, add); } else { wadd_st(&mut b.fee_gy, add); } }
-            else { proto_extra = mm_fee; } // no liquidity provider to pay (only the locked MIN_LIQUIDITY): protocol
+            else { proto_extra = mm_fee; } // no liquidity provider to pay (only the locked MIN_LIQUIDITY): protocol (bonus part too)
         }
         let ck = |v: u128| -> Result<u64> { require!(v <= u64::MAX as u128, BinError::Overflow); Ok(v as u64) };
         if x_for_y {

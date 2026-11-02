@@ -8,7 +8,7 @@ import { requestedMode } from './mode';
 export const RUNTIME_SCRIPTS = ['veyl.config.js', 'sandbox.config.js', 'veyl.keys.js', 'snarkjs.min.js', 'qrcode.js', 'veyl-sol.js'];
 
 interface VeylGlobal {
-  Engine: (new (cfg: RuntimeConfig) => ChainEngine) & { PROTOCOL_FEE_BPS?: number; walletList?(): WalletProvider[]; onWallets?(cb: () => void): () => void };
+  Engine: (new (cfg: RuntimeConfig) => ChainEngine) & { PROTOCOL_FEE_BPS?: number; LP_BONUS_BPS?: number; walletList?(): WalletProvider[]; onWallets?(cb: () => void): () => void };
   Sandbox?: new (opts: object) => SandboxEngine & { cfg: RuntimeConfig };
   SDK?: SdkPort;
   Markets?: new (o: { keys: object }) => MarketsPort;
@@ -40,18 +40,19 @@ export function loadRuntime(): Promise<Runtime> {
 function createRuntime(w: Globals, want: 'sandbox' | 'chain'): Runtime {
   const V = w.Veyl, cfg = w.VEYL_CONFIG || null, deployed = !!cfg?.programs, sdk = V?.SDK || null;
   const protocolFeeBps = typeof V?.Engine?.PROTOCOL_FEE_BPS === 'number' ? V.Engine.PROTOCOL_FEE_BPS : null;
+  const lpBonusBps = typeof V?.Engine?.LP_BONUS_BPS === 'number' ? V.Engine.LP_BONUS_BPS : null;
   const markets = V?.Markets && V.MARKET_SOURCES ? { api: new V.Markets({ keys: w.VEYL_KEYS || {} }), sources: V.MARKET_SOURCES } : null;
   const E = V?.Engine;
   const wallets: WalletDirectory | null = E?.walletList && E.onWallets ? { list: () => E.walletList!(), on: (cb) => E.onWallets!(cb) } : null;
   if (want === 'sandbox' && V?.Sandbox) {
     const engine = new V.Sandbox({ ...(w.VEYL_SANDBOX || {}) });
-    return { mode: 'sandbox', engine, cfg: engine.cfg, chainName: 'the demo', deployed, sdk, protocolFeeBps, markets, market: engine.market, wallets: null };
+    return { mode: 'sandbox', engine, cfg: engine.cfg, chainName: 'the demo', deployed, sdk, protocolFeeBps, lpBonusBps, markets, market: engine.market, wallets: null };
   }
   if (cfg?.programs && V?.Engine) {
     const engine = new V.Engine(cfg);
-    return { mode: 'chain', engine, cfg, chainName: cfg.chainName || 'Solana', deployed, sdk, protocolFeeBps, markets, market: engine.market, wallets };
+    return { mode: 'chain', engine, cfg, chainName: cfg.chainName || 'Solana', deployed, sdk, protocolFeeBps, lpBonusBps, markets, market: engine.market, wallets };
   }
   // no deployment: a standalone market feed still gives the header its SOL price
   const market = V?.Market ? new V.Market() : null;
-  return { mode: 'preview', engine: null, cfg: null, chainName: 'Solana', deployed, sdk, protocolFeeBps, markets, market, wallets };
+  return { mode: 'preview', engine: null, cfg: null, chainName: 'Solana', deployed, sdk, protocolFeeBps, lpBonusBps, markets, market, wallets };
 }

@@ -32,9 +32,9 @@ const over = (v: number, have: number) => v > have + 1e-12;
 const lockLabel = (priv: boolean, privText: string, pubText: string) => (priv ? <><Icon name="lock" size="sm" />{privText}</> : pubText);
 const networkFee = (priv: boolean, flat = 'Relayer, a flat fee') => priv ? flat : '≈ 0.00001 SOL';
 const PUBLIC_SEEN = (pub: string): SeenText => ({ hidden: 'Nothing.', pub });
-/// The swap's fees as detail rows, when the engine's quote reports them: the pool's LP fee and Veyl's protocol fee.
-const feeRows = (f: { lp: number; protocol: number } | null | undefined, sym: string): Detail[] =>
-  f ? [['Pool fee', `${tiny(f.lp)} ${sym}`, 'feeTier'], ['Protocol fee', `${tiny(f.protocol)} ${sym}`, 'protocolFee']] : [];
+/// The swap's fees as detail rows, when the engine's quote reports them: the pool's fee, the LP bonus, Veyl's protocol fee.
+const feeRows = (f: { lp: number; bonus: number | null; protocol: number } | null | undefined, sym: string): Detail[] =>
+  f ? [['Pool fee', `${tiny(f.lp)} ${sym}`, 'feeTier'], ...(f.bonus != null ? [['LP bonus', `${tiny(f.bonus)} ${sym}`, 'lpBonus'] as Detail] : []), ['Protocol fee', `${tiny(f.protocol)} ${sym}`, 'protocolFee']] : [];
 
 // ---------------------------------------------------------------- add
 function useAdd(c: PanelCtx): TabModel {

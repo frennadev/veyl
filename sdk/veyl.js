@@ -23,7 +23,7 @@ const Q = 1n << 128n;
 const STATE_DEPTH = 32, ASP_DEPTH = 20; // = Withdraw(32, 20) in zk/circuits/withdraw.circom
 const ROOT_HISTORY = 192, ASP_HISTORY = 16, BINS_PER_ARRAY = 60;
 const CHUNKS = 2048, MIN_CHUNK = -1024, BITMAP_WORDS = 32, MIN_BIN_ID = -1024 * 60, MAX_BIN_ID = (2048 - 1024) * 60 - 1;
-const MAX_IDS = 70, BPS = 10_000n, PROTOCOL_FEE_BPS = 20, MAX_TIERS = 16, NUM_REWARDS = 2, SWAP_ARRAYS = 4;
+const MAX_IDS = 70, BPS = 10_000n, PROTOCOL_FEE_BPS = 20, LP_BONUS_BPS = 5, MAX_TIERS = 16, NUM_REWARDS = 2, SWAP_ARRAYS = 4;
 /// Suggested fee tiers (Orca / Raydium-like; the deploy config owns the real list, `add_fee_tier` in this order). baseFee in
 /// pips (1e-6: 100 = 0.01%), one bin step per tier (the pool address includes it). vfc scaled ~1/binStep^2 above bin step 20
 /// so one bin of movement adds a similar variable fee in every tier.
@@ -289,12 +289,16 @@ function nextBin(p, bins, from, xForY) {
 }
 /// The protocol fee of a swap of `amount` (= veyl_bin `protocol_fee_of`): ceil(amount * bps / 10_000), off the input first.
 const protocolFeeOf = (amount, bps = PROTOCOL_FEE_BPS) => (BigInt(amount) * BigInt(bps) + BPS - 1n) / BPS;
+/// The LP bonus of a swap of `amount` (= veyl_bin `lp_bonus_of`): ceil(amount * 5 / 10_000) of the gross input, paid to LPs.
+const lpBonusOf = (amount) => protocolFeeOf(amount, LP_BONUS_BPS);
 /// `_simulate` (exact twin of programs/veyl_bin `simulate`): `bins` = Map id -> bin (Veyl.bins). Throws like the program.
-/// Returns { out, fee (LP + protocol), protocolFee (0.2% of the input + LP fee nobody could earn), lpFee, endId, volAcc, touched: [{ id, ...new bin state }] }.
+/// Returns { out, fee (LP + bonus + protocol), protocolFee (0.2% of the input + LP fee nobody could earn), lpFee (tier fee + bonus),
+/// lpBonus (the 0.05% part of lpFee), endId, volAcc, touched: [{ id, ...new bin state }] }.
 function simulateSwap(p, bins, xForY, amountIn, now = Math.floor(Date.now() / 1000)) {
   if (!p.seeded) throw new Error('InsufficientLiquidity');
   const protoIn = protocolFeeOf(amountIn, p.protocolFeeBps === undefined ? PROTOCOL_FEE_BPS : p.protocolFeeBps);
-  const { ref, iref } = refsOf(p, now); let left = BigInt(amountIn) - protoIn; let id = p.activeId; let out = 0n, fee = protoIn, protocolFee = protoIn, volAcc = 0n; const touched = [];
+  let bonus = lpBonusOf(amountIn); if (bonus > BigInt(amountIn) - protoIn) bonus = BigInt(amountIn) - protoIn; const traded = BigInt(amountIn) - protoIn - bonus; let bonusLeft = bonus;
+  const { ref, iref } = refsOf(p, now); let left = traded; let id = p.activeId; let out = 0n, fee = protoIn + bonus, protocolFee = protoIn + (traded === 0n ? bonus : 0n), volAcc = 0n; const touched = [];
   for (let step = 0; left > 0n; step++) {
     const nid = nextBin(p, bins, id, xForY); if (nid === null) throw new Error('InsufficientLiquidity'); id = nid;
     if (step === MAX_STEPS) throw new Error('TooManySteps');
@@ -308,17 +312,18 @@ function simulateSwap(p, bins, xForY, amountIn, now = Math.floor(Date.now() / 10
     let used, got, feeAmt;
     if (left >= maxIn) { used = maxIn; got = avail; feeAmt = feeMax; }
     else { used = left; feeAmt = mulDivCeil(left, f, PIPS); const net = left - feeAmt; got = xForY ? mulDiv(net, price, Q) : mulDiv(net, Q, price); if (got > avail) got = avail; }
-    const lpFee = feeAmt; const net = used - feeAmt;
+    const bonusPart = used === left ? bonusLeft : (bonus * used) / traded; bonusLeft -= bonusPart;
+    const lpFee = feeAmt + bonusPart; const net = used - feeAmt;
     const loGot = (got * loAvail) / avail; const mmGot = got - loGot;
     const loIn = got === 0n ? 0n : (net * loGot) / got, loFee = got === 0n ? 0n : (lpFee * loGot) / got; const mmIn = net - loIn, mmFee = lpFee - loFee;
     const eligible = b.shares > MIN_LIQUIDITY ? b.shares - MIN_LIQUIDITY : 0n; let protoExtra = 0n;
     if (mmFee > 0n) { if (eligible > 0n) { const add = (mmFee << 64n) / eligible; if (xForY) b.feeGx = (b.feeGx + add) % U128; else b.feeGy = (b.feeGy + add) % U128; } else protoExtra = mmFee; }
     if (xForY) { b.x += mmIn; b.y -= mmGot; b.bidY -= loGot; b.bidFilledX += loIn + loFee; } else { b.y += mmIn; b.x -= mmGot; b.askX -= loGot; b.askFilledY += loIn + loFee; }
     for (const v of [b.x, b.y, b.bidFilledX, b.askFilledY]) if (v > U64MAX) throw new Error('Overflow');
-    touched.push({ id, ...b, mmFee, loFee, proto: protoExtra }); out += got; fee += feeAmt; protocolFee += protoExtra; left -= used;
+    touched.push({ id, ...b, mmFee, loFee, bonus: bonusPart, proto: protoExtra }); out += got; fee += feeAmt; protocolFee += protoExtra; left -= used;
     if (left > 0n) id = xForY ? id - 1 : id + 1;
   }
-  return { out, fee, protocolFee, lpFee: fee - protoIn, endId: id, volAcc, touched };
+  return { out, fee, protocolFee, lpFee: fee - protoIn - (traded === 0n ? bonus : 0n), lpBonus: traded === 0n ? 0n : bonus, endId: id, volAcc, touched };
 }
 /// What `shares` of a position slot earned since its checkpoints (fees per token, rewards), Q64.64 growth, wrapping.
 const owedOf = (now, cp, shares) => ((((BigInt(now) - BigInt(cp)) % U128) + U128) % U128) * BigInt(shares) >> 64n;
@@ -683,7 +688,7 @@ class Veyl {
     const r2 = refsOf(p2, now); const fee = feeOf(p2, accOf(r2.ref, r2.iref, p2.activeId));
     const shares = ids.map((id, i) => (ax[i] === 0n && ay[i] === 0n ? 0n : sharesForMint(p2, bins.get(id) || EMPTY_BIN, id, p2.activeId, ax[i], ay[i], fee)));
     const cut = (v) => v - (v * BigInt(slippageBps)) / 10_000n; const protocolFee = swap > 0n ? protocolFeeOf(swap, p.protocolFeeBps === undefined ? PROTOCOL_FEE_BPS : p.protocolFeeBps) : 0n;
-    return { swapAmount: swap, swapOut: sim.out, minSwapOut: cut(sim.out), activeAfter: sim.endId, amountsX: ax, amountsY: ay, expectedShares: shares, minShares: shares.map(cut), lpFee: swap > 0n ? sim.lpFee : 0n, protocolFee }; }
+    return { swapAmount: swap, swapOut: sim.out, minSwapOut: cut(sim.out), activeAfter: sim.endId, amountsX: ax, amountsY: ay, expectedShares: shares, minShares: shares.map(cut), lpFee: swap > 0n ? sim.lpFee : 0n, lpBonus: swap > 0n ? sim.lpBonus : 0n, protocolFee }; }
   // protocol fee + rewards administration
   async withdrawProtocolFeeIx(feeAuthority, pool, amountX, amountY, toX, toY) { const p = await this.binPool(pool);
     return this.binIx('withdraw_protocol_fee', [u64(amountX), u64(amountY)], [R(feeAuthority, true), R(this.factoryPda()), W(pool), R(p.mintX), R(p.mintY), W(p.vaultX), W(p.vaultY), W(toX || this.ata(p.mintX, feeAuthority, p.tokenProgramX)), W(toY || this.ata(p.mintY, feeAuthority, p.tokenProgramY)), R(p.tokenProgramX), R(p.tokenProgramY)]); }
@@ -828,7 +833,7 @@ class Veyl {
   }
 }
 module.exports = { W, R, encRoute, packProofN, strings, Veyl, Reader, TOKEN_PROGRAM, TOKEN_2022, ATA_PROGRAM, SYS, BPF_UPGRADEABLE_LOADER, SIZES, rentOf, F, Q, STATE_DEPTH, ASP_DEPTH, ROOT_HISTORY, ASP_HISTORY, BINS_PER_ARRAY, PIPS, MAX_FEE, MIN_LIQUIDITY, MAX_FEE_BPS, ACTION, DEFAULT_TTL_SLOTS,
-  CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, PROTOCOL_FEE_BPS, MAX_TIERS, DEFAULT_FEE_TIERS, protocolFeeOf, canonicalPair, usableLut, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
+  CHUNKS, MIN_CHUNK, MIN_BIN_ID, MAX_BIN_ID, MAX_IDS, PROTOCOL_FEE_BPS, LP_BONUS_BPS, MAX_TIERS, DEFAULT_FEE_TIERS, protocolFeeOf, lpBonusOf, canonicalPair, usableLut, NUM_REWARDS, SWAP_ARRAYS, TAGS, vfcFromMeteora, vfcToMeteora, U128,
   disc, u8, u16, u32, i32, u64, i64, u128, be32, fromBe32, pk, vec, opt, big, j, feeBpsFor, H, hashToField, labelOf, contextOf, rand, zeros, merklePath, packProof, withdrawInput, newNote, DATA, encodeAction, removeDigest, signedDigest, parseEvents, logEvents, EVENT_IX_TAG, parseEventData, poolIxs,
   mulDiv, mulDivCeil, stepQ, priceOf, feeOf, accOf, refsOf, simulateSwap, sharesForMint, chunkOf, slotOf, chunksForSwap, chunkBit, nextChunk, nextBin, liveChunks, owedOf, pendingRewardGrowth, distribute, sideWeights, shapeWeights, EMPTY_BIN,
   decodeBinPool, decodeBinArray, decodeShareAccount, decodeFactory, decodeBond, MINT_EXT, MINT_EXT_OK, parseMint, refusedExtensions, priceQ, tierCategory, tierLabel, BIN_POOL_DISC };

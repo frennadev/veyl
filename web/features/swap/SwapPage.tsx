@@ -90,7 +90,7 @@ const TokenButton = ({ id, sym, onClick }: { id: string; sym: string; onClick: (
   <button className="tsel" type="button" id={id} onClick={onClick}><TokenLogo sym={sym} className="" />{tl(sym)}<svg className="ic xs"><use href="#i-down" /></svg></button>
 );
 
-function Route({ live, a, v, quote, priv }: { live: boolean; a: string; v: number; quote: { out: number | null; path: { name: string; out: string }[]; fees?: { lp: number; protocol: number } | null } | null; priv: boolean }) {
+function Route({ live, a, v, quote, priv }: { live: boolean; a: string; v: number; quote: { out: number | null; path: { name: string; out: string }[]; fees?: { lp: number; bonus: number | null; protocol: number } | null } | null; priv: boolean }) {
   const top = (extra?: React.ReactNode) => <div className="top"><b>Route</b>{extra}</div>;
   const note = (t: string) => <p className="dim" style={{ margin: 0 }}>{t}</p>;
   return (
@@ -104,6 +104,7 @@ function Route({ live, a, v, quote, priv }: { live: boolean; a: string; v: numbe
             <div><dt>Rate</dt><dd>1 {a} = {tiny(quote.out / v)} {quote.path[quote.path.length - 1]?.out}</dd></div>
             <div><dt>Pools</dt><dd>{quote.path.map((h) => h.name).join(' · ')}</dd></div>
             {quote.fees && <><div><dt>Pool fee<Tip term="feeTier" align="l" /></dt><dd>{tiny(quote.fees.lp)} {a}</dd></div>
+              {quote.fees.bonus != null && <div><dt>LP bonus<Tip term="lpBonus" align="l" /></dt><dd>{tiny(quote.fees.bonus)} {a}</dd></div>}
               <div><dt>Protocol fee<Tip term="protocolFee" align="l" /></dt><dd>{tiny(quote.fees.protocol)} {a}</dd></div></>}
             <div><dt>Slippage limit<Tip term="slippage" align="l" /></dt><dd>1%</dd></div>
             <div><dt>Network fee<Tip term="networkFee" align="l" /></dt><dd>{priv ? 'Relayer, a flat fee' : '≈ 0.00001 SOL'}</dd></div>
