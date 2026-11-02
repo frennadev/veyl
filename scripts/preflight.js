@@ -17,7 +17,7 @@ const KNOWN_DEV_ZKEYS = ['b1ce9fa6440fd92d540badb7f0053b08f6a6a0a1bb5b6afaac9b11
   '5905898bbc9889d03c75384159de066cae304f2bd637f0ea3a80e968bb00c8b2', '24ee888ae9154f87a48341d21e16729db1db3da89326be1784892f3121e4c2c7'];
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 /// Mainnet blockers the owner may accept with a written reason in config "waivers" (shown as warnings, never hidden).
-const WAIVABLE = ['external-audit', 'multisig'];
+const WAIVABLE = ['external-audit', 'multisig', 'single-operator-committee'];
 /// An RPC URL for printing: no path, query or credentials (a paid RPC's API key lives there).
 const safeUrl = (u) => { try { const x = new URL(u); return x.protocol + '//' + x.host + (x.pathname.length > 1 || x.search ? '/…' : ''); } catch { return '(unparsable URL)'; } };
 
@@ -152,7 +152,7 @@ async function preflight({ network, quiet = false }) {
 
   // ---- the batch committee (Phase 3): mainnet needs a real dealerless DKG among independent members, with its public
   //      transcript (committee/transcript.<network>.json) verifying and matching the committee registered on chain
-  { const C = committeeRows({ network, mainnet, later: !!(cfg.sealed && cfg.sealed.later) }); for (const r of C) add(r.check, r.status, r.detail); }
+  { const C = committeeRows({ network, mainnet, later: !!(cfg.sealed && cfg.sealed.later), oneOperatorWaived: !!(cfg.waivers && typeof cfg.waivers['single-operator-committee'] === 'string' && cfg.waivers['single-operator-committee'].trim()) }); for (const r of C) add(r.check, r.status, r.detail); }
 
   // ---- chain
   const ver = await N.rpcCall(rpc, 'getVersion');
@@ -223,13 +223,15 @@ async function preflight({ network, quiet = false }) {
 }
 /// committee/transcript.<network>.json: the public DKG transcript of the network's batch committee.
 function readTranscript(network) { const f = process.env.COMMITTEE_TRANSCRIPT || path.join(R, `committee/transcript.${network}.json`); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; }
-function committeeRows({ network, mainnet, later = false }) {
+function committeeRows({ network, mainnet, later = false, oneOperatorWaived = false }) {
   const rows = []; const tr = readTranscript(network); const D = require('../committee/dkg.js');
   if (!tr) { rows.push({ check: 'batch committee: DKG transcript', status: mainnet && !later ? 'red' : later ? 'warn' : 'info', detail: later ? `sealed swaps start later (config sealed.later): the deploy leaves them off; after the committee's key generation commit committee/transcript.${network}.json and run the deploy again (no program redeploy) to register it and open the sealed pools` : `committee/transcript.${network}.json missing: sealed swaps need the committee's key generation (DEPLOY.md, "Batch committee")` }); return rows; }
   const v = D.verifyTranscript(tr); const distinct = new Set(tr.nodes).size === tr.n;
   const problems = [...v.errs]; if (tr.t < 2 || tr.n < 3) problems.push(`threshold ${tr.t} of ${tr.n} (mainnet needs at least 2 of 3)`); if (!distinct) problems.push('repeated node keys');
   if (/^local-/.test(String(tr.session))) problems.push('a local (one machine) key generation: every member ran on the same host');
-  rows.push({ check: 'batch committee: DKG transcript', status: problems.length ? (mainnet ? 'red' : 'warn') : 'ok', detail: problems.length ? problems.join('; ') : `${tr.t} of ${tr.n}, session ${tr.session}, sha256 ${D.transcriptHash(tr).toString('hex').slice(0, 16)}…, every signature and key re-verified` });
+  /* one operator holds every share (scripts/setup-mainnet-committee.js): waivable, then a warning that stays visible */
+  const one = /one-operator/.test(String(tr.session)); if (one && !oneOperatorWaived) problems.push('one operator holds every key share (session ' + tr.session + '): could decrypt individual sealed swap sizes; waivable as "single-operator-committee"');
+  rows.push({ check: 'batch committee: DKG transcript', status: problems.length ? (mainnet ? 'red' : 'warn') : one ? 'warn' : 'ok', detail: problems.length ? problems.join('; ') : `${one ? 'WAIVED by the owner: one operator holds every key share (individual sealed swap sizes are decryptable by them); ' : ''}${tr.t} of ${tr.n}, session ${tr.session}, sha256 ${D.transcriptHash(tr).toString('hex').slice(0, 16)}…, every signature and key re-verified` });
   return rows;
 }
 module.exports = { preflight, vkeyParts, KNOWN_DEV_ZKEYS, committeeRows };
