@@ -32,7 +32,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     await pg.goto(WEB + '/app.html'); await pg.waitForFunction(() => window.veylEngine && window.veylEngine.sandbox, null, { timeout: 30000 });
     check('the app opens in the demo by default, one small Demo chip in the app bar', /Demo/.test(await pg.textContent('#modeBtn')) && !/ractice/.test(await pg.textContent('body')), lap());
     await pg.waitForFunction(() => /\$162\.37/.test(document.getElementById('kpis').textContent), null, { timeout: 15000 }).catch(() => {});
-    const kps = await pg.textContent('#kpiSol'); check('top bar: only the live SOL market price, with source and age ("Jupiter · N s ago")', /SOL\$162\.37/.test(kps) && /Jupiter · \d+ s ago/.test(kps), kps);
+    const kps = await pg.textContent('#kpiSol'); check('pools overview: only the live SOL market price, with source and age ("Jupiter · N s ago")', /SOL\$162\.37/.test(kps) && /Jupiter · \d+ s ago/.test(kps), kps);
     const anchor = await ev(() => { const e = window.veylEngine; const P = [...e.chain.pools.values()].find((q) => q.id === 'sol-usdc'); return { px: e.chain.humanPrice(P), anchored: e.chain.anchored }; });
     check('sandbox SOL–USDC price tracks the market (within 1%), seeded along the last 24 hours of candles', Math.abs(anchor.px / (PRICES.SOL / PRICES.USDC) - 1) < 0.01 && anchor.anchored === 'history', JSON.stringify(anchor));
     check('no Pyth key: Hermes not asked, Jupiter answered every mint (CoinGecko and Coinbase not needed); the 24h history from public candles', !hits.pyth && hits.jupiter >= 1 && !hits.gecko && !hits.ticker && hits.candles >= 3, JSON.stringify(hits));
@@ -45,7 +45,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     check('pools list: price, liquidity and fee only; no simulated volume, APR, fees or age in practice mode', (await pg.$$('#poolRows tr')).length === 5 && /Price/.test(head) && /Liquidity/.test(head) && /Trading fee/.test(head) && !/APR|Volume|Fees \/ TVL|Age/.test(head) && (await pg.$$('#poolRows .spk')).length === 0, head);
 
     // the app shell: sidebar, top bar, the pools table, rows -> pool page
-    const kp = await pg.textContent('#kpis'); check('top bar: no simulated TVL, positions or fees', !/TVL|Your positions|Fees earned/.test(kp), kp);
+    const kp = await pg.textContent('#kpis'); check('pools overview: no simulated TVL, positions or fees', !/TVL|Your positions|Fees earned/.test(kp), kp);
     check('sidebar: one flat list (Create pool once the engine lists pools) and one Docs link', /SwapPoolsSealedswaps(Createpool)?PortfolioPrivacyActivityDocs/.test((await pg.textContent('#side')).replace(/\s+/g, '').replace('Collapse', '')));
     check('pools toolbar: just search (no interval, sort, columns, filters or category chips in the way)', await pg.isVisible('#poolQ') && !(await pg.isVisible('#poolSort')) && !(await pg.isVisible('#colBtn')) && !(await pg.isVisible('#tokChips')));
     const rowsOrder = () => pg.$$eval('#poolRows tr[data-pool]', (r) => r.map((x) => x.dataset.pool));
@@ -64,7 +64,7 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-sandbox-shots');
     await pg.evaluate(() => { location.hash = '#markets'; }); await pg.waitForFunction(() => document.querySelectorAll('#mkRows tr[data-mk]').length === 5, null, { timeout: 20000 });
     check('Markets: five sources asked, pools merged (the same pool from two sources is one row)', mkHits.gecko >= 1 && mkHits.dexscreener >= 1 && mkHits.meteora >= 1 && mkHits.raydium >= 1 && mkHits.orca >= 1 && (await pg.$$eval('#mkRows tr[data-mk]', (r) => r.length)) === 5, JSON.stringify(mkHits));
     const mkTop = await pg.textContent('#mkRows tr[data-mk]'); check('Markets: labelled external, DEX badge, source + freshness per row', /Solana markets · live · external DEXes/.test(await pg.textContent('.extline')) && /ORCA|Orca/.test(mkTop) && /Orca \+ GeckoTerminal · \d+ s/.test(mkTop), mkTop.replace(/\s+/g, ' ').slice(0, 120));
-    check('Markets never enter Veyl\'s own top bar', !/TVL|\$18\.23M/.test(await pg.textContent('#kpis')));
+    check('Markets never enter Veyl\'s own header', !/TVL|\$18\.23M/.test(await pg.textContent('.hdr')));
     await pg.selectOption('#mkSort', 'liq'); await pg.waitForTimeout(200); check('Markets: sort by liquidity', /\$18\.23M/.test(await pg.textContent('#mkRows tr[data-mk]')));
     await pg.click('#mkDex [data-dex="meteora"]'); await pg.waitForTimeout(200); const met = await pg.textContent('#mkRows'); check('Markets: DEX filter; Meteora row shows bin step and APR from Meteora, price from DexScreener', (await pg.$$('#mkRows tr[data-mk]')).length === 1 && /bin 0\.10%/.test(met) && /\$162\.43/.test(met)); await pg.click('#mkDex [data-dex="all"]');
     await pg.click('#mkIv [data-iv="h1"]'); await pg.waitForTimeout(200); check('Markets: 1h interval relabels; sources without 1h show a dash', /Volume 1h/.test(await pg.textContent('#mkHead')) && /\$2\.40M/.test(await pg.textContent('#mkRows'))); await pg.click('#mkIv [data-iv="h24"]');

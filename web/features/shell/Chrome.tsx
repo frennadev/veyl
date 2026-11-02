@@ -1,14 +1,13 @@
 'use client';
 // The frame around every page: sidebar (collapsible on desktop, a drawer on phones), header, the state banner under it, and
 // the bottom bar on phones. Same classes and ids as the legacy page, so app.css lays it out unchanged.
-import { useEffect, useState } from 'react';
-import { Icon, Banner } from '@/components/ui/primitives';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Icon } from '@/components/ui/primitives';
 import { closeModal, isModalOpen } from '@/components/overlay';
 import { storage } from '@/lib/storage';
-import { checkRpc, setHide, useSession } from '@/features/session/session';
+import { checkRpc, useSession } from '@/features/session/session';
 import { openStart } from '@/features/session/AccountDialogs';
 import { AccountButton, ModeChip } from './AccountMenu';
-import { Kpis } from './Kpis';
 import { PrivacyChip } from '@/features/privacy/PrivacyPage';
 import { BAR_ORDER, PAGES, available, navKey, pageDef } from './pages';
 import { go, useRoute, type PageId } from './router';
@@ -53,6 +52,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
+/// Kept to three things on the right: where you are (mode chip), how private you are, and your account. The figures live on
+/// the Pools page (Kpis) and "hide balances" on the Privacy page.
 export function Header({ onMenu }: { onMenu: () => void }) {
   const hide = useSession((s) => s.hide);
   useBodyClass('hide', hide);
@@ -62,12 +63,10 @@ export function Header({ onMenu }: { onMenu: () => void }) {
         <button className="ib menu" id="menuBtn" type="button" aria-label="Open the menu" aria-controls="side" onClick={onMenu}><Icon name="menu" /></button>
         <Logo />
         <nav className="topnav" aria-label="App">{BAR_ORDER.map((id) => <NavButton key={id} id={id} withIcon={false} />)}</nav>
-        <Kpis />
         <div className="hdr-r">
           <NetLabel />
           <ModeChip />
           <PrivacyChip />
-          <button className="ib" id="hideBtn" type="button" aria-pressed={hide} aria-label={hide ? 'Show balances' : 'Hide balances'} onClick={() => setHide(!hide)}><Icon name={hide ? 'eyeoff' : 'eye'} /></button>
           <AccountButton />
         </div>
       </div>
@@ -81,14 +80,24 @@ function NetLabel() {
   return <span className={'net' + (down ? ' bad' : '')} id="netLbl" hidden><i></i>{chain}</span>;
 }
 
-/// Under the header: the chain isn't answering, or nobody is connected yet. Nothing in the Sandbox or preview.
+/// One slim line: a status dot, one sentence, one action.
+const StatusLine = ({ tone, title, text, action }: { tone?: 'bad'; title: string; text: string; action: ReactNode }) => (
+  <div className={'stline' + (tone ? ' ' + tone : '')} role="status"><i className="sdot" aria-hidden="true"></i><p><b>{title}</b> <span>{text}</span></p>{action}</div>
+);
+
+/// Under the header: the chain isn't answering (the app keeps retrying and clears this by itself), or nobody is connected
+/// yet. Nothing in the Sandbox or preview.
 export function StateBanner() {
   const chain = useSession((x) => (x.rt?.mode === 'chain' ? x.rt.chainName : null));
   const rpc = useSession((x) => x.rpc), account = useSession((x) => x.account);
+  const [busy, setBusy] = useState(false);
+  const retry = () => { setBusy(true); checkRpc().finally(() => setBusy(false)); };
   let body = null;
   if (chain) {
-    if (rpc === 'down') body = <Banner icon="alert" tone="bad" title={`${chain} is not answering`}>The RPC in this site&apos;s configuration did not respond. Nothing can be read or sent until it does.<br /><button className="btn ghost" type="button" id="retryRpc" onClick={checkRpc}>Try again</button></Banner>;
-    else if (!account) body = <Banner icon="key" title="No wallet needed">Fund a deposit address from any wallet or exchange, or connect a wallet. Either way, everything after the deposit is private.<br /><button className="btn" type="button" id="bannerConnect" onClick={openStart}>Get started</button></Banner>;
+    if (rpc === 'down') body = <StatusLine tone="bad" title={`${chain} isn't answering.`} text="Reading and sending are paused until it does. Veyl keeps retrying on its own."
+      action={<button className="btn sm ghost" type="button" id="retryRpc" disabled={busy} onClick={retry}>{busy ? 'Checking…' : 'Retry now'}</button>} />;
+    else if (!account) body = <StatusLine title="No wallet needed." text="Fund a deposit address from any wallet or exchange, or connect one. Everything after the deposit is private."
+      action={<button className="btn sm" type="button" id="bannerConnect" onClick={openStart}>Get started</button>} />;
   }
   return <div className="statebar" id="stateBanner" hidden={!body}>{body}</div>;
 }

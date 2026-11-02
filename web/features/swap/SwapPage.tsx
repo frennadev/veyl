@@ -52,8 +52,10 @@ export default function SwapPage() {
   const max = () => swap.set({ amount: maxAmount(have(s.a)) });
   return (
     <section className="page" id="pg-swap">
+      <div className="ph"><div><h1>Swap</h1><p>Any token to any other, routed through Veyl&apos;s pools. Pay privately and your wallet never appears.</p></div></div>
+      {/* two columns on desktop (the swap, then the route and what the chain sees); on phones one column in reading order */}
+      <div className="swapgrid">
       <div className="swapwrap">
-        <div className="ph"><div><h1>Swap</h1></div></div>
         <div className="lbl"><span>Pay from<Tip term="privatePublic" align="l" /></span></div>
         <div className="src" id="swSrc" role="group" aria-label="Pay from">
           {SOURCES.map((o) => <button key={o.id} type="button" data-src={o.id} aria-pressed={s.src === o.id} onClick={() => swap.set({ src: o.id })}><b><Icon name={o.icon} size="sm" />{o.title}</b><small>{o.sub}</small></button>)}
@@ -72,10 +74,13 @@ export default function SwapPage() {
           </div>
         </div>
         {q.error && <p className="err" role="alert">The quote could not be loaded. Check your connection. <button type="button" className="btn sm ghost" onClick={q.retry}>Try again</button></p>}
+        <button className={'btn go' + (priv ? '' : ' ghost')} type="button" id="swGo" disabled={!!why} onClick={go}>{why || (priv ? <><Icon name="lock" size="sm" />Swap privately</> : 'Swap from wallet')}</button>
+        {priv ? <Hint id="swHint" icon="lock">The chain sees a swap through the pools, not who made it.</Hint> : <Hint id="swHint" icon="alert" tone="warn">This swap is public and linked to your wallet.</Hint>}
+      </div>
+      <div className="swapside">
         <Route live={live} a={s.a} v={v} quote={quote} priv={priv} />
         <Seen s={priv ? { hidden: 'Your wallet. The output lands in a new note on this device.', pub: 'The route, the amounts in and out, the relayer fee.' } : { hidden: 'Nothing.', pub: 'Your wallet and the whole swap.' }} />
-        <button className={'btn' + (priv ? '' : ' ghost')} type="button" id="swGo" disabled={!!why} onClick={go}>{why || (priv ? <><Icon name="lock" size="sm" />Swap privately</> : 'Swap from wallet')}</button>
-        {priv ? <Hint id="swHint" icon="lock">The chain sees a swap through the pools, not who made it.</Hint> : <Hint id="swHint" icon="alert" tone="warn">This swap is public and linked to your wallet.</Hint>}
+      </div>
       </div>
     </section>
   );

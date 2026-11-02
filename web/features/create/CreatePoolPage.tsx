@@ -115,8 +115,9 @@ export default function CreatePoolPage() {
   const byCategory = tiers.reduce<Record<string, FeeTier[]>>((acc, t) => { (acc[t.category || 'other'] ||= []).push(t); return acc; }, {});
   return (
     <section className="page" id="pg-create">
-      <div className="narrow page" style={{ padding: 0 }}>
-        <div className="ph"><div><h1>Create a pool</h1><p>Any two safe tokens, at a fee tier you pick. Your pool shows as unverified until your bond is released.</p></div></div>
+      <div className="ph"><div><h1>Create a pool</h1><p>Any two safe tokens, at a fee tier you pick. Your pool shows as unverified until your bond is released.</p></div></div>
+      {/* two columns on desktop: what the pool is (tokens, tier), then what it costs and the button */}
+      <div className="cpgrid">
         <div className="card pad list" style={{ gap: 14 }}>
           <TokenField id="cpA" label="First token" mint={mintA} onMint={setMintA} check={checkA} />
           <TokenField id="cpB" label="Second token (the price is quoted in it)" mint={mintB} onMint={setMintB} check={checkB} />
@@ -137,6 +138,8 @@ export default function CreatePoolPage() {
           {!tiers.length && (unavailable
             ? <Hint icon="alert" tone="warn">Pool creation isn&apos;t available on this deployment yet: its fee tiers can&apos;t be read. Try again after the next update.</Hint>
             : <small className="dim">Reading the fee tiers…</small>)}
+        </div>
+        <div className="card pad list cpside" style={{ gap: 14 }}>
           {existing && <Hint icon="alert" tone="warn">A {symA}–{symB} pool at this tier already exists. {existingId ? <button className="btn sm ghost" type="button" onClick={() => openPool(existingId)}>Open it</button> : 'Pick another tier to create a second pool of this pair.'}</Hint>}
           <Field id="cpPrice" label={<>Opening price{symA && symB ? ` · ${symB} per 1 ${symA}` : ''}<Tip term="openingPrice" align="l" /></>}
             hint={priceHint}>

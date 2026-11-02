@@ -4,7 +4,7 @@
 import type { Viewport } from 'next';
 import type { ReactNode } from 'react';
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#0A0B09', colorScheme: 'dark' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#09090A', colorScheme: 'dark' };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

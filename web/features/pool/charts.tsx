@@ -32,7 +32,7 @@ export function BinChart({ m, message, overlay }: { m: PoolMath | null; message:
   let band = null, line = '';
   if (pv && overlay.range) {
     const k0 = ids.indexOf(Math.max(overlay.range.lo, ids[0])), k1 = ids.indexOf(Math.min(overlay.range.hi, ids[n - 1]));
-    if (k0 >= 0 && k1 >= 0) band = <rect x={(X(k0) - gap / 2).toFixed(1)} y="0" width={(X(k1) + bw - X(k0) + gap).toFixed(1)} height={H} fill="var(--wine-tint)" />;
+    if (k0 >= 0 && k1 >= 0) band = <rect x={(X(k0) - gap / 2).toFixed(1)} y="0" width={(X(k1) + bw - X(k0) + gap).toFixed(1)} height={H} fill="var(--priv-tint)" />;
     const pm = Math.max(...pv.vals) || 1;
     pv.ids.forEach((id, i) => { const k = ids.indexOf(id); if (k < 0) return; const y = (H - 4 - (pv.vals[i] / pm) * H * 0.42).toFixed(1); line += (line ? 'V' + y : `M${X(k).toFixed(1)},${y}`) + 'H' + (X(k) + bw).toFixed(1); });
   }
@@ -55,9 +55,9 @@ export function BinChart({ m, message, overlay }: { m: PoolMath | null; message:
         })}</g>
         <g className="ov">
           <rect x={X(ids.indexOf(a)).toFixed(1)} y="0" width={bw.toFixed(1)} height={H} fill="var(--act)" opacity=".10" />
-          {line && <path d={line} fill="none" stroke="var(--wine-2)" strokeWidth="2" strokeLinejoin="round" />}
-          {ok >= 0 && <rect x={X(ok).toFixed(1)} y="0" width={bw.toFixed(1)} height={H} fill="none" stroke="var(--wine-2)" strokeWidth="1.5" strokeDasharray="3 3" />}
-          {(overlay.orders || []).map((b, i) => { const k = ids.indexOf(b); return k >= 0 ? <circle key={i} cx={(X(k) + bw / 2).toFixed(1)} cy="8" r="3.5" fill="var(--wine-2)" /> : null; })}
+          {line && <path d={line} fill="none" stroke="var(--priv)" strokeWidth="2" strokeLinejoin="round" />}
+          {ok >= 0 && <rect x={X(ok).toFixed(1)} y="0" width={bw.toFixed(1)} height={H} fill="none" stroke="var(--priv)" strokeWidth="1.5" strokeDasharray="3 3" />}
+          {(overlay.orders || []).map((b, i) => { const k = ids.indexOf(b); return k >= 0 ? <circle key={i} cx={(X(k) + bw / 2).toFixed(1)} cy="8" r="3.5" fill="var(--priv)" /> : null; })}
           {!(mx > 0) && <text x={W / 2} y={H / 2 - 10} textAnchor="middle" {...MUTED_TEXT}>No liquidity in these bins yet</text>}
         </g>
       </svg>

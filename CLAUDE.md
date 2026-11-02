@@ -40,8 +40,13 @@ liquidity, kept private." Inspiration for format: Meteora and Delta Liquidity (t
 - Privacy page + header chip (5 checks, crowd size), plain wording (Private/Public, Withdraw), no "launching soon"/test wording.
 
 ## Brand / site rules (from the owner)
-- Black + green: `--paper #0A0B09`, accent `#C8F560` (tokens in site/veyl.css `:root`). Manrope + IBM Plex Mono, no serif.
-- Logo: 4 pill bins (brand/*.svg). Hero animation = canvas "flow" in index.html (deposits → proof gate → bins).
+- Monochrome + one near-neutral accent (Nov 2026): black, white and silver from the ghost; frost `--priv #CBD8E8` (a pale
+  blue-grey; it replaced lime at the owner's request) only for the main action and privacy confirmations (Private tags,
+  your range, finished private steps). The app's surface/motion rules are the "Dashboard layer" at the end of site/app.css. Tokens in site/veyl.css `:root`. Manrope + IBM Plex Mono, no serif.
+- Logo: the ghost (owner's masters web/public/logo.png and `Frame 353.png`). `node scripts/brand.js` traces them and regenerates
+  brand/ (marks, lockups, mono, favicons, og.png) and web/lib/ghost.ts; never hand-edit those. The site draws the ghost live
+  (web/components/Ghost.tsx): eyes follow the pointer, blink. Homepage hero = the ghost stage in site/home.js (public deposits →
+  ghost = proof on your device → identical lime pieces into the bins).
 - Must look professional, Apple-calibre, never generic/AI-made. No grid backgrounds. No fake stats, testimonials, partners,
   audit badges or security claims; keep the "not yet had an independent audit" line. Never put the owner's name or real details
   in the product, demos or fixtures (use made-up names).

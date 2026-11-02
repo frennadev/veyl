@@ -35,7 +35,7 @@ export function CandleChart({ candles, mode = 'candles', height = 300, formatVol
   // the chart, once
   useEffect(() => {
     if (!box.current) return;
-    const up = css('--good', '#C8F560'), down = css('--bad', '#FF6B5E'), muted = css('--muted', '#8A8F86'), line = css('--line', '#22251F');
+    const up = css('--good', '#6FD6A8'), down = css('--bad', '#FF6B5E'), muted = css('--muted', '#8A8F86'), line = css('--line', '#22251F');
     const c = createChart(box.current, {
       autoSize: true,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: muted, fontFamily: '"IBM Plex Mono", ui-monospace, monospace', fontSize: 11, attributionLogo: true },
@@ -62,7 +62,7 @@ export function CandleChart({ candles, mode = 'candles', height = 300, formatVol
   // its data
   useEffect(() => {
     const s = series.current; if (!s) return;
-    const up = css('--good', '#C8F560'), down = css('--bad', '#FF6B5E');
+    const up = css('--good', '#6FD6A8'), down = css('--bad', '#FF6B5E');
     byTime.current = new Map(candles.map((k) => [k.t, k]));
     const t = (k: Candle) => k.t as UTCTimestamp;
     s.candles.setData(candles.map((k) => ({ time: t(k), open: k.o, high: k.h, low: k.l, close: k.c })));

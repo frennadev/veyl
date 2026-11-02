@@ -15,6 +15,7 @@ import { COLUMNS, DEFAULT_COLUMNS, Change, Spark, liquidityCell, visibleColumns,
 import { poolsUi, restorePoolsUi, setColumns, setFilter, setInterval_, setSort, usePoolsUi } from './state';
 import { usePoolViews } from './usePoolViews';
 import { PoolBadge } from './PoolBadge';
+import { Kpis } from '@/features/shell/Kpis';
 import { statusOf } from '@/lib/veyl/services/pools';
 import type { PoolConfig } from '@/lib/veyl/types';
 
@@ -63,6 +64,7 @@ export default function PoolsPage() {
   return (
     <section className="page" id="pg-pools">
       <div className="ph"><div><h1>Pools</h1><p>Pick a pool, set your range, earn the fees. Nobody sees whose liquidity it is.</p></div></div>
+      <Kpis />
       <div className="ptools">
         <label className="search"><Icon name="search" />
           <input id="poolQ" type="text" placeholder="Search by token or pair" aria-label="Search pools" autoComplete="off" value={ui.filter.q} onChange={(e) => setFilter({ q: e.target.value })} />

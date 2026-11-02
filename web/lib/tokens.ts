@@ -7,7 +7,7 @@ interface Mark { name: string; c: string; g: string }
 const KNOWN: Record<string, Mark> = {
   WIF: { name: 'dogwifhat', c: '#B07A4F', g: 'T:W' }, JTO: { name: 'Jito', c: '#5B7F86', g: 'T:J' }, PYTH: { name: 'Pyth Network', c: '#6E5A9E', g: 'T:P' },
   RAY: { name: 'Raydium', c: '#4A63A8', g: 'T:R' }, JUP: { name: 'Jupiter', c: '#4F8F7A', g: 'jup' }, SOL: { name: 'Solana', c: '#8E98A6', g: 'sol' },
-  USDC: { name: 'USD Coin', c: '#3B5410', g: 'dollar' }, USDT: { name: 'Tether USD', c: '#5E6B7C', g: 'dollar' }, BONK: { name: 'Bonk', c: '#D9843B', g: 'bonk' },
+  USDC: { name: 'USD Coin', c: '#2775CA', g: 'dollar' }, USDT: { name: 'Tether USD', c: '#5E6B7C', g: 'dollar' }, BONK: { name: 'Bonk', c: '#D9843B', g: 'bonk' },
   WISP: { name: 'Wisp · made-up, volatile', c: '#6F7C93', g: 'wisp' },
 };
 const NAMES: Record<string, string> = {

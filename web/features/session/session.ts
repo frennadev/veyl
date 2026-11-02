@@ -92,10 +92,21 @@ function checkRelayer() {
   setTimeout(checkRelayer, RELAYER_RECHECK_MS);
 }
 
+const RPC_TRIES = 3, RPC_RECHECK_MS = 15_000;
+let rpcTimer: ReturnType<typeof setTimeout> | null = null;
+/// Whether the chain's RPC answers. One failed request is not an outage (a public RPC rate-limits, a phone drops a request):
+/// it is tried three times over a few seconds before the app says so, and once it has said so it keeps checking every 15 s
+/// and clears the notice by itself when the RPC answers again.
 export async function checkRpc(): Promise<void> {
   const rt = session.get().rt; if (rt?.mode !== 'chain') return;
-  session.set({ rpc: 'checking' });
-  try { await rt.engine.ping(); session.set({ rpc: 'ok' }); invalidate(); } catch { session.set({ rpc: 'down' }); }
+  if (rpcTimer) { clearTimeout(rpcTimer); rpcTimer = null; }
+  if (session.get().rpc !== 'down') session.set({ rpc: 'checking' });
+  for (let i = 0; i < RPC_TRIES; i++) {
+    try { await rt.engine.ping(); session.set({ rpc: 'ok' }); invalidate(); return; }
+    catch { if (i < RPC_TRIES - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
+  }
+  session.set({ rpc: 'down' });
+  rpcTimer = setTimeout(checkRpc, RPC_RECHECK_MS);
 }
 
 // ---------------------------------------------------------------- connecting
