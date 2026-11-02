@@ -7,7 +7,7 @@
   "chainName": "Solana",
   "explorer": "https://solscan.io",
   "explorerSuffix": "",
-  "relayerUrl": "VERIFY: the HTTPS URL of your relayer host, no trailing slash (e.g. the Render service's https://<name>.onrender.com, or your own domain). Check: curl -s <url>/health answers {\"ok\":true,...,\"network\":\"mainnet\"} once the relayer runs with deploy.mainnet.json",
+  "relayerUrl": "https://veyl-sol-relayer.onrender.com",
   "mockMints": false,
   "tokens": [
     "SOL",
@@ -107,7 +107,7 @@
       "USDC": 10,
       "USDT": 10
     },
-    "later": true,
+    "later": false,
     "_later": "true: launch without sealed swaps. The deploy skips the committee and sealed pools while committee/transcript.mainnet.json is missing; once the three operators have run the key generation, commit that file and run the deploy again (programs are skipped, only the committee and the sealed pools are created). Then set this to false."
   },
   "caps": {
@@ -126,8 +126,9 @@
     }
   },
   "waivers": {
-    "_comment": "Owner decisions that turn a mainnet blocker into a warning in preflight (it stays listed). Only these two ids can be waived; the key ceremony, the batch committee and fresh program keys cannot.",
+    "_comment": "Owner decisions that turn a mainnet blocker into a warning in preflight (it stays listed). Only external-audit, multisig and single-operator-committee can be waived; the key ceremony and fresh program keys cannot.",
     "external-audit": "Owner decision 2026-11-02: launch without an external audit, with deposit caps (\"caps\") limiting what is at risk. REVIEW.md is the internal review.",
-    "multisig": "Owner decision 2026-11-02: single-key authorities at launch, no multisig. Hand every role from the deployer to one dedicated offline key (npm run handover -- --network mainnet --to <that key>); preflight warns while a role sits on the deployer."
+    "multisig": "Owner decision 2026-11-02: single-key authorities at launch, no multisig. Hand every role from the deployer to one dedicated offline key (npm run handover -- --network mainnet --to <that key>); preflight warns while a role sits on the deployer.",
+    "single-operator-committee": "Owner decision 2026-11-02: the three sealed-batch committee nodes run under one operator (Render) at launch. That operator could decrypt individual sealed swap sizes, not just batch totals. Move nodes to independent operators later (committee/OPERATOR.md)."
   }
 }
