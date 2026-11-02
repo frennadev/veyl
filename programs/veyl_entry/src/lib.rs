@@ -65,7 +65,7 @@ pub use sealed::*;
 #[cfg(not(feature = "mainnet"))]
 declare_id!("4q6p4io7m3pgxpMqRDSKBRsAb6gCBGCKvTRabZtp1QHn");
 #[cfg(feature = "mainnet")]
-declare_id!("11111111111111111111111111111111"); // mainnet veyl_entry (npm run keys:mainnet)
+declare_id!("4vGpwpkRwnuKBgN8rGX5P4zf1ATunBzLwzkrACvgspx2"); // mainnet veyl_entry (npm run keys:mainnet)
 
 pub const MAX_FEE_BPS: u16 = 100; // 1%
 pub const RELAY: u8 = 1;

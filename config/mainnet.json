@@ -73,7 +73,7 @@
     "sol": 1,
     "lockDays": 30
   },
-  "treasury": "VERIFY: your own wallet address (base58; a hardware wallet is best). It receives forfeited listing bonds; the protocol fee authority can change it later. Never the deployer, relayer or postman key",
+  "treasury": "7ofhv1rkcmKgfMWDy6Mn7gXDHfsEis4ifxniMhKJThSW",
   "mints": {
     "SOL": "So11111111111111111111111111111111111111112",
     "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -86,12 +86,12 @@
   },
   "_prices": "USD prices that set each bin pool's opening bin. \"live\": fetched by the deploy at that moment from CoinGecko and Jupiter's price API, which must agree within 1% (LIVE_PRICE_MAX_SPREAD), else the deploy stops; LAUNCH_PRICES_JSON='{\"SOL\":<price>}' pins one by hand. USDT is held at its 1 USD peg (USDC is 1 too): usdt-usdc opens at 1.",
   "programs": {
-    "pool": "VERIFY: written by npm run keys:mainnet (fresh veyl_pool keypair in MAINNET_KEYPAIR_DIR, outside the repo); never edit by hand",
-    "bin": "VERIFY: written by npm run keys:mainnet (fresh veyl_bin keypair in MAINNET_KEYPAIR_DIR, outside the repo); never edit by hand",
-    "entry": "VERIFY: written by npm run keys:mainnet (fresh veyl_entry keypair in MAINNET_KEYPAIR_DIR, outside the repo); never edit by hand"
+    "pool": "5fAwTJofpJ527cxuVGuA2gFZgHbPvktxCCvsUwBHFHJm",
+    "bin": "2Xh9gzq3mPiCEF6MpUAXn6Mce4MJPkJaiAeAv5cuorhV",
+    "entry": "4vGpwpkRwnuKBgN8rGX5P4zf1ATunBzLwzkrACvgspx2"
   },
-  "postman": "VERIFY: written by npm run keys:mainnet (postman-keypair.json in MAINNET_KEYPAIR_DIR: the approved-set publisher, its secret goes to the relayer host as POSTMAN_SECRET_KEY)",
-  "relayer": "VERIFY: written by npm run keys:mainnet (relayer-keypair.json in MAINNET_KEYPAIR_DIR: the relayer's fee-only hot wallet, its secret goes to the relayer host as RELAYER_SECRET_KEY; keep ~0.5 SOL on it)",
+  "postman": "GhWM3VBNHfhwDyukd7QriaxJRurPiq7h63VPv9KoQgGg",
+  "relayer": "HEZYjbKtSdFYiXsQ9NiiAs8i4YfEAZ5eKS4ozYiNgTMy",
   "sealed": {
     "_comment": "Phase 3 sealed batch swaps (slots ~0.4 s). One pool at launch, SOL/USDC, so every sealed swap shares one crowd. Same timings as devnet (150-slot epochs ~1 min, a 1,500-slot ~10 min settlement window, k = 3 per direction, max drift 50 bins = ~5% at bin step 10), with 8 rollovers (~9 min) instead of 4 so a quiet launch-week batch waits for company before it refunds, and minimums of ~$10 so filling a batch with fake participants costs real money. Program limits: epoch and window 1..216,000 slots (window >= 10), k <= 64, minimum < 2^40 atoms. The committee comes from committee/transcript.mainnet.json (a real dealerless DKG among independent operators; preflight is red without it).",
     "pools": [

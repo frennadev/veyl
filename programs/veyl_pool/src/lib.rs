@@ -31,12 +31,12 @@ pub mod vkey_claim;
 #[cfg(not(feature = "mainnet"))]
 declare_id!("BudA5kQySdfhfocWhPiDUP888tuoqL9aRxNiq9Qon73V");
 #[cfg(feature = "mainnet")]
-declare_id!("11111111111111111111111111111111"); // mainnet veyl_pool (npm run keys:mainnet)
+declare_id!("5fAwTJofpJ527cxuVGuA2gFZgHbPvktxCCvsUwBHFHJm"); // mainnet veyl_pool (npm run keys:mainnet)
 /// veyl_entry, whose signer PDA `["signer"]` deposits swap / removal proceeds (exempt from the minimum deposit).
 #[cfg(not(feature = "mainnet"))]
 pub const ENTRY_PROGRAM: Pubkey = anchor_lang::solana_program::pubkey!("4q6p4io7m3pgxpMqRDSKBRsAb6gCBGCKvTRabZtp1QHn");
 #[cfg(feature = "mainnet")]
-pub const ENTRY_PROGRAM: Pubkey = anchor_lang::solana_program::pubkey!("11111111111111111111111111111111"); // mainnet veyl_entry (npm run keys:mainnet)
+pub const ENTRY_PROGRAM: Pubkey = anchor_lang::solana_program::pubkey!("4vGpwpkRwnuKBgN8rGX5P4zf1ATunBzLwzkrACvgspx2"); // mainnet veyl_entry (npm run keys:mainnet)
 
 pub const DEPTH: usize = 32; // = MerkleRoot(32) in zk/circuits/withdraw.circom
 /// Known state roots. One entry per slot (every insert in the same slot updates that slot's entry), so a proof stays valid

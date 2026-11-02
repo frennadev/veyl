@@ -7,6 +7,10 @@ skip-lint = false
 veyl_pool = "BudA5kQySdfhfocWhPiDUP888tuoqL9aRxNiq9Qon73V"
 veyl_bin = "6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk"
 veyl_entry = "4q6p4io7m3pgxpMqRDSKBRsAb6gCBGCKvTRabZtp1QHn"
+[programs.mainnet]
+veyl_pool = "5fAwTJofpJ527cxuVGuA2gFZgHbPvktxCCvsUwBHFHJm"
+veyl_bin = "2Xh9gzq3mPiCEF6MpUAXn6Mce4MJPkJaiAeAv5cuorhV"
+veyl_entry = "4vGpwpkRwnuKBgN8rGX5P4zf1ATunBzLwzkrACvgspx2"
 [provider]
 cluster = "Localnet"
 wallet = "~/.config/solana/id.json"

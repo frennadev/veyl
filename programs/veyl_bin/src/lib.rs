@@ -41,7 +41,7 @@ pub use u512::U512;
 #[cfg(not(feature = "mainnet"))]
 declare_id!("6yKrpy8JDoxFfbWdCKUre7Q7PVdvLzmzdSYWa86X4YLk");
 #[cfg(feature = "mainnet")]
-declare_id!("11111111111111111111111111111111"); // mainnet veyl_bin (npm run keys:mainnet)
+declare_id!("2Xh9gzq3mPiCEF6MpUAXn6Mce4MJPkJaiAeAv5cuorhV"); // mainnet veyl_bin (npm run keys:mainnet)
 #[cfg(all(feature = "mainnet", feature = "devnet-migrate"))]
 compile_error!("devnet-migrate is a devnet-only migration: never build it with the mainnet feature");
 
