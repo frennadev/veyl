@@ -124,9 +124,10 @@ export default function Docs() {
               <table className="tbl fees-tbl" style={{marginTop:16}}>
                 <thead><tr><th>Fee</th><th>You pay it when</th><th>Who gets it</th><th>Typical size</th></tr></thead>
                 <tbody>
-                  <tr><td data-label="Fee">Swap fee</td><td data-label="You pay it when">You swap, instant or sealed</td><td data-label="Who gets it">Liquidity providers in the bins you traded through</td><td data-label="Typical size">0.01% to 0.5% at rest, more when the market is busy, never above 10%</td></tr>
+                  <tr><td data-label="Fee">Swap fee</td><td data-label="You pay it when">You swap, instant or sealed</td><td data-label="Who gets it">Liquidity providers in the bins you traded through</td><td data-label="Typical size">0.01% to 2% at rest by the pool&apos;s tier, more when the market is busy, never above 10%</td></tr>
+                  <tr><td data-label="Fee">LP bonus</td><td data-label="You pay it when">Every swap, on top of the swap fee</td><td data-label="Who gets it">The pool&apos;s liquidity providers, claimed with their fees</td><td data-label="Typical size">0.05% of each swap</td></tr>
                   <tr><td data-label="Fee">Relayer fee</td><td data-label="You pay it when">Any shielded action</td><td data-label="Who gets it">The relayer, for submitting your proof</td><td data-label="Typical size">About 0.05%, more on small amounts, never above 1%</td></tr>
-                  <tr><td data-label="Fee">Protocol share</td><td data-label="You pay it when">Out of the swap fee, not on top</td><td data-label="Who gets it">The protocol treasury</td><td data-label="Typical size">10% of the swap fee</td></tr>
+                  <tr><td data-label="Fee">Protocol fee</td><td data-label="You pay it when">Every swap, on top of the swap fee (each pool a route passes through)</td><td data-label="Who gets it">The protocol treasury</td><td data-label="Typical size">0.2% of each swap</td></tr>
                   <tr><td data-label="Fee">Network fee</td><td data-label="You pay it when">Public actions and deposits</td><td data-label="Who gets it">Solana validators</td><td data-label="Typical size">A fraction of a cent in SOL; the relayer covers it on shielded actions</td></tr>
                 </tbody>
               </table>

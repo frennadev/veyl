@@ -121,7 +121,7 @@ function PriceHead({ pool, m, live }: { pool: PoolView; m: PoolMath | null; live
 
 type Stat = [string, ReactNode, ReactNode];
 function PoolStats({ pool: p, m, live, usdY }: { pool: PoolView; m: PoolMath | null; live: boolean; usdY: number | null }) {
-  const protocolFeeBps = useSession((x) => x.rt?.protocolFeeBps ?? null);
+  const protocolFeeBps = useSession((x) => x.rt?.protocolFeeBps ?? null), lpBonusBps = useSession((x) => x.rt?.lpBonusBps ?? null);
   const mode = useSession((s) => s.rt?.mode);
   const { iv } = usePoolsUi(); const ivn = INTERVAL_LABEL[iv];
   const v = (x: () => ReactNode) => (m ? x() : live && !p.err ? <Skeleton width="70%" /> : <Dash />);
@@ -136,7 +136,7 @@ function PoolStats({ pool: p, m, live, usdY }: { pool: PoolView; m: PoolMath | n
         ['Volume ' + ivn, ps ? usd(ps.volumeUsd) ?? <Dash /> : <Dash />, ps ? `${ps.swaps} swaps` : 'not recorded on chain'],
         ['Fees ' + ivn, ps ? usd(ps.feesUsd) ?? <Dash /> : <Dash />, ps ? `APR ${pctOrNull(ps.aprPct) ?? '—'} to LPs` : 'not recorded on chain'],
         ['Bin step', bs, 'per bin'],
-        ['Dynamic fee', v(() => pct(m!.st.fee)), `base ${p.base.toFixed(2)}% + volatility${protocolFeeBps != null ? ` · swaps also pay ${(protocolFeeBps / 100).toFixed(2)}% protocol` : ''}`],
+        ['Dynamic fee', v(() => pct(m!.st.fee)), `base ${p.base.toFixed(2)}% + volatility${lpBonusBps != null ? ` · + ${(lpBonusBps / 100).toFixed(2)}% LP bonus` : ''}${protocolFeeBps != null ? ` · + ${(protocolFeeBps / 100).toFixed(2)}% protocol` : ''}`],
         ['Fees, all time', v(() => tiny(engine().fmt(p.x, m!.st.totalFees.x) * m!.price(m!.st.active) + engine().fmt(p.y, m!.st.totalFees.y))), m ? `in ${tl(p.y)} at today's price` : ''],
       ];
   const termOf = (k: string): Term | null => (/^Liquidity/.test(k) ? 'liquidity' : /^Bin step/.test(k) ? 'binStep' : /^(Trading fee now|Fee now|Dynamic fee)/.test(k) ? (protocolFeeBps != null ? 'traderCost' : 'dynamicFee') : /^Base fee/.test(k) ? 'baseFee' : /^Volume/.test(k) ? 'volume' : null);
@@ -145,9 +145,10 @@ function PoolStats({ pool: p, m, live, usdY }: { pool: PoolView; m: PoolMath | n
 
 function PoolParams({ pool: p }: { pool: PoolView }) {
   const st = p.st;
-  const protocolFeeBps = useSession((x) => x.rt?.protocolFeeBps ?? null);
+  const protocolFeeBps = useSession((x) => x.rt?.protocolFeeBps ?? null), lpBonusBps = useSession((x) => x.rt?.lpBonusBps ?? null);
   const rows: [string, ReactNode][] = [
     ['Bin step', (p.bs / 100).toFixed(2) + '% per bin'], ['Base fee', p.base.toFixed(2) + '%'], ['Dynamic fee now', st ? pct(st.fee) : <Dash />], ['Fee cap', '10%'],
+    ...(lpBonusBps != null ? [['LP bonus', `${(lpBonusBps / 100).toFixed(2)}% of each swap, paid to this pool's LPs`] as [string, ReactNode]] : []),
     protocolFeeBps != null ? ['Protocol fee', `${(protocolFeeBps / 100).toFixed(2)}% of each swap, on top of the LP fee`]
       : ['Protocol share of fees', st?.protocolShare != null ? (st.protocolShare / 100).toFixed(0) + '%' : <Dash />], ['Active bin', st ? String(st.active) : <Dash />],
     ['Farm rewards', st ? (st.rewards.length ? st.rewards.map((r) => (r.sym || short(r.mint)) + (r.live ? ' · emitting' : ' · ended')).join(', ') : 'None') : <Dash />],

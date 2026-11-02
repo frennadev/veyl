@@ -189,8 +189,9 @@ export interface SafetyPort {
   markBackedUp(): number;
   linkRisks(sym: Sym, amount: number | string, to: string): { warnings: LinkRisk[]; tip: { id: string; text: string } };
 }
-/// A route quote. lpFee / protocolFee (atoms of the input token) and per-hop fees arrive with part 2.
-export interface Quote { out: bigint; path: { name: string; out?: Sym; feePips?: number; volatilityPips?: number }[]; lpFee?: bigint; protocolFee?: bigint }
+/// A route quote. lpFee / protocolFee (atoms of the input token) and per-hop fees arrive with part 2. lpFee includes lpBonus,
+/// the fixed 0.05% every swap adds for the pool's LPs (engines since the LP bonus).
+export interface Quote { out: bigint; path: { name: string; out?: Sym; feePips?: number; volatilityPips?: number }[]; lpFee?: bigint; lpBonus?: bigint; protocolFee?: bigint }
 
 // ---------------------------------------------------------------- permissionless pools (part 2; optional until the engine ships it)
 export interface TokenMeta { mint: Base58; symbol: string; name: string; decimals: number; program: 'spl' | 'token2022'; listed: boolean }
@@ -248,7 +249,8 @@ export type Mode = 'sandbox' | 'chain' | 'preview';
 /// The engine for the current mode. Preview has none: the UI shows the listed pools and can't transact.
 /// `deployed`: this site has a deployment config (so On-chain mode can be chosen), whichever mode runs now.
 /// protocolFeeBps: the fixed protocol fee on swaps (Engine.PROTOCOL_FEE_BPS, part 2), null on an engine without it.
-export type Runtime = { chainName: string; deployed: boolean; sdk: SdkPort | null; protocolFeeBps: number | null; markets: { api: MarketsPort; sources: MarketSources } | null; market: MarketPort | null } & (
+/// lpBonusBps: the fixed bonus every swap pays the pool's LPs, on top of its fee (Engine.LP_BONUS_BPS), null without it.
+export type Runtime = { chainName: string; deployed: boolean; sdk: SdkPort | null; protocolFeeBps: number | null; lpBonusBps: number | null; markets: { api: MarketsPort; sources: MarketSources } | null; market: MarketPort | null } & (
   | { mode: 'sandbox'; engine: SandboxEngine; cfg: RuntimeConfig; wallets: null }
   | { mode: 'chain'; engine: ChainEngine; cfg: RuntimeConfig; wallets: WalletDirectory | null }
   | { mode: 'preview'; engine: null; cfg: null; wallets: WalletDirectory | null });

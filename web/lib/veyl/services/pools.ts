@@ -125,7 +125,9 @@ export function sortPools(pools: PoolView[], key: SortKey, liqFallback: (p: Pool
 
 /// A quote's swap fees in units of the input token, when the engine reports them (part 2): the pools' LP fee and Veyl's
 /// protocol fee. null on engines that don't.
-export function quoteFees(E: UnitsPort, sym: Sym, q: { lpFee?: bigint; protocolFee?: bigint } | null | undefined): { lp: number; protocol: number } | null {
+/// `lp` is the pool's own fee (tier + volatility); `bonus` the fixed LP bonus on top (null on engines without it), also to LPs.
+export function quoteFees(E: UnitsPort, sym: Sym, q: { lpFee?: bigint; lpBonus?: bigint; protocolFee?: bigint } | null | undefined): { lp: number; bonus: number | null; protocol: number } | null {
   if (!q || q.lpFee == null || q.protocolFee == null) return null;
-  return { lp: E.fmt(sym, q.lpFee), protocol: E.fmt(sym, q.protocolFee) };
+  const bonus = q.lpBonus ?? null;
+  return { lp: E.fmt(sym, bonus != null ? q.lpFee - bonus : q.lpFee), bonus: bonus != null ? E.fmt(sym, bonus) : null, protocol: E.fmt(sym, q.protocolFee) };
 }
