@@ -130,7 +130,9 @@ All of these allow browser calls (CORS `*`) as far as their docs say; `engine/ma
 ## Fees, rewards, limit orders (Phase 1)
 - **Protocol fee.** A fixed **0.2%** (`protocol_fee_bps = 20`) of every swap's input, on top of the pool's LP fee, goes to an
   accounted protocol balance in its vaults; LPs keep the whole LP fee (claimable per position) and limit orders are paid into
-  the filled amount. Sealed batches pay it on the matched part too (`pay_protocol_fee`). LP fees come from the factory's fee
+  the filled amount. **LP bonus:** every swap also pays a fixed **0.05%** (`LP_BONUS_BPS = 5`, a program constant, all pools
+  and tiers) of its input to LPs, distributed exactly like the LP fee. A trader pays tier fee + 0.05% + 0.2% (SOL/USDC at
+  the 0.05% tier: 0.30%, plus any volatility fee). Sealed batches pay it on the matched part too (`pay_protocol_fee`). LP fees come from the factory's fee
   tiers (`"feeTiers"` in `config/<network>.json`; a listed tier cannot be edited). Pools anyone lists post a refundable bond
   (`"bond": { sol, lockDays }`); `"treasury"` receives delisted bonds. Only the factory's **protocol fee authority** may withdraw: the
   deployer at first; `npm run handover` proposes it to the multisig (two-step, the multisig accepts), like the factory

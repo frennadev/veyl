@@ -111,7 +111,7 @@ export class SandboxChain {
   swapInner(P, xForY, amountIn, now = nowS()) {
     need(amountIn > 0n, 'Enter an amount.'); this.updateActive(P, now); const p = P.p; const refs = refsOf(p, now);
     const r = simulateSwap(p, P.bins, xForY, amountIn, now); const chunks = new Set();
-    for (const t of r.touched) { const { mmFee, loFee, proto, ...b } = t; P.bins.set(t.id, b); chunks.add(chunkOf(t.id)); }
+    for (const t of r.touched) { const { mmFee, loFee, bonus, proto, ...b } = t; P.bins.set(t.id, b); chunks.add(chunkOf(t.id)); }
     for (const c of chunks) this.syncChunk(P, c);
     p.activeId = r.endId; p.volAcc = r.volAcc; p.volRef = refs.ref; p.idRef = refs.iref; p.lastSwapAt = BigInt(now);
     if (xForY) { p.protocolFeeX += r.protocolFee; p.totalFeeX += r.fee; P.vault.x += amountIn; P.vault.y -= r.out; } else { p.protocolFeeY += r.protocolFee; p.totalFeeY += r.fee; P.vault.y += amountIn; P.vault.x -= r.out; }

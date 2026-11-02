@@ -109,7 +109,7 @@ Still open (documented on the site as well): the single-machine trusted setup (C
 |---|---|---|---|
 | Bitmaps: swaps jump over empty ranges | `swap`, `quote` | `private_swap`, `swap_route` | `chunksForSwap`, `simulateSwap` (exact twin), `liveChunks` |
 | Fees: growth per share per token, claimable; volatility fee kept | `claim_fees` | `private_claim_fees` (ed25519; notes or a wallet) | `position()` (unclaimed fees, rewards, orders), `claimFeesIx`, `privateClaimFeesIx` |
-| Protocol fee: 10% default, 25% max, fee authority only | `set_protocol_share`, `withdraw_protocol_fee` | — | `protocolFees`, `setProtocolShareIx`, `withdrawProtocolFeeIx` |
+| Protocol fee: a fixed 0.2% of every swap's input, fee authority withdraws; LP bonus: a fixed 0.05% of every swap's input, on top of the tier fee, to LPs (`LP_BONUS_BPS`) | `withdraw_protocol_fee`, `pay_protocol_fee` | — | `protocolFees`, `protocolFeeOf`, `lpBonusOf`, `withdrawProtocolFeeIx` |
 | Limit orders: one bin away from the active bin, fill and stay filled | `place_limit_order`, `withdraw_limit_order` | `private_place_order` (proof), `private_withdraw_order` (ed25519) | `placeOrderIx`, `withdrawOrderIx`, `privatePlaceOrderIx`, `privateWithdrawOrderIx` |
 | Rebalance: burn + re-add by weights in one instruction, `min_shares` | `rebalance_position` | `private_rebalance` (ed25519, relayer fee withheld) | `rebalanceIx`, `privateRebalanceIx`, `shapeWeights` (spot / curve / bidAsk), `sideWeights`, `distribute` |
 | Zap: one token in, swapped through the pool itself | `swap_and_add` | `private_zap` (proof, needs `min_swap_out` and `min_shares`) | `planZap`, `swapAndAddIx`, `privateZapIx` |

@@ -2,7 +2,8 @@
 // veyl_bin permissionless listing + fixed protocol fee, against its own local validator (RPC 8933; run alone, like the
 // other suites): fee tiers (factory authority), anyone lists a canonical pair at an approved tier and pays the bond,
 // duplicates / reversed pairs / unknown or disabled tiers refused, Token-2022 extension rules, every swap pays the LP fee
-// plus exactly 0.2% of its input to the protocol (vault and accumulator deltas == the JS twin), release_bond before and
+// plus the 0.05% LP bonus plus exactly 0.2% of its input to the protocol (vault and accumulator deltas == the JS twin, LPs
+// claim tier fee + bonus, vault balance covers reserves + protocol + claimable), release_bond before and
 // after the lock, delisting (bond to the treasury, new liquidity refused, exits and swaps still work), pay_protocol_fee.
 'use strict';
 const fs = require('fs'); const path = require('path'); const os = require('os');
@@ -91,14 +92,21 @@ const refused = async (p, re) => { try { await p; return false; } catch (e) { co
     check('swap X->Y: on-chain quote == JS twin == executed (out, fee incl. protocol, end bin)', r.qc.out === r.sim.out && r.qc.fee === r.sim.fee && r.ev.amountOut === r.sim.out && r.ev.fee === r.sim.fee && r.ev.protocolFee === r.sim.protocolFee && r.sim.touched.length === 1);
     check('protocol accumulator X grows by exactly ceil(0.2% x amount in) == twin; Y untouched', r.dpx === r.proto && r.proto === 20_000n && r.sim.protocolFee === r.proto && r.dpy === 0n, `+${r.dpx}`);
     check('vault deltas: +amount in (X), -out (Y)', r.dvx === units(10, 6) && r.dvy === -r.sim.out);
-    { const lp = S.mulDivCeil(units(10, 6) - r.proto, 2_500n, S.PIPS);
-      check('the LP fee is the pool\'s 0.25% of what is left after the protocol fee, on top of it (fee = LP + protocol)', r.sim.lpFee === lp && r.sim.fee === lp + r.proto, `lp ${r.sim.lpFee}`); }
+    const bonus10 = S.lpBonusOf(units(10, 6));
+    { const lp = S.mulDivCeil(units(10, 6) - r.proto - bonus10, 2_500n, S.PIPS);
+      check('LP bonus: exactly ceil(0.05% x amount in) of the gross input (5,000 atoms of 10 units), constant 5 bps', S.LP_BONUS_BPS === 5 && bonus10 === 5_000n && r.sim.lpBonus === bonus10 && r.sim.touched.reduce((a, t) => a + t.bonus, 0n) === bonus10);
+      check('the LP fee = the pool\'s 0.25% of what is left after protocol fee and bonus, + the bonus; fee = LP + bonus + protocol (twin == chain event)', r.sim.lpFee === lp + bonus10 && r.sim.fee === lp + bonus10 + r.proto && r.ev.fee === r.sim.fee && r.ev.protocolFee === r.proto, `lp ${r.sim.lpFee}`); }
     { const pos = await V.position(P1, alice.publicKey, alice.publicKey, ids);
-      check('the LP keeps 100% of the LP fee: claimable == LP fee (minus < 1 atom of per-share rounding)', pos.fees.x <= r.sim.lpFee && pos.fees.x >= r.sim.lpFee - 1n, `${pos.fees.x} of ${r.sim.lpFee}`); }
+      check('the LP keeps 100% of the LP fee incl. the bonus: claimable == tier fee + bonus (minus < 1 atom of per-share rounding)', pos.fees.x <= r.sim.lpFee && pos.fees.x >= r.sim.lpFee - 1n && pos.fees.x > r.sim.lpFee - bonus10, `${pos.fees.x} of ${r.sim.lpFee}`);
+      const bins = await V.bins(P1, [-1, 0]); let res = 0n; for (const b of bins.values()) res += b.x + b.askX + b.bidFilledX;
+      const dust = (await amt(r.q.vaultX)) - r.q.protocolFeeX - res - pos.fees.x;
+      check('conservation: vault X == bin reserves + limit orders + protocol fees + LP claimable + < 2 atoms of rounding (no value created)', dust >= 0n && dust <= 1n, `dust ${dust}`);
+      const ax = await V.tokenBalance(A, alice.publicKey); sig = await as(alice).send([await V.claimFeesIx(alice.publicKey, P1, { ids })], [], 600_000); const fc = await evOf(sig, 'FeesClaimed');
+      check('claim_fees pays the LP the tier fee + the bonus (== claimable, token balance up by it)', fc && fc.amountX === pos.fees.x && (await V.tokenBalance(A, alice.publicKey)) - ax === pos.fees.x, `${fc && fc.amountX}`); }
     r = await swapCase(carol, false, units(2_500, 6));
-    check('a larger Y->X swap across bins: twin == chain, protocol Y += ceil(0.2%) exactly', r.qc.out === r.sim.out && r.ev.amountOut === r.sim.out && r.sim.touched.length > 1 && r.dpy === r.proto && r.proto === 5_000_000n && r.dpx === 0n && r.dvy === units(2_500, 6), `${r.sim.touched.length} bins`);
+    check('a larger Y->X swap across bins: twin == chain (out, fee), protocol Y += ceil(0.2%) exactly, bonus 0.05% split over the bins', r.qc.out === r.sim.out && r.ev.amountOut === r.sim.out && r.ev.fee === r.sim.fee && r.sim.lpBonus === 1_250_000n && r.sim.touched.reduce((a, t) => a + t.bonus, 0n) === r.sim.lpBonus && r.sim.touched.length > 1 && r.dpy === r.proto && r.proto === 5_000_000n && r.dpx === 0n && r.dvy === units(2_500, 6), `${r.sim.touched.length} bins`);
     r = await swapCase(bob, true, 333n);
-    check('rounding: a 333-atom swap pays a 1-atom protocol fee (rounded up), twin == chain', r.dpx === 1n && r.sim.protocolFee === 1n && r.ev.amountOut === r.sim.out);
+    check('rounding: a 333-atom swap pays a 1-atom protocol fee and a 1-atom LP bonus (both rounded up), twin == chain', r.dpx === 1n && r.sim.protocolFee === 1n && r.sim.lpBonus === 1n && r.ev.fee === r.sim.fee && r.ev.amountOut === r.sim.out);
     { const p0 = await V.binPool(P1); sig = await as(bob).send([await V.payProtocolFeeIx(bob.publicKey, P1, 1_000n, 0n)]); const q = await V.binPool(P1);
       check('pay_protocol_fee: anyone pays protocol fees in; they are accounted like a swap\'s', q.protocolFeeX - p0.protocolFeeX === 1_000n && (await evOf(sig, 'ProtocolFeePaid')).amountX === 1_000n); }
     { const q = await V.binPool(P1); const bx = await V.tokenBalance(A, payer.publicKey), by = await V.tokenBalance(B, payer.publicKey); await fund(conn, payer, A, payer.publicKey, 0n); await fund(conn, payer, B, payer.publicKey, 0n);
