@@ -100,6 +100,42 @@ handover, and list only classic SPL Token mints (USDC, USDT, wrapped SOL): no tr
   (a hardware wallet); keep the postman on its own key (`--postman`) so approvals stay automatic. Preflight warns (not red)
   while a role sits on the deployer, and stays red if one sits on the relayer's hot wallet.
 
+## Handing over the roles (mainnet, after the deploy)
+
+Optional, but recommended. Right after the deploy the deployer key holds every power over Veyl: upgrading the three
+programs (rewriting their code, including code that could take every deposit), listing and delisting pools, withdrawing
+the protocol fee, the treasury, reward funders, the postman of every private pool, and the batch committee. That key has
+been used on a working computer through the whole deploy. If it leaks, the deposit caps don't limit the damage: an
+upgrade can drain everything. The handover moves every role to one admin key that is kept off the computer.
+
+Live mainnet: admin authority `HT5vETi4xzbWYSEbSznTxUzRun94GjW93NmbXgcPTeAX` (`~/keys/veyl/mainnet/authority.json`),
+postman `GhWM3VBNHfhwDyukd7QriaxJRurPiq7h63VPv9KoQgGg`. The admin key needs about 0.05 SOL to accept the roles.
+
+1. Plan (reads the chain, sends nothing):
+   ```
+   export DEPLOYER_KEYPAIR=~/keys/veyl/mainnet/deployer.json RPC_URL=<paid mainnet RPC>
+   npm run handover -- --network mainnet --to HT5vETi4xzbWYSEbSznTxUzRun94GjW93NmbXgcPTeAX \
+     --postman GhWM3VBNHfhwDyukd7QriaxJRurPiq7h63VPv9KoQgGg --dry-run
+   ```
+2. Hand over. The pool, factory, fee and committee authorities move in two steps (propose, then accept); because the admin
+   key is a plain key you hold, `--accept-keypair` accepts them in the same run:
+   ```
+   npm run handover -- --network mainnet --to HT5vETi4xzbWYSEbSznTxUzRun94GjW93NmbXgcPTeAX \
+     --postman GhWM3VBNHfhwDyukd7QriaxJRurPiq7h63VPv9KoQgGg --accept-keypair ~/keys/veyl/mainnet/authority.json --confirm-mainnet
+   ```
+3. Check: `npm run preflight -- --network mainnet` must no longer list any role on the deployer.
+4. Move `authority.json` off the computer (the encrypted backup, or a hardware wallet). While it sits next to the deployer
+   key the handover protects much less. The deployer is then an ordinary wallet: move its leftover SOL elsewhere.
+
+Afterwards every admin action needs the admin key, brought online only for that action:
+
+| Action | How |
+|---|---|
+| Program upgrade (e.g. veyl_pool with the ceremony's new verifying keys) | `solana program deploy --program-id <program keypair> target/deploy-mainnet/<program>.so -k <admin key>` |
+| Delist a pool | `delist_pool` signed by the admin key |
+| Collect the protocol fee | `FEE_AUTHORITY_KEYPAIR=<admin key> node scripts/sweep-fees.js --network mainnet --yes --confirm-mainnet` |
+| Change the committee or the postman | `set_committee` / `set_postman` signed by the admin key |
+
 ## Deposit caps
 While Veyl is new (no external audit), the relayer's approved-set publisher admits shielded deposits only within caps; no
 program change is involved. `config/<network>.json` "caps", in whole tokens:
