@@ -1,0 +1,37 @@
+# Balance and liveness alerts (scripts/monitor.js) every 30 minutes, independent of the hosts it watches.
+# Repository secrets: HELIUS_API_KEY (the RPC), and ALERT_WEBHOOK_URL (Discord/Slack) and/or TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
+# Repository variables: MONITOR_MAINNET=true once mainnet is live (with MAINNET_RELAYER_URL); devnet is always checked.
+# While a wallet stays low it is alerted every run (every 30 min) until topped up.
+name: monitor
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        network: [devnet, mainnet]
+    steps:
+      - if: matrix.network == 'devnet' || vars.MONITOR_MAINNET == 'true'
+        uses: actions/checkout@v4
+      - if: matrix.network == 'devnet' || vars.MONITOR_MAINNET == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - if: matrix.network == 'devnet' || vars.MONITOR_MAINNET == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - if: matrix.network == 'devnet' || vars.MONITOR_MAINNET == 'true'
+        run: node scripts/monitor.js --network ${{ matrix.network }} --once
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RELAYER_URL: ${{ matrix.network == 'mainnet' && vars.MAINNET_RELAYER_URL || '' }}
