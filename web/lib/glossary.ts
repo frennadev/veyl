@@ -33,7 +33,7 @@ export const GLOSSARY = {
   // ---- portfolio and positions
   privateBalance: 'Money inside Veyl\'s private pool. Only this browser can open it, and on-chain nobody can tell it is yours.',
   veylAddress: 'Share this to be paid privately. A payment to it lands in your private balance; nobody sees the amount or who sent it.',
-  pending: 'New deposits wait a few seconds to be checked before they join the private pool. Until then you can take them back.',
+  pending: 'New deposits wait a few seconds to be checked before they join the private pool. Until then you can take them back. While Veyl is new, deposits are also capped per deposit and in total: one over a cap stays pending until you take it back.',
   inRange: 'In range: the price is inside your range and you are earning fees. Out of range: you are not earning until the price comes back, or you rebalance.',
   unclaimedFees: 'Fees your position has earned and not yet collected. Claim them any time; they stay yours either way.',
   toEdges: 'How far the price can move down and up before your position leaves its range and stops earning.',

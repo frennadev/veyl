@@ -153,6 +153,7 @@ export default function Docs() {
             <details><summary>Can I create my own pool?</summary><p>Not yet. Every pool is listed by Veyl, which keeps out copycat and scam pairs and keeps liquidity deep where it counts. Open pool creation, with a listing bond and duplicate checks, is on the roadmap.</p></details>
             <details><summary>What does the relayer see?</summary><p>Your request and the network address it came from. It cannot redirect funds, raise its fee or change what you asked for: all of that is locked inside your proof. It never sees your balance or who you are.</p></details>
             <details><summary>Is Veyl a mixer? Who screens deposits?</summary><p>No. A publisher checks each deposit against a deny list before admitting it, keeping stolen or sanctioned funds out; until then you can take it back, and the admitted list is public. The market stays fully visible: Veyl hides who you are and how much you hold, not what the market did.</p></details>
+            <details><summary>Is there a limit on deposits?</summary><p>While Veyl is new, deposits are capped per deposit and in total. A deposit over a cap is never lost: it stays pending and you can take it back.</p></details>
           </section>
         </div>
       </main>

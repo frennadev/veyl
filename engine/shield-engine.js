@@ -56,7 +56,8 @@ export function installShield(Engine, PrivacyError) {
     // deposits still waiting for the approved-set publisher (the chain lists them by depositor)
     const pend = (st.pending || []).map((p) => ({ pending: String(p.pending), depositor: String(p.depositor), mint: String(p.mint), amount: String(p.amount), commitments: (p.commitments || []).map(String) }));
     sh.pending = (sh.pending || []).filter((p) => pend.some((q) => q.commitments.includes(String(p.commitment))));
-    this.shieldPendingNow = pend.filter((p) => this.account && p.depositor === this.account);
+    // `at`: when this device made the deposit (its own record), so the app can say when one has waited unusually long (a deposit cap)
+    this.shieldPendingNow = pend.filter((p) => this.account && p.depositor === this.account).map((p) => { const mine = sh.pending.find((q) => p.commitments.includes(String(q.commitment))); return mine && mine.at ? { ...p, at: mine.at } : p; });
     this.store.save(); return zw.notes;
   };
   const CACHE_V = 1; const cacheKey = (e) => 'veyl:shieldcache:' + e.cfg.programs.entry + ':' + (e.cfg.programs.pool || '');

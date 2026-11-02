@@ -9,6 +9,7 @@ import { engine, session, useSession } from '@/features/session/session';
 import { balanceOf, covers } from '@/lib/veyl/services/balances';
 import { short, tiny, SOLANA_ADDRESS, VEYL_ADDRESS, cleanAmount } from '@/lib/format';
 import { useBalances } from './balances';
+import { useAsyncQuery } from '@/features/session/query';
 import { openBackupThen } from '@/features/backup/BackupDialogs';
 import type { VeylEngine } from '@/lib/veyl/types';
 import { AssetPicker, useTokenAmount, tokenSyms } from './fields';
@@ -45,11 +46,15 @@ function DepositForm() {
   const isLocal = useSession((s) => s.isLocal), account = useSession((s) => s.account) || '';
   const sbx = useSession((s) => s.rt?.mode === 'sandbox');
   const have = balanceOf(b, 'pub', f.sym);
-  const submit = () => {
+  // the deposit caps while Veyl is new (none on devnet or locally): shown before, and checked again by the engine before signing
+  const E = engine();
+  const cap = useAsyncQuery('depositCap', E.depositCap ? () => E.depositCap!(f.sym) : null, [f.sym]).value;
+  const submit = async () => {
     const v = f.value;
     if (!(v > 0)) return f.setError('Enter an amount above zero.');
     if (!covers(have, v)) return f.setError(`Your wallet has ${tiny(have)} ${f.sym}.`);
     const sym = f.sym;
+    if (E.depositCap) { const over = await E.depositCap(sym, E.unit(sym, v)).then((c) => c.message, () => null); if (over) return f.setError(over); }
     runAction({
       title: 'Depositing', kind: 'wallet', exec: (E) => E.deposit(sym, v),
       done: (r) => ({
@@ -68,6 +73,7 @@ function DepositForm() {
       <Field id="dAmt" label="Amount" hintId="dBal" hint={`${isLocal ? 'In your deposit address: ' : 'In your wallet: '}${tiny(have)} ${f.sym}`}>
         <input id="dAmt" type="text" inputMode="decimal" placeholder="0.00" autoComplete="off" value={f.text} onChange={(e) => f.onAmount(e.target.value)} />
       </Field>
+      {cap?.max != null && <Hint icon="lock" id="dCap">Up to {tiny(cap.max)} {f.sym} per deposit while Veyl is new.{cap.room != null && cap.room < cap.max ? ` ${tiny(cap.room)} ${f.sym} of room left right now.` : ''}</Hint>}
       <ErrorLine id="dErr">{f.error}</ErrorLine>
       <button className="btn" type="button" id="dGo" onClick={submit}>Deposit</button>
     </>

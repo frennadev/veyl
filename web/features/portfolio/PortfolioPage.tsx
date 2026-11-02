@@ -154,6 +154,8 @@ const ACTION_NAMES: Record<string, string> = {
 const actionName = (k: string | null) => (k && ACTION_NAMES[k]) || 'a private action';
 const symOfMint = (E: VeylEngine, mint: string) => Object.keys(E.tokens).find((k) => E.tokens[k].mint === String(mint));
 
+/// A deposit not admitted after this long is probably over a cap (while Veyl is new) rather than slow.
+const STUCK_MS = 60_000;
 function takeBack(d: PendingDeposit) {
   runAction({
     title: 'Taking a deposit back', kind: 'wallet', exec: (E) => E.cancelDeposit(d),
@@ -184,7 +186,9 @@ function PendingNotes() {
         {pending.map(({ d, sym }) => (
           <div key={d.pending} className="row">
             <div className="mid"><b className="sens">{tiny(E.fmt(sym, BigInt(d.amount)))} {sym}</b>
-              <small>{sbx ? 'Deposit waiting for a quick automatic check (a few seconds)' : 'Deposit waiting for a quick automatic check · yours to take back until then'}</small></div>
+              <small>{sbx ? 'Deposit waiting for a quick automatic check (a few seconds)'
+                : d.at && Date.now() - d.at > STUCK_MS ? 'Still waiting: it may be over a deposit cap. You can take it back at any time.'
+                  : 'Deposit waiting for a quick automatic check · yours to take back until then'}</small></div>
             <div className="rt"><span className="pill warn">Pending</span>
               {!sbx && <div style={{ marginTop: 6 }}><button className="btn sm ghost" type="button" data-cancel={d.pending} onClick={() => takeBack(d)}>Take back</button></div>}</div>
           </div>

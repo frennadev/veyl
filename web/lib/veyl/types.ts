@@ -39,7 +39,10 @@ export interface PoolStats {
   lpFeesUsd: number | null; spark: number[]; sparkT: number[];
 }
 export interface ShieldNote { index: number; amount: string | bigint; mint: Base58 }
-export interface PendingDeposit { pending: string; mint: Base58; amount: string | bigint }
+/// `at`: when this device made it (ms), if it did.
+export interface PendingDeposit { pending: string; mint: Base58; amount: string | bigint; at?: number }
+/// The deposit caps while Veyl is new, in whole tokens (null: not capped, or not known), and the refusal for one amount.
+export interface DepositCap { max: number | null; total: number | null; room: number | null; message: string | null }
 export interface LegacyNote { sym: Sym; value: string; index: number; precommitment?: string; commitment?: string }
 export interface ActivityEntry { t: string; s: string; amt?: string; ts: number }
 export interface StoreData {
@@ -172,6 +175,7 @@ export interface ActionsPort {
   deposit(sym: Sym, amount: number): Promise<{ tx?: string }>;
   withdraw(sym: Sym, amount: number, to: string): Promise<{ tx?: string }>;
   cancelDeposit(d: PendingDeposit): Promise<string>;
+  depositCap?(sym: Sym, atoms?: bigint | null): Promise<DepositCap>;
   migrate(n: LegacyNote): Promise<{ tx?: string }>;
 }
 export interface BackupPort {
