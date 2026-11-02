@@ -45,7 +45,7 @@ Hermez/Polygon team. Each circuit starts from the smallest file it fits (a domai
 | `powersOfTau28_hez_final_15.ptau` | `982372c867d229c236091f767e703253249a9b432c1710b4f326306bfa2428a17b06240359606cfe4d580b10a5a1f63fbed499527069c18ae17060472969ae6e` |
 
 ```bash
-mkdir -p ceremony/ptau && for p in 14 15; do curl -L -o ceremony/ptau/powersOfTau28_hez_final_$p.ptau https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_$p.ptau; done
+mkdir -p ceremony/ptau && for p in 14 15; do curl -L -o ceremony/ptau/powersOfTau28_hez_final_$p.ptau https://circom.info/powersOfTau28_hez_final_$p.ptau; done
 b2sum ceremony/ptau/*.ptau      # must print the hashes above; init refuses any other file
 ```
 

@@ -22,8 +22,8 @@ and drain every pool. After the ceremony, the keys are safe as long as **one** c
 
 ```bash
 cd ~/Projects/veyl && git pull && npm ci
-mkdir -p ceremony/ptau && for p in 14 15; do curl -L -o ceremony/ptau/powersOfTau28_hez_final_$p.ptau https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_$p.ptau; done
-b2sum ceremony/ptau/*.ptau              # must match the hashes in ceremony/README.md ("Phase 1")
+mkdir -p ceremony/ptau && for p in 14 15; do curl -L -o ceremony/ptau/powersOfTau28_hez_final_$p.ptau https://circom.info/powersOfTau28_hez_final_$p.ptau; done
+python3 -c "import hashlib,glob;[print(f,hashlib.blake2b(open(f,'rb').read()).hexdigest()[:16]) for f in sorted(glob.glob('ceremony/ptau/*.ptau'))]"   # compare with ceremony/README.md "Phase 1"
 npm run ceremony -- r1cs                # the five circuits rebuild to exactly the shipped files
 npm run ceremony -- init
 ```
