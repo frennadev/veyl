@@ -277,9 +277,10 @@ the share job's rent (refunded); settling costs one.
 
 **5. Run.** The nodes then close due batches, post and prove their partial decryptions, recover the totals and settle. The
 relayer cranks too (`SEALED_CRANK=1` default, `CRANK_INTERVAL_MS` 4000): closing, verifying totals, settling and failing are
-permissionless; only shares need members. Rotate with a new key generation and `set_committee` (the committee authority; it
-moves to the multisig with `npm run handover`). Batches under the old key settle only with the old shares, so keep the old
-nodes up until those batches are done or refunded.
+permissionless; only shares need members. Rotate with a new key generation and `set_committee` (the committee authority). After
+`set_committee` a batch under the old key is not settled any more (nodes skip batches of an older committee epoch and stop
+once the on-chain committee is not theirs): it fails after `settleTimeout` and its swappers are refunded. So rotate between
+batches: pause the sealed pools (`paused` in their sealed params), let open batches settle, then rotate and unpause.
 
 | sealed action (compute units, measured by `npm test`) | CU |
 |---|---|
