@@ -73,7 +73,7 @@ function DepositForm() {
       <Field id="dAmt" label="Amount" hintId="dBal" hint={`${isLocal ? 'In your deposit address: ' : 'In your wallet: '}${tiny(have)} ${f.sym}`}>
         <input id="dAmt" type="text" inputMode="decimal" placeholder="0.00" autoComplete="off" value={f.text} onChange={(e) => f.onAmount(e.target.value)} />
       </Field>
-      {cap?.max != null && <Hint icon="lock" id="dCap">Up to {tiny(cap.max)} {f.sym} per deposit while Veyl is new.{cap.room != null && cap.room < cap.max ? ` ${tiny(cap.room)} ${f.sym} of room left right now.` : ''}</Hint>}
+      {cap?.max != null && <Hint icon="lock" id="dCap">Up to {tiny(cap.max)} {f.sym} per deposit while Veyl is new.{cap.room != null && cap.room < cap.max ? ` ${tiny(cap.room)} ${f.sym} of room left right now.` : ''} <a href="docs.html#faq-audit" target="_blank" rel="noopener">Why</a></Hint>}
       <ErrorLine id="dErr">{f.error}</ErrorLine>
       <button className="btn" type="button" id="dGo" onClick={submit}>Deposit</button>
     </>

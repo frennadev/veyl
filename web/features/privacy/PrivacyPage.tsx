@@ -54,8 +54,15 @@ const HABITS: [string, string][] = [
   ['Use sealed swaps for size', 'Big swaps go in a sealed batch: nobody sees your order or trades ahead of it.'],
   ['Back up your keys', 'Your private balance lives in this browser. An encrypted backup is the only way to recover it.'],
 ];
-const WHO_SEES: [string, boolean][] = [
-  ['Your wallet', true], ['Your position size', true], ['Fees you earned', true], ['Your sealed swap size', true], ['Pool totals and prices', false], ['Deposits into Veyl', false],
+// true: only you; false: everyone; a string: who else can (sealed swap sizes: the committee, run by the team at launch)
+const WHO_SEES: [string, boolean | string][] = [
+  ['Your wallet', true], ['Your position size', true], ['Fees you earned', true], ['Your sealed swap size', 'You, and the committee'], ['Pool totals and prices', false], ['Deposits into Veyl', false],
+];
+/// What a user trusts while Veyl is new, each with its FAQ answer.
+const WHILE_NEW: [string, string, string][] = [
+  ['No independent audit', 'Deposits are capped while Veyl is new.', 'faq-audit'],
+  ['Proving keys made by the team', 'A public key ceremony is planned soon after launch.', 'faq-keys'],
+  ['Committee run by the team', 'It could see individual sealed swap sizes. Regular private swaps don\'t use it.', 'faq-committee'],
 ];
 
 export default function PrivacyPage() {
@@ -101,7 +108,11 @@ export default function PrivacyPage() {
           <div className="sec"><h2>Who sees what</h2></div>
           <div className="card pad pvtable">
             <div className="r h"><span></span><span>Who can see it</span></div>
-            {WHO_SEES.map(([t, onlyYou]) => <div key={t} className="r"><span>{t}</span><span className={onlyYou ? 'yes' : 'no'}>{onlyYou ? 'Only you' : 'Everyone'}</span></div>)}
+            {WHO_SEES.map(([t, who]) => <div key={t} className="r"><span>{t}</span><span className={who === true ? 'yes' : 'no'}>{who === true ? 'Only you' : who === false ? 'Everyone' : <a href="docs.html#faq-committee">{who}</a>}</span></div>)}
+          </div>
+          <div className="sec"><h2>While Veyl is new</h2></div>
+          <div className="list" id="pvNew">
+            {WHILE_NEW.map(([t, s, faq]) => <div key={faq} className="row"><div className="mid"><b>{t}</b><small>{s} <a href={'docs.html#' + faq}>Read more</a></small></div></div>)}
           </div>
         </div>
       </div>
