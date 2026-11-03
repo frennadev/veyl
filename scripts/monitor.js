@@ -21,7 +21,7 @@ const env = process.env; const cfg = N.loadConfig(args.network); const dep = N.l
 const real = (v) => (v && !N.isVerify(v) ? v : null);
 const rpc = env.RPC_URL || (env.HELIUS_API_KEY ? `https://${args.network === 'mainnet' ? 'mainnet' : 'devnet'}.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}` : real(cfg.rpc));
 const relayerUrl = (env.RELAYER_URL || real(cfg.relayerUrl) || '').replace(/\/$/, '');
-const floor = { relayer: Number(env.MIN_RELAYER_SOL || 0.5), postman: Number(env.MIN_POSTMAN_SOL || 0.05), committee: Number(env.MIN_COMMITTEE_SOL || 0.1) };
+const floor = { relayer: Number(env.MIN_RELAYER_SOL || 0.2), postman: Number(env.MIN_POSTMAN_SOL || 0.05), committee: Number(env.MIN_COMMITTEE_SOL || 0.1) };
 const hide = (s) => String(s).split(rpc || '\u0000').join('<rpc>').replace(/api-key=[^&\s"]+/g, 'api-key=…');
 
 async function alert(text) { const msg = `Veyl ${args.network}: ${text}`; const sent = [];

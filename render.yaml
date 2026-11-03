@@ -25,7 +25,7 @@ services:
       - key: MIN_FEE_BPS
         value: "5"
       - key: LOW_BALANCE_SOL
-        value: "0.5"
+        value: "0.2"
       - key: TRUST_PROXY   # Render's proxy: rate-limit on the client address it appends to X-Forwarded-For (REVIEW.md L-2)
         value: "1"
       - key: FEE_COVER     # the fee must pay back at least this multiple of the rent + fees a request costs (REVIEW.md M-1)
