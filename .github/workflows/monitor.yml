@@ -35,3 +35,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RELAYER_URL: ${{ matrix.network == 'mainnet' && vars.MAINNET_RELAYER_URL || '' }}
+          MIN_RELAYER_SOL: '0.2'
+          # mainnet extras: the test wallet (live tests run from it), the deployer and the admin authority
+          WATCH: ${{ matrix.network == 'mainnet' && 'test-wallet=5oV1czyCFdULn6njjBbkB9S779tMmhnWEk1qNgvoLtk:0.05,deployer=8rxMXkA6gmHhGrYr8xCHL7noZp6K1WP9dap2EuBmUQ8p:0.05,authority=HT5vETi4xzbWYSEbSznTxUzRun94GjW93NmbXgcPTeAX:0.01' || '' }}
