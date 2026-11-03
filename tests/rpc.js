@@ -25,7 +25,8 @@ function net(plan) { const calls = []; const f = async (url, init) => { calls.pu
   for (const [label, bad] of [['a dropped connection', new TypeError('fetch failed')], ['rate limiting (429)', status(429)], ['a rejected key (401)', status(401)], ['a server error (503)', status(503)]]) {
     t += 60_000; n = net({ [MAIN]: [bad], [PUB]: [ok({ r: 'pub' })] }); F = R.fallbackFetch(MAIN, PUB, { base: n, now: () => t });
     const r = await (await F(MAIN, { body: '{"method":"getSlot"}' })).json();
-    check(label + ': the same request goes to the public RPC', r.r === 'pub' && n.calls[1].url === PUB && n.calls[1].body === n.calls[0].body);
+    const pubCall = n.calls.find((c) => c.url === PUB); const mains = n.calls.filter((c) => c.url === MAIN).length;
+    check(label + ': the same request goes to the public RPC' + (bad.status === 429 ? ' (after two short retries of the configured one)' : ''), r.r === 'pub' && !!pubCall && pubCall.body === n.calls[0].body && mains === (bad.status === 429 ? 3 : 1));
   }
 
   n = net({ [MAIN]: ['hang'], [PUB]: [ok({ r: 'pub' })] }); F = R.fallbackFetch(MAIN, PUB, { base: n, timeoutMs: 30 });
@@ -36,23 +37,27 @@ function net(plan) { const calls = []; const f = async (url, init) => { calls.pu
 
   // cooldown: after a failure the public RPC goes first; the configured one gets another try after it
   t = 0; switches.length = 0;
-  n = net({ [MAIN]: [status(429), ok({ r: 'main' })], [PUB]: [ok({ r: 'pub' })] }); F = R.fallbackFetch(MAIN, PUB, { base: n, now: () => t, onSwitch: (to, why) => switches.push([to, why]) });
+  n = net({ [MAIN]: [status(503), ok({ r: 'main' })], [PUB]: [ok({ r: 'pub' })] }); F = R.fallbackFetch(MAIN, PUB, { base: n, now: () => t, onSwitch: (to, why) => switches.push([to, why]) });
   await F(MAIN, {}); t = 10_000; const during = await (await F(MAIN, {})).json();
   check('during the cooldown the public RPC is asked first (the configured one is not called)', during.r === 'pub' && n.calls.length === 3 && n.calls[2].url === PUB);
   t = 31_000; const after = await (await F(MAIN, {})).json();
   check('after the cooldown the configured RPC is tried again, and used', after.r === 'main' && n.calls.at(-1).url === MAIN);
-  check('one switch reported per failure, with the reason', switches.length === 1 && switches[0][0] === 'fallback' && switches[0][1] === 'HTTP 429', JSON.stringify(switches));
+  check('one switch reported per failure, with the reason', switches.length === 1 && switches[0][0] === 'fallback' && switches[0][1] === 'HTTP 503', JSON.stringify(switches));
 
   t = 0; n = net({ [MAIN]: [status(503), ok({ r: 'main' })], [PUB]: [status(503)] }); switches.length = 0;
   F = R.fallbackFetch(MAIN, PUB, { base: n, now: () => t, onSwitch: (to) => switches.push(to) });
   await F(MAIN, {}); t = 5_000; const back = await (await F(MAIN, {})).json();
-  check('in the cooldown, if the public RPC fails too, the configured one is asked and taken back', back.r === 'main' && switches.join() === 'fallback,primary');
+  check('a public RPC that fails too is not switched to: the next request goes straight to the configured one', back.r === 'main' && switches.length === 0 && n.calls.at(-1).url === MAIN);
 
   n = net({ [MAIN]: [new TypeError('down')], [PUB]: [new TypeError('down')] }); F = R.fallbackFetch(MAIN, PUB, { base: n });
   let msg = ''; try { await F(MAIN, {}); } catch (e) { msg = e.message; }
   check('both unreachable: a clear error naming both failures', /RPC unreachable: down; public RPC: down/.test(msg), msg);
   n = net({ [MAIN]: [status(429)], [PUB]: [status(503)] }); F = R.fallbackFetch(MAIN, PUB, { base: n });
-  check('both answer with an error status: one response is handed back for web3.js to report', (await F(MAIN, {})).status === 503);
+  check('both answer with an error status: the configured RPC\'s is handed back (web3.js retries a 429 itself)', (await F(MAIN, {})).status === 429);
+  // a fallback that refuses access (Solana's public mainnet RPC answers 403 to web pages) is skipped, not preferred
+  t = 0; n = net({ [MAIN]: [status(503), ok({ r: 'main' })], [PUB]: [status(403)] }); F = R.fallbackFetch(MAIN, PUB, { base: n, now: () => t });
+  await F(MAIN, {}); t = 1_000; const after403 = await (await F(MAIN, {})).json();
+  check('a fallback that answered 403 is skipped afterwards: the configured RPC is asked, not the 403 one', after403.r === 'main' && n.calls.filter((c) => c.url === PUB).length === 1);
   n = net({ 'https://other.test': [ok({})] }); F = R.fallbackFetch(MAIN, PUB, { base: n });
   await F('https://other.test', {}); check('another URL passes straight through', n.calls.length === 1 && n.calls[0].url === 'https://other.test');
 
