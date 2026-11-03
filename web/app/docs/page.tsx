@@ -104,7 +104,7 @@ export default function Docs() {
           <section id="swap">
             <h2>Swap</h2>
             <h3>Instant</h3>
-            <p>Settles now at the current pool price. Paid from your shielded balance it hides who you are; the amounts in and out are public at the pool, as with any swap. Use it when you want the trade done now and the size is not sensitive.</p>
+            <p>Settles now at the current pool price. Paid from your private balance it hides who you are; the amounts in and out are public at the pool, as with any swap. Use it when you want the trade done now and the size is not sensitive.</p>
             <h3>Sealed</h3>
             <p>Hides the size too. Your amount is encrypted on your device and joins the pool's current batch (about a minute). Only the batch's totals are decrypted; buyers are netted against sellers, one swap covers the difference, and you <b>Claim</b> your share at the clearing price with a second proof. Use it when your size is sensitive; it settles with the batch and has no limit price, only a guard against the price drifting too far. A side with under three sellers waits for the next batch, and is refunded if it never fills.</p>
           </section>

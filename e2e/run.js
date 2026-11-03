@@ -127,6 +127,13 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     await page.screenshot({ path: path.join(SHOTS, 'app-shielded.png') });
     // send 200 USDC to another Veyl address: stays inside the pool
     await page.click('[data-open="withdraw"]'); await sleep(500); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '200'); await page.fill('#wTo', friend.address); await sleep(200);
+    { // the relayer's fee comes out of the same balance: the form says what can go, Max fills it, and more is refused before any proof
+      await page.waitForFunction(() => /relayer fee .* you can send up to/.test(document.getElementById('wBal').textContent), null, { timeout: 30000 }).catch(() => {});
+      const hint = await page.textContent('#wBal'); const upTo = (/you can send up to ([\d.]+) USDC/.exec(hint) || [])[1];
+      await page.fill('#wAmt', '1000'); await page.click('#wGo'); await sleep(300); const refused = await page.textContent('#wErr');
+      await page.click('#wMax'); const maxed = await page.inputValue('#wAmt');
+      check('send form: private balance, relayer fee and the most that can go; Max fills it; the whole balance is refused in the form (no proof)', /^Private: 1000 USDC · relayer fee [\d.]+ USDC/.test(hint) && upTo && maxed === upTo && +upTo < 1000 && /more than you can send/.test(refused) && !(await page.$('#actErr')), hint + ' | ' + refused);
+      await page.fill('#wAmt', '200'); }
     const kind = await page.textContent('#wKind'); await page.click('#wGo'); let t = await finish(); const sp = await noteProof(); await scan(friend);
     check('private send to a Veyl address through the UI: the receiver decrypts a 200 USDC note; no amount on chain', /Sent 200(\.0+)? USDC/.test(t) && /stays private/.test(kind) && friend.balance(USDC) === units(200, 6), t.slice(0, 120) + (sp ? ` (worker proof ${sp.ms} ms)` : ''));
     // send 300 USDC to a fresh Solana address: leaves the pool (amount + receiver public)

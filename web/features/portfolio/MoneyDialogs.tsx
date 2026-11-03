@@ -7,7 +7,7 @@ import { copyText, openModal, toast } from '@/components/overlay';
 import { runAction } from '@/features/actions/runAction';
 import { engine, session, useSession } from '@/features/session/session';
 import { balanceOf, covers } from '@/lib/veyl/services/balances';
-import { short, tiny, SOLANA_ADDRESS, VEYL_ADDRESS, cleanAmount } from '@/lib/format';
+import { short, tiny, maxAmount, SOLANA_ADDRESS, VEYL_ADDRESS, cleanAmount } from '@/lib/format';
 import { useBalances } from './balances';
 import { useAsyncQuery } from '@/features/session/query';
 import { openBackupThen } from '@/features/backup/BackupDialogs';
@@ -81,6 +81,11 @@ function DepositForm() {
 }
 
 // ---------------------------------------------------------------- send privately / withdraw
+/// Atoms as an exact decimal string (no float rounding, so Max never asks for more than there is).
+const atomsText = (atoms: bigint, decimals: number) => {
+  const s = atoms.toString().padStart(decimals + 1, '0'); const whole = s.slice(0, s.length - decimals), frac = s.slice(s.length - decimals).replace(/0+$/, '');
+  return frac ? `${whole}.${frac}` : whole;
+};
 export interface SendPrefill { to?: string; amt?: number; sym?: string }
 export const openSend = (pre: SendPrefill = {}) => openModal(<SendDialog pre={pre} />);
 
@@ -95,11 +100,19 @@ function SendDialog({ pre }: { pre: SendPrefill }) {
   const sbx = rt?.mode === 'sandbox' ? rt.engine : null;
   const have = balanceOf(b, 'priv', f.sym);
   const isRequest = !!pre.to && to === pre.to;
+  // what can go once the relayer's fee is taken from the same balance (a withdrawal to a Solana address can cost more)
+  const E = engine();
+  const dest0 = to.trim(), destOk = dest0.startsWith('veyl:') || SOLANA_ADDRESS.test(dest0);
+  const room = useAsyncQuery('sendMax', E.sendMax ? () => E.sendMax!(f.sym, destOk ? dest0 : null) : null, [f.sym, destOk ? dest0 : null, have], 250, { account: true }).value;
+  const dec = E.tokens[f.sym]?.decimals ?? 9;
+  const tooMuch = room && room.fee > 0n ? `That's more than you can send. You have ${atomsText(room.balance, dec)} ${f.sym} private and the relayer's fee is ${atomsText(room.fee, dec)} ${f.sym}, so you can send up to ${atomsText(room.max, dec)} ${f.sym}.` : null;
+  const fillMax = () => f.onAmount(room ? atomsText(room.max, dec) : maxAmount(have));
   const submit = () => {
     const v = f.value, dest = to.trim(), inside = dest.startsWith('veyl:'); f.setError('');
     if (!(v > 0)) return f.setError('Enter an amount above zero.');
     if (!dest) return f.setError('Enter where it goes: a Veyl address (veyl:…) or a Solana address.');
     if (!inside && !SOLANA_ADDRESS.test(dest)) return f.setError(`“${dest.length > 24 ? dest.slice(0, 22) + '…' : dest}” isn't a Veyl address (veyl:…) or a Solana address. Paste the whole address.`);
+    if (room && tooMuch && E.unit(f.sym, v) > room.max) return f.setError(tooMuch);
     if (!covers(have, v)) return f.setError(`${tiny(v)} ${f.sym} is more than your private balance of ${tiny(have)} ${f.sym}. Use Max, or deposit more first.`);
     const sym = f.sym;
     runAction({
@@ -119,9 +132,12 @@ function SendDialog({ pre }: { pre: SendPrefill }) {
       <h3 id="dlgTitle">{pre.to ? 'Pay privately' : 'Withdraw or send'}</h3>
       <p>From your private balance. Send to a <b>Veyl address</b> to pay someone privately: nobody sees the amount, the sender or the receiver. Send to a <b>Solana address</b> to withdraw: the amount and the receiver are public, not where it came from.</p>
       <AssetPicker id="wA" value={f.sym} onChange={f.setSym} />
-      <Field id="wAmt" label="Amount" hintId="wBal" hint={`Private: ${tiny(have)} ${f.sym}`}>
+      <Field id="wAmt" label="Amount" hintId="wBal" hint={room && room.fee > 0n
+        ? `Private: ${atomsText(room.balance, dec)} ${f.sym} · relayer fee ${atomsText(room.fee, dec)} ${f.sym} · you can send up to ${atomsText(room.max, dec)} ${f.sym}`
+        : `Private: ${tiny(have)} ${f.sym}`}>
         <input id="wAmt" type="text" inputMode="decimal" placeholder="0.00" autoComplete="off" value={f.text} onChange={(e) => f.onAmount(e.target.value)} />
       </Field>
+      <div className="quick" style={{ marginTop: -6, marginBottom: 10 }}><button type="button" id="wMax" onClick={fillMax}>Max</button></div>
       <div className="fld">
         <label htmlFor="wTo">To<Tip term="sendDest" align="l" /></label>
         <input id="wTo" type="text" placeholder="veyl:… or a fresh Solana address" autoComplete="off" spellCheck={false} value={to} onChange={(e) => setTo(e.target.value)} />

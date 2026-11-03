@@ -50,7 +50,8 @@ const ERROR_HINTS: { test: RegExp; hint: string }[] = [
 ];
 const hintFor = (m: string | null) => (m ? ERROR_HINTS.find((h) => h.test.test(m))?.hint ?? rpcTrouble(m) : null);
 
-interface TaskState { step: number; subs: string[]; status: 'running' | 'done' | 'failed'; error: string | null; outcome: ActionOutcome | null; bar: number | null }
+/// beforeChain: the engine refused before anything was proven or sent (so nothing can have reached the chain).
+interface TaskState { step: number; subs: string[]; status: 'running' | 'done' | 'failed'; error: string | null; beforeChain?: boolean; outcome: ActionOutcome | null; bar: number | null }
 interface Task { title: string; kind: ActionKind; steps: Step[]; state: Store<TaskState> }
 
 export function runAction<R>(spec: ActionSpec<R>): void {
@@ -74,9 +75,9 @@ export function runAction<R>(spec: ActionSpec<R>): void {
     let result: R;
     try { result = await spec.exec(E); }
     catch (e) {
-      const err = e as { shortMessage?: string; message?: string } | null;
+      const err = e as { shortMessage?: string; message?: string; beforeChain?: boolean } | null;
       const m = String(err?.shortMessage || err?.message || e);
-      state.set({ status: 'failed', error: m.length > 300 ? m.slice(0, 300) + '…' : m });
+      state.set({ status: 'failed', error: m.length > 300 ? m.slice(0, 300) + '…' : m, beforeChain: err?.beforeChain === true });
       invalidate(); // a multi-transaction action may have completed some steps
       return;
     } finally { finish(); }
@@ -139,7 +140,7 @@ function ActionDialog({ task }: { task: Task }) {
       {s.status === 'failed' && <>
         <p className="err" id="actErr" role="alert">{s.error}</p>
         {hintFor(s.error) && <Hint icon="bolt">{hintFor(s.error)}</Hint>}
-        <Hint icon="alert">Some steps may already have reached the chain. Check your balances and activity before trying again. Notes created for this action stay on this device.</Hint>
+        {!s.beforeChain && <Hint icon="alert">Some steps may already have reached the chain. Check your balances and activity before trying again. Notes created for this action stay on this device.</Hint>}
         <button className="btn ghost" type="button" id="errClose" onClick={closeModal}>Close</button>
       </>}
     </>

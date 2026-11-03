@@ -176,6 +176,8 @@ export interface ActionsPort {
   withdraw(sym: Sym, amount: number, to: string): Promise<{ tx?: string }>;
   cancelDeposit(d: PendingDeposit): Promise<string>;
   depositCap?(sym: Sym, atoms?: bigint | null): Promise<DepositCap>;
+  /// What a send or withdrawal can move now, in atoms: the private balance, the relayer's fee (to: the destination, once typed) and the rest.
+  sendMax?(sym: Sym, to?: string | null): Promise<{ balance: bigint; fee: bigint; max: bigint }>;
   migrate(n: LegacyNote): Promise<{ tx?: string }>;
 }
 export interface BackupPort {

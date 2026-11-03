@@ -12,7 +12,7 @@ import { asset } from '@/lib/assets';
 
 const DESCRIPTION = 'Veyl is concentrated DLMM liquidity on Solana, private by default: choose your range and shape, earn dynamic fees, and keep your position to yourself.';
 const OG_TITLE = 'Veyl: concentrated liquidity, kept private';
-const OG_DESCRIPTION = 'Veyl is private liquidity on Solana: provide into DLMM price bins and swap from a shielded balance, without your wallet showing up.';
+const OG_DESCRIPTION = 'Veyl is private liquidity on Solana: provide into DLMM price bins and swap from a private balance, without your wallet showing up.';
 
 // The padlock that marks what each liquidity tool keeps private.
 const Lock = () => <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="3" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /></svg>;
