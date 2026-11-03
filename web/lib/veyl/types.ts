@@ -173,7 +173,8 @@ export interface SwapPort {
 export interface SdkPort { shapeWeights(ids: number[], active: number, shape: EngineShape): { weightsX: number[]; weightsY: number[] } }
 export interface ActionsPort {
   deposit(sym: Sym, amount: number): Promise<{ tx?: string }>;
-  withdraw(sym: Sym, amount: number, to: string): Promise<{ tx?: string }>;
+  /// allowUsed: the user confirmed a Solana address the engine's guard refuses (its own wallet, or one with history).
+  withdraw(sym: Sym, amount: number, to: string, o?: { allowUsed?: boolean }): Promise<{ tx?: string }>;
   cancelDeposit(d: PendingDeposit): Promise<string>;
   depositCap?(sym: Sym, atoms?: bigint | null): Promise<DepositCap>;
   /// What a send or withdrawal can move now, in atoms: the private balance, the relayer's fee (to: the destination, once typed) and the rest.
@@ -194,6 +195,10 @@ export interface SafetyPort {
   ackNoBackup(): number;
   markBackedUp(): number;
   linkRisks(sym: Sym, amount: number | string, to: string): { warnings: LinkRisk[]; tip: { id: string; text: string } };
+  /// Throws (a PrivacyError, in words) for a Solana address a withdrawal should not go to: invalid, the deposit wallet, or one with history.
+  guardRecipient?(addr: string): Promise<void>;
+  /// The relayer's flat fee for a private action of `kind`, in atoms of `sym`.
+  shieldFee?(kind: string, sym: Sym): Promise<bigint>;
 }
 /// A route quote. lpFee / protocolFee (atoms of the input token) and per-hop fees arrive with part 2. lpFee includes lpBonus,
 /// the fixed 0.05% every swap adds for the pool's LPs (engines since the LP bonus).

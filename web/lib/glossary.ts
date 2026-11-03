@@ -16,6 +16,7 @@ export const GLOSSARY = {
   limitOrder: 'Your tokens wait in one price bin. When the price reaches it, they are sold or bought at that bin\'s price. You also earn that bin\'s swap fees. Cancel any time.',
   sealedMode: 'Sealed: your swap joins a batch. Its size is encrypted, everyone in the batch gets the same price, and nobody can trade ahead of you. It settles when the batch closes (about a minute). Instant: swaps now, but the amount is visible at the pool.',
   slippage: 'If the price moves against you by more than this before your swap lands, it is cancelled instead of filled at a worse price.',
+  relayerFee: 'A private swap is sent by Veyl\'s relayer so your wallet never signs it. It charges a flat fee in the token you pay with, covering its own transaction cost, so on a small swap it is a large share.',
   networkFee: 'Private actions are sent by a relayer, which charges a small flat fee in the token you use. Public actions pay Solana\'s own fee from your wallet (a fraction of a cent).',
   rent: 'Solana charges a refundable deposit for each account that stores your position. You get it back when the account is closed.',
   clearingPrice: 'Everyone in a batch gets the same price, set when the batch settles from what was bought and sold in it.',

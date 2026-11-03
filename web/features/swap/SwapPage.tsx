@@ -36,6 +36,9 @@ export default function SwapPage() {
     return best ? { out: E.fmt(s.b, best.out), path: best.path as { name: string; out: string }[], fees: quoteFees(E, s.a, best) } : { out: null, path: [], fees: null };
   } : null, [s.a, s.b, v], 250);
   const quote = q.value && q.key === JSON.stringify([s.a, s.b, v]) ? q.value : null;
+  // a private swap also pays the relayer a flat fee (its transaction cost, charged back): large on a small swap, so shown
+  const E0 = live ? engine() : null;
+  const relayerFee = useAsyncQuery('relayerFee', priv && E0?.shieldFee ? async () => E0.fmt(s.a, await E0.shieldFee!('shieldSwap', s.a)) : null, [s.a, priv], 0).value;
   const block = !live ? 'Not connected' : rpc === 'down' ? 'Chain not answering' : !priv && !account ? 'Connect a wallet' : '';
   const why = block || (!(v > 0) ? 'Enter an amount' : v > have(s.a) + 1e-12 ? 'Not enough ' + s.a : q.error ? 'Quote unavailable' : !quote ? 'Quoting…' : quote.out == null ? 'No route' : '');
   const go = () => {
@@ -78,7 +81,7 @@ export default function SwapPage() {
         {priv ? <Hint id="swHint" icon="lock">The chain sees a swap through the pools, not who made it.</Hint> : <Hint id="swHint" icon="alert" tone="warn">This swap is public and linked to your wallet.</Hint>}
       </div>
       <div className="swapside">
-        <Route live={live} a={s.a} v={v} quote={quote} priv={priv} />
+        <Route live={live} a={s.a} v={v} quote={quote} priv={priv} relayerFee={priv ? relayerFee : null} />
         <Seen s={priv ? { hidden: 'Your wallet. The output lands in a new note on this device.', pub: 'The route, the amounts in and out, the relayer fee.' } : { hidden: 'Nothing.', pub: 'Your wallet and the whole swap.' }} />
       </div>
       </div>
@@ -90,7 +93,9 @@ const TokenButton = ({ id, sym, onClick }: { id: string; sym: string; onClick: (
   <button className="tsel" type="button" id={id} onClick={onClick}><TokenLogo sym={sym} className="" />{tl(sym)}<svg className="ic xs"><use href="#i-down" /></svg></button>
 );
 
-function Route({ live, a, v, quote, priv }: { live: boolean; a: string; v: number; quote: { out: number | null; path: { name: string; out: string }[]; fees?: { lp: number; bonus: number | null; protocol: number } | null } | null; priv: boolean }) {
+/// A fee as a share of the amount it is charged on: 0.4%, 6%.
+const pctOf = (fee: number, of: number) => { const p = (fee / of) * 100; return p < 0.01 ? '<0.01%' : (p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + '%'; };
+function Route({ live, a, v, quote, priv, relayerFee }: { relayerFee: number | null; live: boolean; a: string; v: number; quote: { out: number | null; path: { name: string; out: string }[]; fees?: { lp: number; bonus: number | null; protocol: number } | null } | null; priv: boolean }) {
   const top = (extra?: React.ReactNode) => <div className="top"><b>Route</b>{extra}</div>;
   const note = (t: string) => <p className="dim" style={{ margin: 0 }}>{t}</p>;
   return (
@@ -107,8 +112,11 @@ function Route({ live, a, v, quote, priv }: { live: boolean; a: string; v: numbe
               {quote.fees.bonus != null && <div><dt>LP bonus<Tip term="lpBonus" align="l" /></dt><dd>{tiny(quote.fees.bonus)} {a}</dd></div>}
               <div><dt>Protocol fee<Tip term="protocolFee" align="l" /></dt><dd>{tiny(quote.fees.protocol)} {a}</dd></div></>}
             <div><dt>Slippage limit<Tip term="slippage" align="l" /></dt><dd>1%</dd></div>
-            <div><dt>Network fee<Tip term="networkFee" align="l" /></dt><dd>{priv ? 'Relayer, a flat fee' : '≈ 0.00001 SOL'}</dd></div>
+            {priv && relayerFee != null
+              ? <div><dt>Relayer fee<Tip term="relayerFee" align="l" /></dt><dd id="swRelayerFee">{tiny(relayerFee)} {a}{v > 0 ? ` (${pctOf(relayerFee, v)} of this swap)` : ''}</dd></div>
+              : <div><dt>Network fee<Tip term="networkFee" align="l" /></dt><dd>{priv ? 'Relayer, a flat fee' : '≈ 0.00001 SOL'}</dd></div>}
           </dl>
+          {priv && relayerFee != null && v > 0 && relayerFee / v >= 0.02 && <Hint icon="alert" tone="warn" id="swSmall">The relayer&apos;s fee is flat, so it is {pctOf(relayerFee, v)} of a swap this small. Larger private swaps pay proportionally less.</Hint>}
         </> : quote ? <>{top()}{note('No route with liquidity for this pair right now.')}</> : <>{top()}{note('Enter an amount to see the best route.')}</>}
     </div>
   );

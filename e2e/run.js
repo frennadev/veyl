@@ -140,14 +140,25 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'veyl-e2e-shots'); fs.
     const fresh = Keypair.generate().publicKey; const rel0 = await V.tokenBalance(USDC, relayer.publicKey);
     await page.click('[data-open="withdraw"]'); await sleep(500); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '300'); await page.fill('#wTo', fresh.toBase58()); await page.click('#wGo'); t = await finish(); await noteProof();
     check('private withdrawal to a fresh wallet: it receives exactly 300 USDC; the relayer earned its flat fee', /Sent 300(\.0+)? USDC/.test(t) && (await V.tokenBalance(USDC, fresh)) === units(300, 6) && (await V.tokenBalance(USDC, relayer.publicKey)) > rel0, t.slice(0, 120));
-    await page.click('[data-open="withdraw"]'); await sleep(400); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '10'); await page.fill('#wTo', user.publicKey.toBase58()); await page.click('#wGo');
-    await page.waitForSelector('#errClose', { timeout: 60000 }); check('UI refuses to send to the depositing wallet', /deposited from/.test(await page.textContent('#dlgBody'))); await page.click('#errClose'); await sleep(300);
+    await page.click('[data-open="withdraw"]'); await sleep(400); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '10'); await page.fill('#wTo', user.publicKey.toBase58());
+    { // the depositing wallet: refused under the To field as soon as it's typed, never in the proof dialog; an explicit tick sends anyway
+      await page.waitForSelector('#wGuard', { timeout: 60000 }); const guard = await page.textContent('#wGuard'); await page.click('#wGo'); await sleep(500);
+      const err = await page.textContent('#wErr'); const proofOpened = !!(await page.$('#actErr, #doneBtn'));
+      check('UI refuses to send to the depositing wallet in the form (no proof dialog), with an explicit override', /deposited from/.test(guard) && /I understand/.test(guard) && /deposited from/.test(err) && !proofOpened, (guard + ' | ' + err).slice(0, 240));
+      await page.click('#dlgX'); await sleep(300);
+      // an address with history (here the test's funder): the milder confirmation; ticking it withdraws there. (Not the user's own
+      // wallet: the check below that it appears in none of the relayer's transactions must still hold.)
+      await page.click('[data-open="withdraw"]'); await sleep(400); await page.click('#wA [data-a="USDC"]'); await page.fill('#wAmt', '10'); await page.fill('#wTo', payer.publicKey.toBase58());
+      await page.waitForSelector('#wGuard', { timeout: 60000 }); const used = await page.textContent('#wGuard');
+      const w1 = await V.tokenBalance(USDC, payer.publicKey); await page.click('#wAck'); await page.click('#wGo'); await page.waitForSelector('h3#dlgTitle'); const ttl = await page.textContent('h3#dlgTitle'); const t2 = await finish();
+      check('an address with history: refused with an override ("can link it to me"); ticking it withdraws there, titled "Withdrawing", exactly 10 USDC arrive', /history/.test(used) && /can link it to me/.test(used) && ttl === 'Withdrawing' && /Sent 10(\.0+)? USDC/.test(t2) && (await V.tokenBalance(USDC, payer.publicKey)) - w1 === units(10, 6), ttl + ' | ' + t2.slice(0, 160)); }
     // private swap 300 USDC -> SOL from shielded notes
     await page.click('[data-go="swap"]'); await sleep(800);
     await page.click('#swTokIn'); await sleep(300); await page.click('[data-pick="USDC"]'); await sleep(300);
     await page.click('#swTokOut'); await sleep(300); await page.click('[data-pick="SOL"]'); await sleep(300);
     await page.fill('#swIn', '300'); await sleep(4000);
     const q = await page.inputValue('#swOut'); check('live quote from the bin pool on the device: ' + q + ' SOL', parseFloat(q) > 1.8 && parseFloat(q) < 2.1);
+    { const rf = await page.textContent('#swRelayerFee').catch(() => ''); check('private swap: the relayer\'s flat fee shown in the route, with its share of the swap', /^\S+ USDC \(<?[\d.]+% of this swap\)$/.test(rf), rf); }
     await page.screenshot({ path: path.join(SHOTS, 'app-swap.png') });
     await page.click('#swGo'); console.log('  proving the swap...', lap()); t = await finish();
     check('private swap through the UI into a shielded SOL note', /Got [12]\.\d+ SOL/.test(t), t.slice(0, 160));

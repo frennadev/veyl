@@ -107,16 +107,28 @@ function SendDialog({ pre }: { pre: SendPrefill }) {
   const dec = E.tokens[f.sym]?.decimals ?? 9;
   const tooMuch = room && room.fee > 0n ? `That's more than you can send. You have ${atomsText(room.balance, dec)} ${f.sym} private and the relayer's fee is ${atomsText(room.fee, dec)} ${f.sym}, so you can send up to ${atomsText(room.max, dec)} ${f.sym}.` : null;
   const fillMax = () => f.onAmount(room ? atomsText(room.max, dec) : maxAmount(have));
-  const submit = () => {
+  // a Solana address is checked as soon as it is one: the deposit wallet, or an address with history, links the withdrawal
+  // to it; either is refused here unless the user explicitly confirms it (never inside the proof dialog)
+  const account = useSession((s) => s.account);
+  const solana = !dest0.startsWith('veyl:') && SOLANA_ADDRESS.test(dest0);
+  const guard = useAsyncQuery('guardRecipient', solana && E.guardRecipient ? () => E.guardRecipient!(dest0).then(() => '', (e: Error) => e.message || String(e)) : null, [dest0], 300, { account: true });
+  const refusal = solana && guard.key === JSON.stringify([dest0]) ? guard.value : null; // '' = fine, a string = refused, null = checking
+  const own = solana && !!account && dest0 === account;
+  const [ack, setAck] = useState<string | null>(null); const acked = ack === dest0;
+  const submit = async () => {
     const v = f.value, dest = to.trim(), inside = dest.startsWith('veyl:'); f.setError('');
     if (!(v > 0)) return f.setError('Enter an amount above zero.');
     if (!dest) return f.setError('Enter where it goes: a Veyl address (veyl:…) or a Solana address.');
     if (!inside && !SOLANA_ADDRESS.test(dest)) return f.setError(`“${dest.length > 24 ? dest.slice(0, 22) + '…' : dest}” isn't a Veyl address (veyl:…) or a Solana address. Paste the whole address.`);
     if (room && tooMuch && E.unit(f.sym, v) > room.max) return f.setError(tooMuch);
     if (!covers(have, v)) return f.setError(`${tiny(v)} ${f.sym} is more than your private balance of ${tiny(have)} ${f.sym}. Use Max, or deposit more first.`);
-    const sym = f.sym;
+    if (!inside && E.guardRecipient && !acked) {
+      const why = refusal ?? await E.guardRecipient(dest).then(() => '', (e: Error) => e.message || String(e));
+      if (why) return f.setError(why + ' Tick the box under the address to send there anyway.');
+    }
+    const sym = f.sym, allowUsed = !inside && acked;
     runAction({
-      title: 'Sending privately', kind: 'proof', exec: (E) => E.withdraw(sym, v, dest),
+      title: inside ? 'Sending privately' : 'Withdrawing', kind: 'proof', exec: (E) => E.withdraw(sym, v, dest, allowUsed ? { allowUsed: true } : undefined),
       done: (r) => ({
         title: `Sent ${tiny(v)} ${sym}`, tx: r.tx,
         body: inside
@@ -142,6 +154,12 @@ function SendDialog({ pre }: { pre: SendPrefill }) {
         <label htmlFor="wTo">To<Tip term="sendDest" align="l" /></label>
         <input id="wTo" type="text" placeholder="veyl:… or a fresh Solana address" autoComplete="off" spellCheck={false} value={to} onChange={(e) => setTo(e.target.value)} />
         <small id="wKind">{isRequest ? 'Payment request · Veyl address: stays private' : recipientKind(to.trim())}</small>
+        {refusal && <div id="wGuard">
+          <Hint icon="alert" tone="warn">{refusal}</Hint>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5 }}><input type="checkbox" id="wAck" checked={acked} onChange={(e) => setAck(e.target.checked ? dest0 : null)} style={{ marginTop: 3 }} />
+            {own ? 'I understand: this is the wallet I deposited from. Anyone can see this withdrawal went back to it, which undoes the privacy of this money.'
+              : 'I understand: withdrawing to an address with history can link it to me.'}</label>
+        </div>}
         {sbx && <div className="quick">
           <button type="button" id="wMara" onClick={() => setTo(sbx.friendAddress())}>Mara&apos;s Veyl address</button>
           <button type="button" id="wFresh" onClick={() => setTo(sbx.freshAddress())}>A fresh Solana address</button>
