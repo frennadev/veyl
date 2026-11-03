@@ -17,7 +17,7 @@ import { installPools, PoolError } from './pools-engine.js';
 import { Market, parsePyth, parseJupiter, parseCandles, ORIGINS as MARKET_ORIGINS } from './market.js';
 import { Markets, SOURCES as MARKET_SOURCES, ORIGINS as MARKETS_ORIGINS, mergeRows } from './markets.js';
 
-class PrivacyError extends Error {}
+class PrivacyError extends Error { constructor(m) { super(m); this.code = 'PRIVACY'; this.beforeChain = true; } } /* always thrown before any proof or transaction */
 const b58 = (k) => new PublicKey(k).toBase58();
 const WSOL = 'So11111111111111111111111111111111111111112', FEE_RESERVE = 5_000_000n; // 0.005 SOL kept for network fees
 
