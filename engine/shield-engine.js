@@ -140,7 +140,7 @@ export function installShield(Engine, PrivacyError) {
   P.ensureSpendable = async function (sym, need) {
     const zw = this.zw; const mint = this.tok(sym).mint; need = BigInt(need);
     for (let i = 0; i < 6 && !zw.select(mint, need); i++) {
-      if (zw.balance(mint) < need) throw new Error('Not enough ' + sym + ' in your shielded balance.');
+      if (zw.balance(mint) < need) throw this._short(sym, zw.balance(mint), need);
       this.log('Merging two notes first'); const fee = await this.shieldFee('transact', sym); const two = zw.mergePlan(mint); const me = await this._relayerAddr();
       const total = two.reduce((s, n) => s + BigInt(n.amount), 0n); if (total <= fee) throw new Error('Your ' + sym + ' notes are too small to merge.');
       const t = zw.transact({ mint, ins: two, outs: [{ amount: total - fee }], ext: { fee, relayer: this.V.ata(new PublicKey(mint), me, await this.V.tokenProgram(new PublicKey(mint))), mint: new PublicKey(mint) } });
@@ -184,10 +184,21 @@ export function installShield(Engine, PrivacyError) {
     return this._sendAll([[await this.V.cancelDepositIx(this.pk, new PublicKey(pending.pending), new PublicKey(pending.mint))]], 200_000); };
   /// Shielded -> another Veyl address, inside the pool. Public: two nullifiers, two new notes, the relayer's flat fee and so
   /// its token. Hidden: the amount, the sender, the recipient.
+  /// A spend that the private balance cannot cover: says how much can go, before anything is proven or sent.
+  P._short = function (sym, have, need, fee = null) { const max = fee != null && have > fee ? have - fee : 0n;
+    const e = new Error(fee != null ? `That's more than you can send. You have ${this.fmt(sym, have)} ${sym} private and the relayer's fee is ${this.fmt(sym, fee)} ${sym}, so you can send up to ${this.fmt(sym, max)} ${sym}.` : `Not enough ${sym} in your private balance: ${this.fmt(sym, have)} ${sym}, and this needs ${this.fmt(sym, need)} ${sym}.`);
+    e.code = 'NOT_ENOUGH'; e.beforeChain = true; e.max = max; e.fee = fee; return e; };
+  /// What a send or withdrawal can move right now: { balance, fee, max } in atoms of `sym` (to: a Veyl address, or a
+  /// Solana address for a withdrawal, whose fee can include the recipient's token account). For a Max button and a check
+  /// before the proof.
+  P.sendMax = async function (sym, to = null) { await this.shieldSync(); const mint = new PublicKey(this.tok(sym).mint); const balance = this.zw.balance(mint.toBase58());
+    let solana = false; if (to) { try { Z.decodeAddress(to); } catch { solana = true; } }
+    const fee = solana ? await this.shieldFee('transact', sym, { recipientOwner: to, ext: { extAmount: '-1', recipient: this.V.ata(mint, new PublicKey(to), await this.V.tokenProgram(mint)).toBase58() } }) : await this.shieldFee('transact', sym);
+    return { balance, fee, max: balance > fee ? balance - fee : 0n }; };
   P.send = async function (sym, amount, to) {
     let dest; try { dest = Z.decodeAddress(to); } catch (e) { throw new PrivacyError(e.message); }
     if (to === this.veylAddress()) throw new PrivacyError('That is your own Veyl address.');
-    await this.shieldSync(); const v = this.unit(sym, amount); const fee = await this.shieldFee('transact', sym); await this.ensureSpendable(sym, v + fee);
+    await this.shieldSync(); const v = this.unit(sym, amount); const fee = await this.shieldFee('transact', sym); { const have = this.zw.balance(this.tok(sym).mint); if (have < v + fee) throw this._short(sym, have, v + fee, fee); } await this.ensureSpendable(sym, v + fee);
     const mint = new PublicKey(this.tok(sym).mint); const me = await this._relayerAddr();
     const t = this.zw.spend({ mint, send: v, to, fee, relayer: this.V.ata(mint, me, await this.V.tokenProgram(mint)) });
     const p = await this.proveIn('transact', t.input); const r = await this.submit({ kind: 'transact', ext: t.ext, p }); await this.shieldSync();
@@ -198,7 +209,7 @@ export function installShield(Engine, PrivacyError) {
     if (!allowUsed) await this.guardRecipient(to);
     await this.shieldSync(); const v = this.unit(sym, amount); const mint = new PublicKey(this.tok(sym).mint); const tp = await this.V.tokenProgram(mint);
     const recipient = this.V.ata(mint, new PublicKey(to), tp); const fee = await this.shieldFee('transact', sym, { recipientOwner: to, ext: { extAmount: '-1', recipient: recipient.toBase58() } });
-    await this.ensureSpendable(sym, v + fee); const me = await this._relayerAddr();
+    { const have = this.zw.balance(mint.toBase58()); if (have < v + fee) throw this._short(sym, have, v + fee, fee); } await this.ensureSpendable(sym, v + fee); const me = await this._relayerAddr();
     const t = this.zw.spend({ mint, pay: v, fee, recipient, relayer: this.V.ata(mint, me, tp) });
     const p = await this.proveIn('transact', t.input); const r = await this.submit({ kind: 'transact', ext: t.ext, p, recipientOwner: to }); await this.shieldSync();
     return { tx: r.txHash, received: v, fee };
