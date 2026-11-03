@@ -118,7 +118,7 @@ export class Engine {
   /// Native SOL is wrapped on the way in: the pools hold wrapped SOL (an SPL token), wallets mostly hold native SOL.
   async wrapIxs(mint, v) { if (new PublicKey(mint).toBase58() !== WSOL) return []; const m = new PublicKey(WSOL); const tp = await this.V.tokenProgram(m);
     const have = await this.V.tokenBalance(m, this.pk); if (have >= v) return []; const ata = this.V.ata(m, this.pk, tp); const need = v - have;
-    const lam = BigInt(await this.conn.getBalance(this.pk)); if (lam < need + FEE_RESERVE) throw new Error('Not enough SOL: keep about 0.005 SOL for network fees on top of the deposit.');
+    const lam = BigInt(await this.conn.getBalance(this.pk)); if (lam < need + FEE_RESERVE) throw new Error('Not enough SOL: keep about 0.005 SOL for network fees on top of this amount.');
     return [this.ataIx(this.pk, m, this.pk, tp), SystemProgram.transfer({ fromPubkey: this.pk, toPubkey: ata, lamports: Number(need) }), new TransactionInstruction({ programId: tp, keys: [{ pubkey: ata, isSigner: false, isWritable: true }], data: Buffer.from([17]) })]; }
   // ---- no-wallet mode: a deposit address kept in this browser (backed up with the notes). Funded from any wallet or exchange.
   localKeypair() { const d = this.store.data; if (!Array.isArray(d.depositKey)) { d.depositKey = Array.from(Keypair.generate().secretKey); this.store.save(); } return Keypair.fromSecretKey(Uint8Array.from(d.depositKey)); }
@@ -528,7 +528,12 @@ export class Engine {
     const best = await this.quoteRoute(symIn, symOut, v); if (!best) throw new Error('No route with liquidity for that pair.');
     const routes = await this.V.prepareRoutes([{ amountIn: v, hops: best.path.map((h) => ({ pool: h.pool, xForY: h.xForY })) }]); const tin = new PublicKey(this.tok(symIn).mint), tout = new PublicKey(this.tok(symOut).mint);
     const ix = await this.V.swapRouteIx(this.pk, tin, tout, routes, best.out - (best.out * BigInt(slippageBps)) / 10000n, this.deadline());
-    const tx = await this._sendAll([[this.ataIx(this.pk, tout, this.pk, await this.V.tokenProgram(tout)), ix]]); return { tx, out: best.out, route: best.path.map((h) => h.name) }; }
+    /* native SOL in: wrap what the wSOL account lacks (as deposits do); SOL out: unwrap it again (close the wSOL account) */
+    const wrap = await this.wrapIxs(tin, v); const toutTp = await this.V.tokenProgram(tout);
+    const unwrap = tout.toBase58() === WSOL ? [new TransactionInstruction({ programId: toutTp, keys: [{ pubkey: this.V.ata(tout, this.pk, toutTp), isSigner: false, isWritable: true }, { pubkey: this.pk, isSigner: false, isWritable: true }, { pubkey: this.pk, isSigner: true, isWritable: false }], data: Buffer.from([9]) })] : [];
+    const main = [this.ataIx(this.pk, tout, this.pk, toutTp), ix, ...unwrap]; const one = [...wrap, ...main];
+    const groups = wrap.length && (await this._bytes(one, this.pk)) > Engine.MAX_TX ? [wrap, main] : [one];
+    const tx = await this._sendAll(groups); return { tx, out: best.out, route: best.path.map((h) => h.name) }; }
   // ---- chain history (Devnet / Local): every figure below is read from the chain, nothing estimated
   /// The pool's transactions, newest first, from getSignaturesForAddress (paged, cached, incremental), decoded for its
   /// Swapped events (every swap through the pool, whoever routed it: wallets, the relayer, batch settlements) and its
